@@ -1,0 +1,78 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Sign in â€” Outcomestar">
+  <section class="py-16 md:py-24">
+    <div class="max-w-md mx-auto px-6">
+      <p class="text-xs uppercase tracking-wider text-flame mb-3">Sign in</p>
+      <h1 class="text-3xl md:text-4xl text-white font-light mb-3">Welcome back.</h1>
+      <p class="text-slate-400 mb-10 leading-relaxed">Checking your session...</p>
+      <div id="status" class="text-sm text-slate-400 mb-8"></div>
+      <form id="signin-form" class="space-y-4 hidden">
+        <div>
+          <label for="code" class="block text-xs uppercase tracking-wider text-slate-500 mb-2">Pairing code</label>
+          <input type="text" id="code" name="code" required autocomplete="off" placeholder="XXXXXX"
+            class="w-full bg-navy-900 border border-slate-700 text-white px-4 py-3 rounded font-mono tracking-widest text-lg focus:outline-none focus:border-flame transition-colors" />
+        </div>
+        <button type="submit" id="submit-btn"
+          class="w-full bg-flame hover:bg-flame/90 text-white font-medium py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Continue
+        </button>
+        <div id="form-status" class="text-sm text-slate-400 min-h-[1.25rem] mt-4"></div>
+      </form>
+      <div class="mt-12 pt-8 border-t border-slate-800 text-sm text-slate-500">
+        <p>Trouble signing in? Email <a href="mailto:support@outcomestar.app" class="text-flame hover:underline">support@outcomestar.app</a></p>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  const API_BASE = "https://outcomestar-companion-api.onrender.com";
+  const APP_URL = "https://app.outcomestar.app/north-star/sync";
+  const status = document.getElementById("status");
+  const form = document.getElementById("signin-form");
+  (async () => {
+    try {
+      const raw = localStorage.getItem("outcomestar_auth");
+      if (raw) {
+        const auth = JSON.parse(raw);
+        if (auth.api_token) {
+          status.textContent = "Found existing session. Redirecting...";
+          status.className = "text-sm text-emerald-400 mb-8";
+          setTimeout(() => { window.location.href = APP_URL + "#token=" + encodeURIComponent(auth.api_token); }, 600);
+          return;
+        }
+      }
+    } catch {}
+    status.textContent = "Enter your pairing code below to sign in.";
+    form.classList.remove("hidden");
+  })();
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const codeInput = document.getElementById("code");
+    const submitBtn = document.getElementById("submit-btn");
+    const formStatus = document.getElementById("form-status");
+    const code = codeInput.value.trim().toUpperCase();
+    if (code.length < 4) { formStatus.textContent = "Enter a valid pairing code."; formStatus.className = "text-sm text-amber-400 min-h-[1.25rem] mt-4"; return; }
+    submitBtn.disabled = true;
+    formStatus.textContent = "Connecting...";
+    try {
+      const r = await fetch(API_BASE + "/v1/auth/extension-pair", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const body = await r.json();
+      if (!r.ok) { formStatus.textContent = "Sign in failed: " + (body.detail || ("HTTP " + r.status)); formStatus.className = "text-sm text-red-400 min-h-[1.25rem] mt-4"; submitBtn.disabled = false; return; }
+      localStorage.setItem("outcomestar_auth", JSON.stringify({ api_token: body.api_token, tenant_id: body.tenant_id, student_ids: body.student_ids, pair_name: body.name }));
+      formStatus.textContent = "Signed in. Redirecting...";
+      formStatus.className = "text-sm text-emerald-400 min-h-[1.25rem] mt-4";
+      setTimeout(() => { window.location.href = APP_URL + "#token=" + encodeURIComponent(body.api_token); }, 800);
+    } catch (err) {
+      formStatus.textContent = "Network error: " + err.message;
+      formStatus.className = "text-sm text-red-400 min-h-[1.25rem] mt-4";
+      submitBtn.disabled = false;
+    }
+  });
+</script>

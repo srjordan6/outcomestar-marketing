@@ -1,0 +1,113 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const pillars = [
+  { name: "Personal", description: "Character, values, identity, and the narrative that ties a student's life together." },
+  { name: "Academics", description: "Grades, course trajectory, test prep, and academic competitions â€” the foundation." },
+  { name: "Extra Curricular", description: "Sports, arts, leadership, and the depth that distinguishes a candidate." },
+  { name: "Career", description: "Internships, business ventures, mentorships, and signs of real-world initiative." },
+  { name: "Higher Education", description: "Target schools, scholarship pathways, application strategy, and the final mile." },
+];
+
+const targetSchools = ["Princeton", "MIT", "Harvard", "Stanford", "Yale", "Caltech", "Duke", "Johns Hopkins", "Northwestern", "Penn", "Purdue", "Texas A&M", "UT Austin"];
+---
+
+<Layout title="Outcomestar â€” Aim Higher">
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-b from-navy-950 via-navy-900/50 to-navy-950"></div>
+    <div class="absolute inset-0 opacity-30" style="background-image: radial-gradient(circle at 20% 30%, rgba(240,120,0,0.15) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(32,24,104,0.4) 0%, transparent 50%);"></div>
+    <div class="relative max-w-5xl mx-auto px-6 py-24 md:py-32">
+      <p class="text-xs uppercase tracking-[0.3em] text-flame mb-6">North Star &middot; College Admissions</p>
+      <h1 class="text-5xl md:text-7xl font-light text-white mb-6 leading-[1.05] tracking-tight">Aim higher.</h1>
+      <p class="text-xl md:text-2xl text-slate-300 mb-10 max-w-2xl leading-relaxed font-light">
+        Outcomestar is the family operating system for college admissions. From middle school
+        to your North Star â€” Stanford, Texas A&amp;M, MIT, a Service Academy, or wherever
+        you're aiming â€” we help you track every activity, every achievement, every step.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4">
+        <a href="/signup" class="bg-flame hover:bg-flame/90 text-white font-medium px-8 py-4 rounded text-center transition-colors">Get started</a>
+        <a href="#how-it-works" class="border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white font-medium px-8 py-4 rounded text-center transition-colors">How it works</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="border-y border-slate-800/50 bg-navy-900/30 py-10">
+    <div class="max-w-6xl mx-auto px-6">
+      <p class="text-xs uppercase tracking-wider text-slate-500 mb-4 text-center">Built around the 13 schools families ask about most</p>
+      <div class="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-slate-400">
+        {targetSchools.map((school) => (<span class="text-sm">{school}</span>))}
+      </div>
+    </div>
+  </section>
+
+  <section class="py-24 md:py-32">
+    <div class="max-w-3xl mx-auto px-6">
+      <p class="text-xs uppercase tracking-wider text-flame mb-4">The problem</p>
+      <h2 class="text-3xl md:text-4xl text-white font-light mb-8 leading-tight">
+        College admissions used to start in junior year. <span class="text-slate-400">Now it starts in sixth grade.</span>
+      </h2>
+      <div class="space-y-6 text-slate-300 text-lg leading-relaxed font-light">
+        <p>Selective universities don't just look at grades. They look at the trajectory of a student's life â€” the through-line that connects who they were in middle school to who they're becoming in twelfth grade.</p>
+        <p>Athletic competitions in seventh grade become recruiting touchpoints in sophomore year. Math team in eighth grade becomes the foundation of an AMC trajectory. A single summer experience can change which essay options open up two years later.</p>
+        <p class="text-white">Families know this. But they don't know what to track, when to start, or how to organize it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how-it-works" class="py-24 md:py-32 bg-navy-900/30 border-y border-slate-800/50">
+    <div class="max-w-5xl mx-auto px-6">
+      <p class="text-xs uppercase tracking-wider text-flame mb-4">How it works</p>
+      <h2 class="text-3xl md:text-4xl text-white font-light mb-6 max-w-3xl leading-tight">
+        One place to build your child's case â€” across the five pillars admissions officers actually evaluate.
+      </h2>
+      <p class="text-slate-400 text-lg mb-16 max-w-2xl font-light">
+        Capture data once. Use it for every college conversation, every scholarship application, every counselor meeting from now until decision day.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {pillars.map((pillar, i) => (
+          <div class="bg-navy-950/50 border border-slate-800 rounded-lg p-6 hover:border-flame/30 transition-colors">
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-flame font-mono text-xs">0{i + 1}</span>
+              <h3 class="text-white text-lg font-medium">{pillar.name}</h3>
+            </div>
+            <p class="text-slate-400 text-sm leading-relaxed">{pillar.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="py-24">
+    <div class="max-w-3xl mx-auto px-6">
+      <div class="border border-flame/30 bg-flame/5 rounded-lg p-8 md:p-10">
+        <p class="text-xs uppercase tracking-wider text-flame mb-3">Roach Middle School Pilot â€” Free Through 2027</p>
+        <h2 class="text-2xl md:text-3xl text-white font-light mb-4 leading-tight">Frisco ISD families: this is for you.</h2>
+        <p class="text-slate-300 leading-relaxed mb-6 font-light">
+          Outcomestar is opening to all Roach Middle School families as a free pilot through the 2026-2027 school year. Sign up with your student's Frisco ISD email, get the full platform, no payment required.
+        </p>
+        <a href="/signup" class="inline-block bg-flame hover:bg-flame/90 text-white font-medium px-6 py-3 rounded transition-colors">Join the pilot</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-24 md:py-32 bg-navy-900/30 border-y border-slate-800/50">
+    <div class="max-w-3xl mx-auto px-6">
+      <p class="text-xs uppercase tracking-wider text-flame mb-4">The mission</p>
+      <h2 class="text-3xl md:text-4xl text-white font-light mb-8 leading-tight">
+        Top-of-funnel admissions shouldn't only belong to families who can afford a $40,000 consultant.
+      </h2>
+      <div class="space-y-6 text-slate-300 text-lg leading-relaxed font-light">
+        <p>Outcomestar exists because every family deserves the structure, planning, and visibility that wealthy families already buy. We're building this for families with budget â€” and for families without.</p>
+        <p>Pilot families pay nothing. Paid plans subsidize free access. The product gets better whether you pay for it or not.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-24 md:py-32">
+    <div class="max-w-3xl mx-auto px-6 text-center">
+      <h2 class="text-4xl md:text-5xl text-white font-light mb-6 leading-tight">Start tracking your North Star.</h2>
+      <p class="text-slate-400 text-lg mb-10 font-light">Free for Roach Middle School families through 2027.</p>
+      <a href="/signup" class="inline-block bg-flame hover:bg-flame/90 text-white font-medium px-10 py-4 rounded text-lg transition-colors">Get started</a>
+    </div>
+  </section>
+</Layout>
