@@ -1,17 +1,12 @@
 ---
 const year = new Date().getFullYear();
 ---
-<footer class="border-t border-slate-800/50 mt-24">
+<footer class="border-t border-srj-gray-light bg-white mt-24">
   <div class="max-w-6xl mx-auto px-6 py-10">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-sm">
-      <div class="flex items-center gap-2">
-        <span class="text-flame text-lg">&#10022;</span>
-        <span class="text-white font-medium">OutcomeStar</span>
-      </div>
-      <p class="text-slate-500">
-        Questions: <a href="mailto:support@outcomestar.app" class="text-slate-300 hover:text-flame transition-colors">support@outcomestar.app</a>
-      </p>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <a href="/" class="flex items-baseline gap-2"><span class="text-srj-orange text-lg leading-none">&#10022;</span><span class="text-srj-navy font-headline font-semibold tracking-tight">OutcomeStar</span></a>
+      <p class="font-body text-sm text-srj-gray">Questions: <a href="mailto:support@outcomestar.app" class="text-srj-navy hover:text-srj-orange transition-colors font-medium">support@outcomestar.app</a></p>
     </div>
-    <p class="text-xs text-slate-600 mt-6">&copy; {year} OutcomeStar.</p>
+    <p class="font-body text-xs text-srj-gray mt-6">&copy; {year} OutcomeStar &middot; an SRJ Consulting &amp; Services platform.</p>
   </div>
 </footer>

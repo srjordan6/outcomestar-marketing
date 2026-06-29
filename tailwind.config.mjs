@@ -4,16 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        navy: {
-          950: "#0a0e27",
-          900: "#13183a",
-          800: "#201868",
-        },
-        flame: "#F07800",
+        "srj-navy":        "#201868",
+        "srj-orange":      "#F07800",
+        "srj-gray":        "#7A8A9E",
+        "srj-navy-dark":   "#160F4A",
+        "srj-orange-dark": "#C46300",
+        "srj-gray-light":  "#E3E7ED",
+        "srj-gray-dark":   "#4A5563",
       },
       fontFamily: {
-        display: ["Inter", "system-ui", "sans-serif"],
-        body: ["Inter", "system-ui", "sans-serif"],
+        headline: ["Lora", "Georgia", "serif"],
+        body: ["Poppins", "system-ui", "sans-serif"],
       },
     },
   },
