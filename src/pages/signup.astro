@@ -1,12 +1,12 @@
----
+﻿---
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="Get started — Outcomestar">
+<Layout title="Get started â€” OutcomeStar">
   <section class="py-16 md:py-24">
     <div class="max-w-md mx-auto px-6">
       <p class="text-xs uppercase tracking-wider text-flame mb-3">Get started</p>
-      <h1 class="text-3xl md:text-4xl text-white font-light mb-3">Welcome to Outcomestar.</h1>
+      <h1 class="text-3xl md:text-4xl text-white font-light mb-3">Welcome to OutcomeStar.</h1>
       <p class="text-slate-400 mb-10 leading-relaxed">Enter your pairing code below to access your family workspace.</p>
       <form id="signup-form" class="space-y-4">
         <div>
@@ -23,8 +23,8 @@ import Layout from "../layouts/Layout.astro";
       <div class="mt-12 pt-8 border-t border-slate-800 text-sm text-slate-500">
         <p class="mb-2">Don't have a code?</p>
         <p>
-          Outcomestar is currently in pilot with select schools. If you're a Roach Middle School family, email
-          <a href="mailto:support@outcomestar.app" class="text-flame hover:underline">support@outcomestar.app</a> for access.
+          OutcomeStar is currently in pilot with select schools. If you're a Roach Middle School family, email
+          <a href="mailto:support@OutcomeStar.app" class="text-flame hover:underline">support@OutcomeStar.app</a> for access.
         </p>
       </div>
     </div>
@@ -32,8 +32,8 @@ import Layout from "../layouts/Layout.astro";
 </Layout>
 
 <script>
-  const API_BASE = "https://outcomestar-companion-api.onrender.com";
-  const APP_URL = "https://app.outcomestar.app/north-star/sync";
+  const API_BASE = "https://OutcomeStar-companion-api.onrender.com";
+  const APP_URL = "https://app.OutcomeStar.app/north-star/sync";
   const form = document.getElementById("signup-form");
   const status = document.getElementById("status");
   const submitBtn = document.getElementById("submit-btn");
@@ -52,7 +52,7 @@ import Layout from "../layouts/Layout.astro";
       });
       const body = await r.json();
       if (!r.ok) { status.textContent = "Pairing failed: " + (body.detail || ("HTTP " + r.status)); status.className = "text-sm text-red-400 min-h-[1.25rem] mt-4"; submitBtn.disabled = false; return; }
-      localStorage.setItem("outcomestar_auth", JSON.stringify({ api_token: body.api_token, tenant_id: body.tenant_id, student_ids: body.student_ids, pair_name: body.name }));
+      localStorage.setItem("OutcomeStar_auth", JSON.stringify({ api_token: body.api_token, tenant_id: body.tenant_id, student_ids: body.student_ids, pair_name: body.name }));
       status.textContent = "Connected. Redirecting...";
       status.className = "text-sm text-emerald-400 min-h-[1.25rem] mt-4";
       setTimeout(() => { window.location.href = APP_URL + "#token=" + encodeURIComponent(body.api_token); }, 800);

@@ -1,8 +1,8 @@
----
+﻿---
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="Sign in — Outcomestar">
+<Layout title="Sign in â€” OutcomeStar">
   <section class="py-16 md:py-24">
     <div class="max-w-md mx-auto px-6">
       <p class="text-xs uppercase tracking-wider text-flame mb-3">Sign in</p>
@@ -22,20 +22,20 @@ import Layout from "../layouts/Layout.astro";
         <div id="form-status" class="text-sm text-slate-400 min-h-[1.25rem] mt-4"></div>
       </form>
       <div class="mt-12 pt-8 border-t border-slate-800 text-sm text-slate-500">
-        <p>Trouble signing in? Email <a href="mailto:support@outcomestar.app" class="text-flame hover:underline">support@outcomestar.app</a></p>
+        <p>Trouble signing in? Email <a href="mailto:support@OutcomeStar.app" class="text-flame hover:underline">support@OutcomeStar.app</a></p>
       </div>
     </div>
   </section>
 </Layout>
 
 <script>
-  const API_BASE = "https://outcomestar-companion-api.onrender.com";
-  const APP_URL = "https://app.outcomestar.app/north-star/sync";
+  const API_BASE = "https://OutcomeStar-companion-api.onrender.com";
+  const APP_URL = "https://app.OutcomeStar.app/north-star/sync";
   const status = document.getElementById("status");
   const form = document.getElementById("signin-form");
   (async () => {
     try {
-      const raw = localStorage.getItem("outcomestar_auth");
+      const raw = localStorage.getItem("OutcomeStar_auth");
       if (raw) {
         const auth = JSON.parse(raw);
         if (auth.api_token) {
@@ -65,7 +65,7 @@ import Layout from "../layouts/Layout.astro";
       });
       const body = await r.json();
       if (!r.ok) { formStatus.textContent = "Sign in failed: " + (body.detail || ("HTTP " + r.status)); formStatus.className = "text-sm text-red-400 min-h-[1.25rem] mt-4"; submitBtn.disabled = false; return; }
-      localStorage.setItem("outcomestar_auth", JSON.stringify({ api_token: body.api_token, tenant_id: body.tenant_id, student_ids: body.student_ids, pair_name: body.name }));
+      localStorage.setItem("OutcomeStar_auth", JSON.stringify({ api_token: body.api_token, tenant_id: body.tenant_id, student_ids: body.student_ids, pair_name: body.name }));
       formStatus.textContent = "Signed in. Redirecting...";
       formStatus.className = "text-sm text-emerald-400 min-h-[1.25rem] mt-4";
       setTimeout(() => { window.location.href = APP_URL + "#token=" + encodeURIComponent(body.api_token); }, 800);
