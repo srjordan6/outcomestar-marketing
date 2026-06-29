@@ -1,4 +1,4 @@
-﻿---
+---
 import Layout from "../layouts/Layout.astro";
 
 const portfolios = [
@@ -6,7 +6,7 @@ const portfolios = [
     name: "John Ray Jordan",
     classYear: "Class of 2032",
     focus: "Distance & Breaststroke",
-    href: "https://app.OutcomeStar.app/john",
+    href: "https://outcomestar.app/john",
   },
 ];
 ---
@@ -62,21 +62,23 @@ const portfolios = [
   <section class="py-20 md:py-24 bg-navy-900/30 border-y border-slate-800/50">
     <div class="max-w-3xl mx-auto px-6">
       <div class="border border-flame/30 bg-flame/5 rounded-lg p-8 md:p-10">
-        <p class="text-xs uppercase tracking-wider text-flame mb-3">Roach Middle School pilot &middot; Free through 2027</p>
-        <h2 class="text-2xl md:text-3xl text-white font-light mb-4 leading-tight">Frisco ISD families: this is for you.</h2>
-        <p class="text-slate-300 leading-relaxed mb-6 font-light">
-          OutcomeStar is opening to Roach Middle School families as a free pilot through the 2026-2027 school year. Sign up with your student's Frisco ISD email and start the record now &mdash; not when applications are due.
+        <p class="text-xs uppercase tracking-wider text-flame mb-3">Coming Fall 2026</p>
+        <h2 class="text-2xl md:text-3xl text-white font-light mb-4 leading-tight">Launching with Roach Middle School families.</h2>
+        <p class="text-slate-300 leading-relaxed font-light">
+          OutcomeStar opens to Roach Middle School families as a free pilot in the 2026-2027 school year. Cohort signup, parent portal, and the full data-capture workflow will be available before the start of the school year. If you're a Roach family and want to be notified when enrollment opens, email <a href="mailto:support@outcomestar.app" class="text-flame hover:underline">support@outcomestar.app</a>.
         </p>
-        <a href="/signup" class="inline-block bg-flame hover:bg-flame/90 text-white font-medium px-6 py-3 rounded transition-colors">Join the pilot</a>
       </div>
     </div>
   </section>
 
   <section class="py-20 md:py-24">
-    <div class="max-w-3xl mx-auto px-6 text-center">
-      <h2 class="text-3xl md:text-4xl text-white font-light mb-4 leading-tight">Start the record.</h2>
-      <p class="text-slate-400 mb-10 font-light">Free for Roach Middle School families through 2027.</p>
-      <a href="/signup" class="inline-block bg-flame hover:bg-flame/90 text-white font-medium px-10 py-4 rounded text-lg transition-colors">Get started</a>
+    <div class="max-w-3xl mx-auto px-6">
+      <p class="text-xs uppercase tracking-wider text-flame mb-6">Status</p>
+      <div class="space-y-4 text-slate-400 text-sm leading-relaxed">
+        <p><span class="text-emerald-400">&#9679;</span> <span class="text-white">Live</span> &mdash; Portfolio: John Ray Jordan</p>
+        <p><span class="text-amber-400">&#9679;</span> <span class="text-white">In development</span> &mdash; Cohort signup, parent portal, data-capture workflow, target schools dashboard</p>
+        <p><span class="text-slate-500">&#9679;</span> <span class="text-slate-300">Planned</span> &mdash; Pricing, public application, additional cohorts</p>
+      </div>
     </div>
   </section>
 </Layout>
