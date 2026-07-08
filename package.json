@@ -1,17 +1,16 @@
-﻿{
-    "name":  "outcomestar-marketing",
-    "type":  "module",
-    "version":  "0.1.0",
-    "scripts":  {
-                    "dev":  "astro dev",
-                    "start":  "astro dev",
-                    "build":  "astro build",
-                    "preview":  "astro preview",
-                    "postbuild":  "node scripts/inject-chatwoot.mjs"
-                },
-    "dependencies":  {
-                         "@astrojs/tailwind":  "^5.1.5",
-                         "astro":  "^5.1.0",
-                         "tailwindcss":  "^3.4.17"
-                     }
+{
+  "name": "outcomestar-marketing",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/tailwind": "^5.1.5",
+    "astro": "^5.1.0",
+    "tailwindcss": "^3.4.17"
+  }
 }
