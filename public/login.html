@@ -134,6 +134,7 @@ async function doLogin(ev){
     var user = body.user || {};
     if (token){
       try {
+        sessionStorage.setItem("focms_token", token);
         localStorage.setItem("focms_access_token", token);
         localStorage.setItem("focms_user_email", user.email || email);
         if (user.id) localStorage.setItem("focms_user_id", user.id);
