@@ -5216,7 +5216,7 @@ function ucaPrint(id){
     +'<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">'
     +'<style>'+(ucaIsReport(x.form_code)?REPORT_CSS:(ucaIsResume(x.form_code)?RESUME_CSS:UCA_CSS))+' body{max-width:760px;margin:0 auto}</style></head><body>'
     + ucaFullDoc(x)
-    +'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<'+'/script></body></html>');
+    +'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>');
   w.document.close();
 }
 function ucaPdfOut(id){
@@ -6293,7 +6293,7 @@ function printLetter(id){
     +'<h1>Letter of Recommendation</h1>'
     +'<div class="m">From '+esc(l.submitter_name||'')+(meta?(' \u00b7 '+esc(meta)):'')+'</div>'
     +'<div>'+(l.letter_text||'')+'</div>'
-    +'<script>window.onload=function(){window.print();}<'+'/script></body></html>');
+    +'<script>window.onload=function(){window.print();}<\/script></body></html>');
   w.document.close();
 }
 function pdfLetter(id){
@@ -6533,7 +6533,7 @@ function appPrint(id){
     +'<h1>College Application \u2014 '+esc(a.common_name||a.university_name||'')+'</h1>'
     +'<div class="m">'+esc(studentDisplayName())+' \u00b7 prepared '+new Date().toLocaleDateString()+'</div>'
     +'<table>'+rows+'</table>'
-    +'<script>window.onload=function(){window.print();}<'+'/script></body></html>');
+    +'<script>window.onload=function(){window.print();}<\/script></body></html>');
   w.document.close();
 }
 function appPdf(id){
