@@ -4,9 +4,37 @@ const year = new Date().getFullYear();
 <footer class="border-t border-srj-gray-light bg-white mt-24">
   <div class="max-w-6xl mx-auto px-6 py-10">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <a href="/" class="flex items-baseline gap-2"><span class="text-srj-orange text-lg leading-none">&#10022;</span><span class="text-srj-navy font-headline font-semibold tracking-tight">OutcomeStar</span></a>
-      <p class="font-body text-sm text-srj-gray">Questions: <a href="mailto:support@outcomestar.app" class="text-srj-navy hover:text-srj-orange transition-colors font-medium">support@outcomestar.app</a></p>
+      <a href="/" class="flex items-baseline gap-2">
+        <span class="text-srj-orange text-lg leading-none">&#10022;</span>
+        <span class="text-srj-navy font-headline font-semibold tracking-tight">OutcomeStar</span>
+      </a>
+      <p class="font-body text-sm text-srj-gray">
+        Questions:
+        <a href="mailto:support@outcomestar.app" class="text-srj-navy hover:text-srj-orange transition-colors font-medium">support@outcomestar.app</a>
+        <span class="mx-2 text-srj-gray-light">|</span>
+        <button
+          type="button"
+          data-chatwoot-open
+          class="text-srj-navy hover:text-srj-orange transition-colors font-medium underline-offset-2 hover:underline cursor-pointer bg-transparent border-0 p-0 font-body text-sm"
+        >
+          Ask me in the chat &rarr;
+        </button>
+      </p>
     </div>
     <p class="font-body text-xs text-srj-gray mt-6">&copy; {year} OutcomeStar &middot; an SRJ Consulting &amp; Services platform.</p>
   </div>
 </footer>
+
+<script is:inline>
+  document.addEventListener("click", function (e) {
+    const trigger = e.target.closest("[data-chatwoot-open]");
+    if (!trigger) return;
+    e.preventDefault();
+    if (window.$chatwoot && typeof window.$chatwoot.toggle === "function") {
+      window.$chatwoot.toggle("open");
+    } else {
+      // Widget hasn't loaded yet — fall back to mailto
+      window.location.href = "mailto:support@outcomestar.app";
+    }
+  });
+</script>

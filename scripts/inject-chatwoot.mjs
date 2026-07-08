@@ -1,5 +1,5 @@
-﻿#!/usr/bin/env node
-// Injects the Chatwoot widget into every .html file in dist/ after Astro build.
+#!/usr/bin/env node
+// Injects the Chatwoot widget + bubble-label hint into every .html file in dist/.
 // Reads token + baseUrl from env vars (PUBLIC_* — safe for browser).
 // Idempotent: skips files that already contain the widget marker.
 
@@ -16,6 +16,41 @@ if (!TOKEN || !BASE_URL) {
 
 const MARKER = "<!-- chatwoot-widget -->";
 const SNIPPET = `${MARKER}
+<style>
+  #chatwoot-hint {
+    position: fixed;
+    bottom: 34px;
+    right: 92px;
+    background: #201868;
+    color: #ffffff;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-family: Poppins, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(32, 24, 104, 0.25);
+    z-index: 999998;
+    opacity: 0;
+    transform: translateX(8px);
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #chatwoot-hint.show {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  #chatwoot-hint::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-left-color: #201868;
+    border-right: 0;
+  }
+</style>
 <script>
   window.chatwootSettings = {
     position: "right",
@@ -36,6 +71,39 @@ const SNIPPET = `${MARKER}
       });
     };
   })(document, "script");
+
+  // Bubble label hint — shows once per session
+  (function () {
+    var SESSION_KEY = "chatwoot_hint_shown";
+    if (sessionStorage.getItem(SESSION_KEY)) return;
+
+    function showHint() {
+      var hint = document.createElement("div");
+      hint.id = "chatwoot-hint";
+      hint.textContent = "Ask Stephen";
+      document.body.appendChild(hint);
+      // Wait a beat for DOM insertion, then transition in
+      setTimeout(function () { hint.classList.add("show"); }, 50);
+      // Fade out after 8 seconds
+      setTimeout(function () {
+        hint.classList.remove("show");
+        setTimeout(function () { hint.remove(); }, 400);
+      }, 8000);
+      sessionStorage.setItem(SESSION_KEY, "1");
+    }
+
+    // Wait for the widget bubble to actually render before positioning the hint
+    var attempts = 0;
+    var poll = setInterval(function () {
+      attempts++;
+      if (document.querySelector("#cw-bubble-holder .woot-widget-bubble")) {
+        clearInterval(poll);
+        setTimeout(showHint, 800); // small pause after launcher appears
+      } else if (attempts > 40) {
+        clearInterval(poll); // give up after 20 seconds
+      }
+    }, 500);
+  })();
 </script>
 `;
 
@@ -69,4 +137,4 @@ for (const file of walk(distDir)) {
   writeFileSync(file, updated, "utf8");
   count++;
 }
-console.log(`[chatwoot-inject] Injected widget into ${count} file(s). Skipped ${skipped} already-injected.`);
+console.log(`[chatwoot-inject] Injected widget + hint into ${count} file(s). Skipped ${skipped} already-injected.`);
