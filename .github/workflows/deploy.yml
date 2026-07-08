@@ -1,8 +1,10 @@
-﻿name: Deploy to Cloudflare Workers
+name: Deploy to Cloudflare Workers
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,22 +14,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: "22"
+
       - name: Install dependencies
         run: npm install
+
       - name: Build Astro site
         run: npm run build
-        env:
-          PUBLIC_CHATWOOT_WEBSITE_TOKEN: ${{ secrets.PUBLIC_CHATWOOT_WEBSITE_TOKEN }}
-          PUBLIC_CHATWOOT_BASE_URL: ${{ secrets.PUBLIC_CHATWOOT_BASE_URL }}
+
       - name: List dist contents (debug)
         run: |
           echo "--- dist directory ---"
           ls -la dist/
           echo "--- wrangler.jsonc ---"
           cat wrangler.jsonc
+
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
