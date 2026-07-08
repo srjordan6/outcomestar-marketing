@@ -520,6 +520,7 @@
       <h1 id="pillar-view-title" class="pillar-view-title"></h1>
       <p id="pillar-view-desc" class="pillar-view-sub"></p>
     </div>
+    <div id="site-banner" style="display:none;background:#F7F5FB;border:1px solid #D6DAE0;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:13.5px"></div>
     <div id="sections-container"></div>
   </div>
 </main>
@@ -755,8 +756,8 @@ async function openPillar(pillarCode) {
   if (pillarCode === 'milestones') return openMilestones();
   if (pillarCode === 'skills') return openSkills();
   if (pillarCode === 'major_fit') return openMajorFit();
-  if (pillarCode === 'academics') return openAcademicsBands();
-  if (pillarCode === 'personal') return openPersonal();
+  if (pillarCode === 'academics') { renderSiteBanner('academics'); return openAcademicsBands(); }
+  if (pillarCode === 'personal') { renderSiteBanner('personal'); return openPersonal(); }
   if (pillarCode === 'extracurricular') return openExtracurricular();
   if (pillarCode === 'higher_education') return openHigherEducation();
   if (pillarCode === 'career') return openCareer();
@@ -768,6 +769,7 @@ async function openPillar(pillarCode) {
   document.getElementById('view-pillars').classList.add('hidden');
   document.getElementById('view-pillar').classList.remove('hidden');
   document.getElementById('pillar-view-title').textContent = p.name;
+  renderSiteBanner(pillarCode);
   document.getElementById('pillar-view-desc').textContent = p.desc;
   const container = document.getElementById('sections-container');
   container.innerHTML = `<div class="loading"><div class="spinner"></div><div>Loading form schema…</div></div>`;
@@ -1007,7 +1009,62 @@ function readInputValue(el, f) {
   return el.value.trim();
 }
 
+let SITE_STATUS = null;
+async function loadSiteStatus(){
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/website-config');
+    SITE_STATUS = { slug: d.site_slug, url: d.site_url,
+      is_public: (d.config && d.config.is_public !== false),
+      pillars: (d.config && d.config.pillars) || {},
+      catalog: d.pillars_catalog || [] };
+  } catch(e){ SITE_STATUS = null; }
+}
+function pillarCodeToSiteKey(code){
+  var map = { personal:'personal', academics:'academics', extracurricular:'extracurricular',
+              career:'career', higher_ed:'higher_education', millstones:'personal',
+              website:null, apps_docs:null, skills:null };
+  return code in map ? map[code] : null;
+}
+async function renderSiteBanner(pillarCode){
+  var el = document.getElementById('site-banner');
+  if (!el) return;
+  if (!SITE_STATUS) await loadSiteStatus();
+  var siteKey = pillarCodeToSiteKey(pillarCode);
+  if (!SITE_STATUS || siteKey === null) { el.style.display='none'; return; }
+  var slug = SITE_STATUS.slug || '';
+  var url  = SITE_STATUS.url  || ('https://app.outcomestar.app/' + slug);
+  var pubMaster = SITE_STATUS.is_public;
+  var pubPillar = SITE_STATUS.pillars[siteKey] !== false;
+  var pillarLabel = ((SITE_STATUS.catalog.find(function(p){return p.code===siteKey;})||{}).label) || siteKey;
+  el.style.display='block';
+  el.innerHTML =
+      '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">'
+    +   '<div>'
+    +     '<b style="color:var(--navy)">Website:</b> <a href="'+url+'" target="_blank" style="color:var(--orange);font-weight:600">'+url.replace('https://','')+'</a>'
+    +     '<span style="color:#7A8A9E;margin-left:8px">slug: <b>'+escapeHTML(slug)+'</b></span>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">'
+    +     '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'
+    +       '<input type="checkbox" id="banner-publish" '+(pubMaster?'checked':'')+' onchange="bannerSetPublish(this.checked)"><span>Publish site</span></label>'
+    +     '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'
+    +       '<input type="checkbox" id="banner-pillar" '+(pubPillar?'checked':'')+' onchange="bannerSetPillar(\''+siteKey+'\',this.checked)"><span>Show '+escapeHTML(pillarLabel)+' on site</span></label>'
+    +     '<a href="javascript:void(0)" onclick="openWebsitePillar()" style="color:var(--orange);font-weight:600">Manage website \u2192</a>'
+    +   '</div>'
+    + '</div>';
+}
+async function bannerSetPublish(v){
+  SITE_STATUS.is_public = !!v;
+  try { await apiPost('/focms/v1/student/' + STUDENT_ID + '/website-config', { is_public: !!v, pillars: SITE_STATUS.pillars }); showToast(v?'Website published':'Website hidden','success'); }
+  catch(e){ showToast(e.message,'error'); }
+}
+async function bannerSetPillar(code, v){
+  SITE_STATUS.pillars[code] = !!v;
+  try { await apiPost('/focms/v1/student/' + STUDENT_ID + '/website-config', { is_public: SITE_STATUS.is_public, pillars: SITE_STATUS.pillars }); showToast('Pillar '+(v?'shown':'hidden')+' on site','success'); }
+  catch(e){ showToast(e.message,'error'); }
+}
+
 function backToPillars() {
+  var b=document.getElementById('site-banner'); if(b) b.style.display='none';
   document.getElementById('view-pillar').classList.add('hidden');
   document.getElementById('view-pillars').classList.remove('hidden');
   renderPillars();
@@ -4762,7 +4819,7 @@ async function ucaDelete(id){
   try { await apiPost('/focms/v1/student/' + STUDENT_ID + '/uca-forms', { delete_ids: [id] }); renderUcaTopic(inst?inst.form_code:'uca_main'); showToast('Deleted','success'); }
   catch(e){ showToast(e.message,'error'); }
 }
-/* v165 - per-form official-UCA-look renderer (Print + PDF), navy/orange */
+/* v166 - per-form official-UCA-look renderer (Print + PDF), navy/orange */
 var UCA_RATE7 = ['No Ability to Judge','Below Average','Average','Good','Very Good','Excellent','Outstanding'];
 function ucaVals(x){
   var m={}, sr={};
