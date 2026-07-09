@@ -157,7 +157,7 @@ a{color:var(--orange)}
     document.getElementById('done-view').style.display='block';
     document.getElementById('done-msg').textContent='Payment received — parental consent captured. Your account is being created now; your portal access token and email confirmations are on the way to your inbox.';
   } else if(q.get('vpc')==='cancelled'){
-    var e=document.getElementById('f-err'); e.textContent='Checkout was cancelled — no account was created. Submit again when ready.'; e.style.display='block';
+    var e=document.getElementById('f-err'); e.textContent='Checkout was cancelled — no account was created and no charge was made. Your entries below are preserved; review and submit again when ready.'; e.style.display='block';
   }
 })();
 (function(){
@@ -165,6 +165,21 @@ a{color:var(--orange)}
   for(var i=now-3;i>=now-19;i--){ var o=document.createElement('option'); o.value=i; o.textContent=i; y.appendChild(o); }
   document.getElementById('vpc-block').style.display='block';
   y.onchange=function(){};
+})();
+/* Restore form data if the parent backed out of Stripe checkout */
+var SIGNUP_FIELDS=['f-code','f-pfirst','f-plast','f-pdisplay','f-pemail','f-sfirst','f-slast','f-semail','f-sgrade','f-syear','f-vpcplan'];
+function saveSignupDraft(){
+  var d={}; SIGNUP_FIELDS.forEach(function(id){ var el=document.getElementById(id); if(el) d[id]=el.value; });
+  try{ sessionStorage.setItem('signup_draft', JSON.stringify(d)); }catch(e){}
+}
+(function(){
+  var q=new URLSearchParams(location.search);
+  if(q.get('vpc')==='complete'){ try{ sessionStorage.removeItem('signup_draft'); }catch(e){} return; }
+  try{
+    var raw=sessionStorage.getItem('signup_draft'); if(!raw) return;
+    var d=JSON.parse(raw);
+    SIGNUP_FIELDS.forEach(function(id){ var el=document.getElementById(id); if(el && d[id]!=null && d[id]!=='') el.value=d[id]; });
+  }catch(e){}
 })();
 document.getElementById('f-go').onclick = async function(){
   var g=function(id){ return document.getElementById(id).value.trim(); };
@@ -183,6 +198,7 @@ document.getElementById('f-go').onclick = async function(){
   };
   if(body.password.length < 12){ err.textContent='Password must be at least 12 characters - a 4-word passphrase works well.'; err.style.display='block'; return; }
   if(body.password !== g('f-pass2')){ err.textContent='Passwords do not match.'; err.style.display='block'; return; }
+  if(window.turnstile && !body.turnstile_token){ err.textContent='Complete the security check first. If it never loads, your network may be blocking Cloudflare\u2019s challenge domains \u2014 try another network or DNS.'; err.style.display='block'; return; }
   for (var k in body){ if(k!=='student_email' && k!=='storage_plan_key' && (body[k]===''||body[k]===null)){ err.textContent='Please complete every field.'; err.style.display='block'; return; } }
   if(!body.accept_user_agreement||!body.accept_privacy_policy){ err.textContent='Both agreements must be accepted.'; err.style.display='block'; return; }
   var btn=this; btn.disabled=true; btn.textContent='Creating your account\u2026';
@@ -190,7 +206,7 @@ document.getElementById('f-go').onclick = async function(){
     var r=await fetch('https://focms-api.onrender.com/focms/v1/auth/cohort-signup',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var d=await r.json().catch(function(){return {};});
-    if(r.status===201 && d.vpc_checkout_url){ location.href=d.vpc_checkout_url; return; }
+    if(r.status===201 && d.vpc_checkout_url){ saveSignupDraft(); location.href=d.vpc_checkout_url; return; }
     if(r.status===201 && d.api_token){ location.href='/portal#t='+encodeURIComponent(d.api_token); return; }
     if(r.status===201){
       document.getElementById('form-view').style.display='none';
@@ -201,13 +217,15 @@ document.getElementById('f-go').onclick = async function(){
       document.getElementById('done-msg').textContent=dm;
       window.scrollTo({top:0});
     } else {
+      if(window.turnstile){ try{ turnstile.reset(); }catch(e){} }
       var m = d.detail;
       if (Array.isArray(m)) m = m.map(function(x){return x.msg;}).join('; ');
       else if (m && typeof m === 'object') m = m.message || m.error || JSON.stringify(m);
+      if (r.status===409) m = (m || 'An account with this email already exists.') + ' Already signed up? Use Sign in instead.';
       err.textContent = m || ('Signup failed ('+r.status+'). Check your invitation code and try again.');
       err.style.display='block';
     }
-  }catch(e){ err.textContent='Network error \u2014 please try again.'; err.style.display='block'; }
+  }catch(e){ if(window.turnstile){ try{ turnstile.reset(); }catch(e2){} } err.textContent='Network error \u2014 please try again.'; err.style.display='block'; }
   btn.disabled=false; btn.textContent='Create my account';
 };
 </script>
