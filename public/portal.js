@@ -1911,19 +1911,40 @@ const EC_CAT_SKILL_DOMAINS = {
   'Domestic, Life Skills & Trades': ['Intermediate Life Skills & Kitchen Safety','Life Skills, Home Chores & Social Nuance','Real-World Self-Sufficiency & Auto Skills','Financial Literacy & Money Management','Advanced Financial Independence','Fine Motor & Coordination'],
   'Community, Inclusivity & Lifestyle': ['Leadership, Civics & Community Engagement','Social Dynamics, Leadership & Peer Skills','Social, Emotional & Autonomy','Identity, Boundaries & Emotional Maturity']
 };
+let FORM_SKILLS = [];
+function renderFormSkillChips() {
+  const c = document.getElementById('sk-chips');
+  if (!c) return;
+  c.innerHTML = FORM_SKILLS.length
+    ? FORM_SKILLS.map(function(code){ return '<span class="ec-chip">' + escapeHTML(skillTitle(code)) + ' <span class="art-x" onclick="removeFormSkill(\'' + code.replace(/'/g, "\\'") + '\')">\u00d7</span></span>'; }).join(' ')
+    : '<span class="cr-waiting" style="padding:0">No skills on this record yet.</span>';
+}
+function addFormSkill(code) {
+  if (code && FORM_SKILLS.indexOf(code) === -1) FORM_SKILLS.push(code);
+  const sel = document.getElementById('sk-add'); if (sel) sel.value = '';
+  renderFormSkillChips();
+}
+function removeFormSkill(code) {
+  FORM_SKILLS = FORM_SKILLS.filter(function(x){ return x !== code; });
+  renderFormSkillChips();
+}
 function skillsGainedField(current, catName) {
-  const list = (current || []).filter(Boolean);
+  FORM_SKILLS = (current || []).filter(Boolean).slice();
   const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
-  const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1 || list.includes(sk.code));
+  const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
   const opts = pool.map(sk =>
-    '<option value="' + (sk.code || '') + '"' + (list.includes(sk.code) ? ' selected' : '') + '>' +
+    '<option value="' + (sk.code || '') + '">' +
     escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
     '</option>').join('');
-  const custom = list.filter(v => !(SKILLS_CATALOG || []).some(sk => sk.code === v)).join(', ');
-  return '<label class="ec-lbl">Skills gained (multi-select)' +
-    '<select class="ec-in ec-skills" data-k="skills_gained" multiple size="6">' + opts + '</select>' +
-    '<div class="ec-hint">Hold Ctrl/Cmd to pick multiple. Not on the list? Add below (comma-separated).</div>' +
-    '<input class="ec-in ec-skills-custom" data-k="skills_gained_custom" type="text" placeholder="e.g. sailing knots, drill formations" value="' + escapeHTML(custom) + '"></label>';
+  const chips = FORM_SKILLS.length
+    ? FORM_SKILLS.map(function(code){ return '<span class="ec-chip">' + escapeHTML(skillTitle(code)) + ' <span class="art-x" onclick="removeFormSkill(\'' + code.replace(/'/g, "\\'") + '\')">\u00d7</span></span>'; }).join(' ')
+    : '<span class="cr-waiting" style="padding:0">No skills on this record yet.</span>';
+  return '<label class="ec-lbl">Skills on this record' +
+    '<div id="sk-chips" class="ec-chips" style="margin:4px 0 6px">' + chips + '</div>' +
+    '<select class="ec-in" id="sk-add" onchange="addFormSkill(this.value)">' +
+    '<option value="">-- add a skill --</option>' + opts + '</select>' +
+    '<div class="ec-hint">Pick from the list to add. Click \u00d7 on a chip to remove. Not on the list? Add below (comma-separated).</div>' +
+    '<input class="ec-in ec-skills-custom" data-k="skills_gained_custom" type="text" placeholder="e.g. sailing knots, drill formations" value=""></label>';
 }
 function showcaseField(current) {
   return '<label class="ec-check"><input type="checkbox" class="ec-in ec-showcase" data-k="show_on_showcase"' +
@@ -2036,9 +2057,7 @@ function ecTrailCrumb(leaf) {
   return ecCrumbHtml(parts);
 }
 function readSkillsFromForm() {
-  const out = [];
-  const sel = document.querySelector('.ec-in.ec-skills');
-  if (sel) Array.from(sel.selectedOptions).forEach(function(o){ if (o.value) out.push(o.value); });
+  const out = FORM_SKILLS.slice();
   const cus = document.querySelector('.ec-in.ec-skills-custom');
   if (cus) cus.value.split(',').map(function(x){ return x.trim(); }).filter(Boolean).forEach(function(x){ out.push(x); });
   return Array.from(new Set(out));
@@ -2514,6 +2533,7 @@ async function ecSave(id) {
   const item = { affiliation_type: EC_FILTER || 'program' };
   if (id) item.id = id;
   collectEcForm(item);
+  item.skills_gained = readSkillsFromForm();
   const other = document.querySelector('.ec-in[data-k="organization_name_other"]');
   if (other && other.value.trim()) item.organization_name = other.value.trim();
   delete item.organization_name_other;
