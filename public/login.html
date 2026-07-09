@@ -130,7 +130,7 @@ async function doLogin(ev){
       btn.textContent = "Sign in";
       return false;
     }
-    var token = body.access_token || body.token || (body.session && body.session.token);
+    var token = body.api_token || body.access_token || body.token || (body.session && body.session.token);
     var user = body.user || {};
     if (token){
       try {
