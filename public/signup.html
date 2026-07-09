@@ -33,7 +33,7 @@ a{color:var(--orange)}
 </style>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
-\1
+<body>
 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 18px;border-bottom:1px solid #E5E2D9;background:#fff;font-family:Poppins,Arial,sans-serif">
   <a href="https://outcomestar.app/"><img src="/outcomestar_logo_primary.png" alt="outcomestar" style="height:40px"></a>
   <nav style="display:flex;gap:18px;font-size:14px">
@@ -86,13 +86,42 @@ a{color:var(--orange)}
         <select id="f-syear"><option value="">Select…</option></select></div>
     </div>
 
+    <!-- ===== Pricing policy ===== -->
+    <div style="background:#fff;border:1px solid #E3E7ED;border-radius:12px;padding:18px 20px;margin-top:22px">
+      <div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:17px">Membership pricing</div>
+      <div style="font-size:12.5px;color:#4A5563;margin:4px 0 10px">Per student, billed annually. Your plan is set by your student's current grade and includes the complete record platform: all five pillars, benchmarks, generated applications, resumes, reports, and the student website.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+        <tr style="text-align:left;border-bottom:2px solid #201868"><th style="padding:5px 0">Grade band</th><th style="text-align:right">Price</th></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Pre-K &ndash; Grade 5</td><td style="text-align:right;font-weight:600;color:#1B7A3D">Free</td></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Grades 6&ndash;8</td><td style="text-align:right;font-weight:600">$119.99/yr</td></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Grades 9&ndash;11</td><td style="text-align:right;font-weight:600">$249.99/yr</td></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Grade 12</td><td style="text-align:right;font-weight:600">$399/yr</td></tr>
+        <tr><td style="padding:6px 0">After grade 12 (alumni archive)</td><td style="text-align:right;font-weight:600">$11.99/yr</td></tr>
+      </table>
+      <div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:17px;margin-top:18px">Storage pricing</div>
+      <div style="font-size:12.5px;color:#4A5563;margin:4px 0 10px">Per family, billed annually. Storage covers uploaded files &mdash; photos, video, and documents. 1 GB is included free with every account.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+        <tr style="text-align:left;border-bottom:2px solid #201868"><th style="padding:5px 0">Plan</th><th>Storage</th><th style="text-align:right">Price</th></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Included</td><td>1 GB</td><td style="text-align:right;font-weight:600;color:#1B7A3D">Free</td></tr>
+        <tr style="border-bottom:1px solid #EEF1F6;background:#FFF4E8"><td style="padding:6px 0;font-weight:600">Keepsake</td><td>10 GB</td><td style="text-align:right;font-weight:600">$29/yr</td></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Portfolio</td><td>50 GB</td><td style="text-align:right;font-weight:600">$79/yr</td></tr>
+        <tr><td style="padding:6px 0">Archive</td><td>100 GB</td><td style="text-align:right;font-weight:600">$149/yr</td></tr>
+      </table>
+      <ul style="font-size:12.5px;color:#4A5563;margin:12px 0 0;padding-left:18px;line-height:1.6">
+        <li>Founding-cohort invitation codes lock founding pricing for the life of the account.</li>
+        <li>Cancel anytime &mdash; annual plans simply stop at renewal.</li>
+        <li>Your structured record is never deleted and is exportable free at any time. If a storage plan lapses, uploaded files are removed after 90 days; the record itself remains permanently.</li>
+        <li>Every account is verified by a parent card payment &mdash; for children under 13 this is the FTC-recognized method of verified parental consent under COPPA. Cards are held by Stripe; we never see the number.</li>
+      </ul>
+    </div>
+
     <div style="background:#FFF4E8;border:1px solid #F0C89E;border-radius:9px;padding:11px 14px;font-size:12.5px;color:#7A4A12;margin-top:16px">Your child's life record is yours forever. Files cost us money to store; if you stop, we delete the files. We never delete the record. Artifacts (photos, videos, documents) are deleted 90 days after a storage plan lapses; all structured records remain yours permanently and are exportable free at any time.</div>
     <div id="vpc-block" style="display:none;background:#EEEDF7;border:1px solid #C9C6E4;border-radius:9px;padding:13px 15px;margin-top:16px">
       <div style="font-weight:600;color:#201868;font-size:14px">Parent verification &amp; billing setup</div>
       <div style="font-size:12.5px;color:#4A5563;margin:6px 0 10px">Every account is verified by a parent card payment (for children under 13 this is the FTC-recognized COPPA consent method). Your card stays securely on file with Stripe for easy billing, and a storage plan unlocks photos, videos, and documents.</div>
       <label style="font-size:13px;font-weight:500;color:#201868">Choose a storage plan</label>
       <select class="rec-i" id="f-vpcplan" style="width:100%;padding:11px 12px;border:1.5px solid #D5DAE2;border-radius:9px;font-size:15px;background:#fff">
-        <option value="free">Free plan — 1 GB — $1 one-time consent verification (no subscription)</option>
+        <option value="free">Included storage — 1 GB — $1 one-time consent verification (no subscription)</option>
         <option value="keepsake">Keepsake — 10 GB — $29/yr</option>
         <option value="portfolio">Portfolio — 50 GB — $79/yr</option>
         <option value="archive">Archive — 100 GB — $149/yr</option>
@@ -105,8 +134,8 @@ a{color:var(--orange)}
     <script>function togglePw(id,btn){var el=document.getElementById(id);el.type=el.type==='password'?'text':'password';btn.textContent=el.type==='password'?'Show':'Hide';}</script>
     <div style="font-size:12px;color:#7A8A9E;margin:-4px 0 10px">Best practice: a passphrase of 4+ unrelated words, 12&ndash;16 characters.</div>
     <div class="cf-turnstile" data-sitekey="0x4AAAAAADw4Xqk23WJvTch-" style="margin:12px 0"></div>
-    <label class="chk"><input type="checkbox" id="f-agree1"> I accept the <a href="/user-agreement.html" target="_blank">User Agreement</a>.</label>
-    <label class="chk"><input type="checkbox" id="f-agree2"> I accept the <a href="/privacy-policy.html" target="_blank">Privacy Policy</a>, including its protections for children's data.</label>
+    <label class="chk"><input type="checkbox" id="f-agree1"> I accept the <a href="/user-agreement" target="_blank">User Agreement</a>.</label>
+    <label class="chk"><input type="checkbox" id="f-agree2"> I accept the <a href="/privacy-policy" target="_blank">Privacy Policy</a>, including its protections for children's data.</label>
 
     <button class="btn" id="f-go">Create my account</button>
     <div class="msg err" id="f-err"></div>
