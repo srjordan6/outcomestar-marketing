@@ -51,10 +51,10 @@ a{color:var(--orange)}
   <div id="form-view">
     <h1>Join the founding cohort</h1>
     <div class="rule"></div>
-    <p class="sub">Signup is by invitation code. One parent account, one student to start — you can add more later.</p>
+    <p class="sub">One parent account, one student to start — you can add more later. Have a school or invitation code? Enter it to join that cohort; otherwise leave it blank.</p>
 
-    <label>Invitation code</label>
-    <input id="f-code" autocomplete="off" placeholder="e.g. FOUNDER-2026">
+    <label>Invitation code (optional — leave blank if you don't have one)</label>
+    <input id="f-code" autocomplete="off" placeholder="From your school or invitation, e.g. FOUNDER-2026">
 
     <h2 style="font-size:19px;margin-top:26px">Parent</h2>
     <div class="row">
@@ -76,6 +76,7 @@ a{color:var(--orange)}
     <div class="row">
       <div><label>Current grade</label>
         <select id="f-sgrade"><option value="">Select…</option>
+          <option value="none">Not in school yet</option>
           <option value="pre-k">Pre-K</option><option value="k">Kindergarten</option>
           <option value="1">1</option><option value="2">2</option><option value="3">3</option>
           <option value="4">4</option><option value="5">5</option><option value="6">6</option>
@@ -162,7 +163,7 @@ a{color:var(--orange)}
 })();
 (function(){
   var y=document.getElementById('f-syear'), now=new Date().getFullYear();
-  for(var i=now-3;i>=now-19;i--){ var o=document.createElement('option'); o.value=i; o.textContent=i; y.appendChild(o); }
+  for(var i=now;i>=now-19;i--){ var o=document.createElement('option'); o.value=i; o.textContent=i; y.appendChild(o); }
   document.getElementById('vpc-block').style.display='block';
   y.onchange=function(){};
 })();
@@ -185,7 +186,7 @@ document.getElementById('f-go').onclick = async function(){
   var g=function(id){ return document.getElementById(id).value.trim(); };
   var err=document.getElementById('f-err'); err.className='msg err'; err.style.display='none';
   var body={
-    code:g('f-code'), parent_email:g('f-pemail'), parent_display_name:g('f-pdisplay'),
+    code:g('f-code')||null, parent_email:g('f-pemail'), parent_display_name:g('f-pdisplay'),
     parent_first_name:g('f-pfirst'), parent_last_name:g('f-plast'),
     student_first_name:g('f-sfirst'), student_last_name:g('f-slast'),
     student_grade:g('f-sgrade'), student_birth_year:parseInt(g('f-syear'),10)||null,
@@ -199,7 +200,16 @@ document.getElementById('f-go').onclick = async function(){
   if(body.password.length < 12){ err.textContent='Password must be at least 12 characters - a 4-word passphrase works well.'; err.style.display='block'; return; }
   if(body.password !== g('f-pass2')){ err.textContent='Passwords do not match.'; err.style.display='block'; return; }
   if(window.turnstile && !body.turnstile_token){ err.textContent='Complete the security check first. If it never loads, your network may be blocking Cloudflare\u2019s challenge domains \u2014 try another network or DNS.'; err.style.display='block'; return; }
-  for (var k in body){ if(k!=='student_email' && k!=='storage_plan_key' && (body[k]===''||body[k]===null)){ err.textContent='Please complete every field.'; err.style.display='block'; return; } }
+  var OPTIONAL_FIELDS={student_email:1,storage_plan_key:1,code:1,turnstile_token:1};
+  for (var k in body){ if(!OPTIONAL_FIELDS[k] && (body[k]===''||body[k]===null)){ err.textContent='Please complete every field.'; err.style.display='block'; return; } }
+  /* Grade vs birth-year sanity check (mirrors the server rule) */
+  var _age=new Date().getFullYear()-body.student_birth_year;
+  var _win={'none':[0,6],'pre-k':[2,6],'k':[4,7]}[body.student_grade] || (isNaN(parseInt(body.student_grade,10)) ? [0,19] : [parseInt(body.student_grade,10)+4, parseInt(body.student_grade,10)+8]);
+  if(_age<_win[0] || _age>_win[1]){
+    var _lbl={'none':'not yet in school','pre-k':'in Pre-K','k':'in kindergarten'}[body.student_grade] || ('in grade '+body.student_grade);
+    err.textContent='A student '+_lbl+' is usually '+_win[0]+'\u2013'+_win[1]+' years old \u2014 check the grade and birth year.';
+    err.style.display='block'; return;
+  }
   if(!body.accept_user_agreement||!body.accept_privacy_policy){ err.textContent='Both agreements must be accepted.'; err.style.display='block'; return; }
   var btn=this; btn.disabled=true; btn.textContent='Creating your account\u2026';
   try{
