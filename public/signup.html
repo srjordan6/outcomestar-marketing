@@ -87,6 +87,13 @@ a{color:var(--orange)}
         </select></div>
     </div>
 
+    <div id="bc-block" style="display:none;background:#EEEDF7;border:1px solid #C9C6E4;border-radius:9px;padding:13px 15px;margin-top:16px">
+      <div style="font-weight:600;color:#201868;font-size:14px">Birth certificate required (ages 0&ndash;10)</div>
+      <div style="font-size:12.5px;color:#4A5563;margin:6px 0 10px">Students aged 0&ndash;10 get the membership free once age is validated. Upload the student's birth certificate (JPG, PNG, or PDF, up to 8&nbsp;MB). It is stored privately, never shown publicly, and reviewed only to confirm the name and birth date.</div>
+      <input type="file" id="f-bcert" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" style="font-size:14px">
+      <div id="bc-status" style="font-size:12px;color:#7A8A9E;margin-top:6px"></div>
+    </div>
+
     <!-- ===== Pricing policy ===== -->
     <div style="background:#fff;border:1px solid #E3E7ED;border-radius:12px;padding:18px 20px;margin-top:22px">
       <div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:17px">Membership pricing</div>
@@ -112,17 +119,17 @@ a{color:var(--orange)}
         <li>Founding-cohort invitation codes lock founding pricing for the life of the account.</li>
         <li>Cancel anytime &mdash; annual plans simply stop at renewal.</li>
         <li>Your structured record is never deleted, and you can generate a report containing all stored data, free at any time. If a storage plan lapses, uploaded files are removed after 90 days; the record itself remains permanently.</li>
-        <li>Every account is verified by a parent card payment &mdash; for children under 13 this is the FTC-recognized method of verified parental consent under COPPA. Cards are held by Stripe; we never see the number.</li>
+        <li>Every account is verified by a parent card payment. For students aged 0&ndash;10, a one-time $3 identity &amp; age verification (government-ID check handled by Stripe Identity, plus the birth certificate review) is valid for 10 years and replaces any subscription — for children under 13 this is the FTC-recognized method of verified parental consent under COPPA. Cards and IDs are held by Stripe; we never see them.</li>
       </ul>
     </div>
 
     <div style="background:#FFF4E8;border:1px solid #F0C89E;border-radius:9px;padding:11px 14px;font-size:12.5px;color:#7A4A12;margin-top:16px">Your child's life record is yours forever. Files cost us money to store; if you stop, we delete the files. We never delete the record. Artifacts (photos, videos, documents) are deleted 90 days after a storage plan lapses; all structured records remain yours permanently, and you can generate a report containing all stored data, free at any time.</div>
     <div id="vpc-block" style="display:none;background:#EEEDF7;border:1px solid #C9C6E4;border-radius:9px;padding:13px 15px;margin-top:16px">
       <div style="font-weight:600;color:#201868;font-size:14px">Parent verification &amp; billing setup</div>
-      <div style="font-size:12.5px;color:#4A5563;margin:6px 0 10px">Every account is verified by a parent card payment (for children under 13 this is the FTC-recognized COPPA consent method). Your card stays securely on file with Stripe for easy billing, and a storage plan unlocks photos, videos, and documents.</div>
+      <div style="font-size:12.5px;color:#4A5563;margin:6px 0 10px">Every account is verified by a parent card payment. For students aged 0&ndash;10 the free plan carries a one-time $3 identity &amp; age verification (valid 10 years). Your card stays securely on file with Stripe for easy billing, and a storage plan unlocks photos, videos, and documents.</div>
       <label style="font-size:13px;font-weight:500;color:#201868">Choose a storage plan</label>
       <select class="rec-i" id="f-vpcplan" style="width:100%;padding:11px 12px;border:1.5px solid #D5DAE2;border-radius:9px;font-size:15px;background:#fff">
-        <option value="free">Included storage — 1 GB — $1 one-time consent verification (no subscription)</option>
+        <option value="free">Included storage — 1 GB — $3 one-time identity &amp; age verification (valid 10 years)</option>
         <option value="keepsake">Keepsake — 10 GB — $29/yr</option>
         <option value="portfolio">Portfolio — 50 GB — $79/yr</option>
         <option value="archive">Archive — 100 GB — $149/yr</option>
@@ -167,7 +174,25 @@ a{color:var(--orange)}
   bd.max=t.toISOString().slice(0,10);
   var min=new Date(t.getFullYear()-19, t.getMonth(), t.getDate());
   bd.min=min.toISOString().slice(0,10);
+  function ageFrom(v){ if(!v) return null; var b=new Date(v+'T00:00:00'), n=new Date();
+    return n.getFullYear()-b.getFullYear()-((n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate()))?1:0); }
+  window.__studentAge=ageFrom;
+  bd.addEventListener('change', function(){
+    var a=ageFrom(bd.value);
+    document.getElementById('bc-block').style.display=(a!=null && a<=10)?'block':'none';
+  });
 })();
+var BC_DATA=null;
+document.getElementById('f-bcert').addEventListener('change', function(){
+  var f=this.files && this.files[0]; var st=document.getElementById('bc-status'); BC_DATA=null;
+  if(!f){ st.textContent=''; return; }
+  if(f.size>8*1024*1024){ st.textContent='File is over 8 MB \u2014 choose a smaller scan.'; this.value=''; return; }
+  var r=new FileReader();
+  r.onload=function(){ BC_DATA={ b64:String(r.result).split(',')[1], mime:f.type||'application/pdf', name:f.name };
+    st.textContent='Attached: '+f.name+' ('+Math.round(f.size/1024)+' KB)'; };
+  r.onerror=function(){ st.textContent='Could not read the file \u2014 try again.'; };
+  r.readAsDataURL(f);
+});
 /* Restore form data if the parent backed out of Stripe checkout */
 var SIGNUP_FIELDS=['f-code','f-pfirst','f-plast','f-pdisplay','f-pemail','f-sfirst','f-slast','f-semail','f-sgrade','f-sbdate','f-vpcplan'];
 function saveSignupDraft(){
@@ -181,6 +206,8 @@ function saveSignupDraft(){
     var raw=sessionStorage.getItem('signup_draft'); if(!raw) return;
     var d=JSON.parse(raw);
     SIGNUP_FIELDS.forEach(function(id){ var el=document.getElementById(id); if(el && d[id]!=null && d[id]!=='') el.value=d[id]; });
+    var bd=document.getElementById('f-sbdate');
+    if(bd && bd.value){ bd.dispatchEvent(new Event('change')); }
   }catch(e){}
 })();
 document.getElementById('f-go').onclick = async function(){
@@ -213,6 +240,10 @@ document.getElementById('f-go').onclick = async function(){
     err.style.display='block'; return;
   }
   if(!body.accept_user_agreement||!body.accept_privacy_policy){ err.textContent='Both agreements must be accepted.'; err.style.display='block'; return; }
+  if(_age<=10){
+    if(!BC_DATA){ err.textContent='For students aged 0\u201310, upload the birth certificate so we can validate the birth date for free access.'; err.style.display='block'; return; }
+    body.birth_certificate_b64=BC_DATA.b64; body.birth_certificate_mime=BC_DATA.mime; body.birth_certificate_filename=BC_DATA.name;
+  }
   var btn=this; btn.disabled=true; btn.textContent='Creating your account\u2026';
   try{
     var r=await fetch('https://focms-api.onrender.com/focms/v1/auth/cohort-signup',{
