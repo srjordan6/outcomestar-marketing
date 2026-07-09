@@ -1843,7 +1843,7 @@ let EC_VIEW = null;
 const EC_SECTIONS = [
   { code: 'cat_stem',        label: 'STEM, Tech & Coding',              desc: 'Robotics, coding, science, math clubs' },
   { code: 'cat_leadership',  label: 'Leadership, Civic & Career Prep',  desc: 'Scouts, cadets, NHS, student gov, business clubs' },
-  { code: 'cat_arts',        label: 'Creative, Visual & Performing Arts', desc: 'Music, band, theater, art, film, dance' },
+  { code: 'cat_arts',        label: 'Creative, Visual & Performing Arts', desc: 'Band, theater, art, film, dance' },
   { code: 'cat_academic',    label: 'Academic, Language & Culture',     desc: 'Debate, language, mock trial, quiz bowl' },
   { code: 'cat_sports_main', label: 'Mainstream Sports & Athletics',    desc: 'Soccer, swim, basketball, baseball, football' },
   { code: 'cat_sports_alt',  label: 'Alternative, Combat & Niche Sports', desc: 'Martial arts, fencing, climbing, cycling, sailing' },
@@ -1981,39 +1981,26 @@ function collectEcForm(item) {
   if (item.skills_gained) item.skills_gained = Array.from(new Set(item.skills_gained));
 }
 
-function progForAffil(a) {
-  const ps = EC_PROGRAMS || [];
-  if (a.program_code) { const byCode = ps.find(p => p.code === a.program_code); if (byCode) return byCode; }
-  return ps.find(p => p.title === a.organization_name) || null;
-}
-
 function renderEcSections() {
   const counts = { awards: EC_AWARDS.length, sessions: EC_SESSIONS.length, camps: 0, coaches: 0 };
   for (const k of Object.keys(CAT_MAP)) counts[k] = 0;
   const catToCode = {};
   for (const k in CAT_MAP) catToCode[CAT_MAP[k]] = k;
-  let unassigned = 0;
   for (const a of EC_DATA) {
     if (a.affiliation_type === 'coach_relationship') { counts.coaches++; continue; }
-    const prog = progForAffil(a);
+    const prog = (EC_PROGRAMS || []).find(p => p.title === a.organization_name);
     if (prog && catToCode[prog.category]) counts[catToCode[prog.category]]++;
-    else unassigned++;
   }
   for (const s of EC_SESSIONS) if (s.event_type === 'summer_experience') counts.camps++;
-  let cards = EC_SECTIONS.map(t =>
+  const cards = EC_SECTIONS.map(t =>
     '<button class="ec-card" onclick="openEcSection(\''+t.code+'\')">' +
     '<div><div class="ec-name">'+t.label+'</div><div class="ec-desc">'+t.desc+'</div></div>' +
     '<div class="ec-count">'+counts[t.code]+' <span>on record</span></div>' +
     '</button>').join('');
-  if (unassigned > 0) cards +=
-    '<button class="ec-card" onclick="renderUnassignedList()">' +
-    '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
-    '<div class="ec-count">'+unassigned+' <span>on record</span></div></button>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + '</div>';
 }
 
 let CAT_FILTER = null;
-let PROG_VIEW = null;
 function openEcSection(code) {
   EC_VIEW = code;
   AWARDS_FILTER = null;
@@ -2027,64 +2014,25 @@ function openEcSection(code) {
 }
 
 function renderCategoryList(catCode) {
-  PROG_VIEW = null;
   const catName = CAT_MAP[catCode];
+  const rows = EC_DATA.filter(a => {
+    if (a.affiliation_type === 'coach_relationship') return false;
+    const prog = (EC_PROGRAMS || []).find(p => p.title === a.organization_name);
+    return prog && prog.category === catName;
+  });
   const t = EC_SECTIONS.find(x => x.code === catCode);
-  const catProgs = (EC_PROGRAMS || []).filter(p => p.category === catName);
-  const byCode = {};
-  for (const a of EC_DATA) {
-    if (a.affiliation_type === 'coach_relationship') continue;
-    const prog = progForAffil(a);
-    if (prog && prog.category === catName) (byCode[prog.code] = byCode[prog.code] || []).push(a);
-  }
-  const withEntries = catProgs.filter(p => byCode[p.code]);
-  const cards = withEntries.map(p => {
-    const orgs = byCode[p.code].map(a => a.organization_name).filter((v, i, s) => s.indexOf(v) === i).slice(0, 3).join(', ');
-    return '<button class="ec-card" onclick="renderProgramEntries(\''+catCode+'\',\''+p.code+'\')">' +
-      '<div><div class="ec-name">'+escapeHTML(p.title)+'</div><div class="ec-desc">'+escapeHTML(orgs)+'</div></div>' +
-      '<div class="ec-count">'+byCode[p.code].length+' <span>on record</span></div></button>';
-  }).join('');
   let html = '<div class="ec-bar"><button class="save-btn" onclick="ecEditForCategory(\''+catCode+'\')">Add ' + t.label + ' entry</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>';
-  if (!withEntries.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry \u2014 you will pick the program (e.g. ' + escapeHTML(catProgs.slice(0, 3).map(p => p.title).join(', ')) + ') as part of the form.</div>';
-  else html += '<div class="ec-grid">' + cards + '</div>';
-  document.getElementById('sections-container').innerHTML = html;
-}
-
-function renderProgramEntries(catCode, progCode) {
-  PROG_VIEW = { cat: catCode, code: progCode };
-  CAT_FILTER = CAT_MAP[catCode];
-  const prog = (EC_PROGRAMS || []).find(p => p.code === progCode);
-  const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
-  const t = EC_SECTIONS.find(x => x.code === catCode);
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
-    '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else html += rows.map(ecRow).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
 
-function renderUnassignedList() {
-  PROG_VIEW = null; CAT_FILTER = null; EC_VIEW = 'unassigned'; EC_FILTER = 'program';
-  const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && !progForAffil(a));
-  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>' +
-    '<div class="cr-waiting">Open each entry (Edit) and pick its program so it shows in the right category.</div>';
-  html += rows.map(ecRow).join('');
-  document.getElementById('sections-container').innerHTML = html;
-}
-
 function ecEditForCategory(catCode) {
   EC_FILTER = 'program';
-  CAT_FILTER = CAT_MAP[catCode];
-  PROG_VIEW = null;
+  const stub = { affiliation_type: 'program', _catCode: catCode };
+  const c = document.getElementById('sections-container');
   ecEdit(null);
-}
-
-function ecEditForProgram(catCode, progCode) {
-  EC_FILTER = 'program';
-  CAT_FILTER = CAT_MAP[catCode];
-  PROG_VIEW = { cat: catCode, code: progCode };
-  ecEdit(null, progCode);
 }
 
 function classifyAward(a) {
@@ -2192,13 +2140,12 @@ function ecRow(a) {
     '<button onclick="ecDelete(\'' + a.id + '\')">Delete</button></div></div>';
 }
 
-function ecEdit(id, presetProgCode) {
-  const a = id ? EC_DATA.find(x => x.id === id) : { affiliation_type: EC_FILTER || 'program', program_code: presetProgCode || null };
+function ecEdit(id) {
+  const a = id ? EC_DATA.find(x => x.id === id) : { affiliation_type: EC_FILTER };
   if (!a) return;
-  const showPicker = EC_FILTER === 'program' || a.program_code || a.affiliation_type === 'program' || a.affiliation_type === 'activity';
   const c = document.getElementById('sections-container');
   c.innerHTML = '<div class="ec-form">' +
-    (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
+    (EC_FILTER === 'program' ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -2216,17 +2163,18 @@ function ecEdit(id, presetProgCode) {
     skillsGainedField(a.skills_gained) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
-    '<button class="save-btn save-btn-ghost" onclick="' + (PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
+    '<button class="save-btn save-btn-ghost" onclick="' + (CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
 }
 
 function ecProgramPicker(a) {
   const filtered = CAT_FILTER ? (EC_PROGRAMS || []).filter(p => p.category === CAT_FILTER) : (EC_PROGRAMS || []);
-  const opts = filtered.map(p => '<option value="'+p.code+'"'+(a.program_code===p.code?' selected':'')+'>'+escapeHTML(p.title)+(CAT_FILTER?'':' ('+escapeHTML(p.category)+')')+'</option>').join('');
+  const opts = filtered.map(p => '<option value="'+p.title.replace(/"/g,'&quot;')+'"'+(a.organization_name===p.title?' selected':'')+'>'+p.title+(CAT_FILTER?'':' ('+p.category+')')+'</option>').join('');
+  const otherVal = a.organization_name && !(EC_PROGRAMS || []).some(p => p.title === a.organization_name) ? a.organization_name : '';
   return '<label class="ec-lbl">Program *' +
-    '<select class="ec-in" data-k="program_code">' +
+    '<select class="ec-in" data-k="organization_name">' +
     '<option value="">-- pick a program --</option>' + opts + '</select></label>' +
-    '<label class="ec-lbl">Organization / provider name' +
-    '<input class="ec-in" data-k="organization_name" type="text" placeholder="e.g. Frisco School of Music (defaults to the program name)" value="'+escapeHTML(a.organization_name||'')+'"></label>';
+    '<label class="ec-lbl">Or type another' +
+    '<input class="ec-in" data-k="organization_name_other" type="text" value="'+otherVal.replace(/"/g,'&quot;')+'"></label>';
 }
 
 function ecField(key, label, val, req, type) {
@@ -2240,25 +2188,19 @@ function ecArea(key, label, val) {
 function ecRowTwo(a, b) { return '<div class="ec-two">' + a + b + '</div>'; }
 
 async function ecSave(id) {
-  const item = { affiliation_type: EC_FILTER || 'program' };
+  const item = { affiliation_type: EC_FILTER };
   if (id) item.id = id;
   collectEcForm(item);
   const other = document.querySelector('.ec-in[data-k="organization_name_other"]');
   if (other && other.value.trim()) item.organization_name = other.value.trim();
   delete item.organization_name_other;
-  if (!item.organization_name && item.program_code) {
-    const p = (EC_PROGRAMS || []).find(x => x.code === item.program_code);
-    if (p) item.organization_name = p.title;
-  }
-  if (!item.organization_name) { showToast('Pick a program or type an organization name', 'error'); return; }
+  if (!item.organization_name) { showToast('Organization name is required', 'error'); return; }
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/affiliations', { items: [item] });
     showToast('Saved', 'success');
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/affiliations');
     EC_DATA = d.affiliations || [];
-    if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
-    else if (EC_VIEW === 'unassigned') renderEcSections();
-    else if (CAT_FILTER) { const code = Object.keys(CAT_MAP).find(k => CAT_MAP[k] === CAT_FILTER); renderCategoryList(code); } else openEcType(EC_FILTER);
+    if (CAT_FILTER) { const code = Object.keys(CAT_MAP).find(k => CAT_MAP[k] === CAT_FILTER); renderCategoryList(code); } else openEcType(EC_FILTER);
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -2267,9 +2209,7 @@ async function ecDelete(id) {
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/affiliations', { delete_ids: [id] });
     EC_DATA = EC_DATA.filter(a => a.id !== id);
-    if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
-    else if (EC_VIEW === 'unassigned') renderUnassignedList();
-    else if (CAT_FILTER) { const code = Object.keys(CAT_MAP).find(k => CAT_MAP[k] === CAT_FILTER); renderCategoryList(code); } else openEcType(EC_FILTER);
+    if (CAT_FILTER) { const code = Object.keys(CAT_MAP).find(k => CAT_MAP[k] === CAT_FILTER); renderCategoryList(code); } else openEcType(EC_FILTER);
     showToast('Deleted', 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -4761,7 +4701,7 @@ function ucaPrint(id){
     +'<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">'
     +'<style>'+(ucaIsReport(x.form_code)?REPORT_CSS:(ucaIsResume(x.form_code)?RESUME_CSS:UCA_CSS))+' body{max-width:760px;margin:0 auto}</style></head><body>'
     + ucaFullDoc(x)
-    +'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<'+'/script></body></html>');
+    +'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<' + '\/script></body></html>');
   w.document.close();
 }
 function ucaPdfOut(id){
@@ -5838,7 +5778,7 @@ function printLetter(id){
     +'<h1>Letter of Recommendation</h1>'
     +'<div class="m">From '+esc(l.submitter_name||'')+(meta?(' \u00b7 '+esc(meta)):'')+'</div>'
     +'<div>'+(l.letter_text||'')+'</div>'
-    +'<script>window.onload=function(){window.print();}<'+'/script></body></html>');
+    +'<script>window.onload=function(){window.print();}<' + '\/script></body></html>');
   w.document.close();
 }
 function pdfLetter(id){
@@ -6078,7 +6018,7 @@ function appPrint(id){
     +'<h1>College Application \u2014 '+esc(a.common_name||a.university_name||'')+'</h1>'
     +'<div class="m">'+esc(studentDisplayName())+' \u00b7 prepared '+new Date().toLocaleDateString()+'</div>'
     +'<table>'+rows+'</table>'
-    +'<script>window.onload=function(){window.print();}<'+'/script></body></html>');
+    +'<script>window.onload=function(){window.print();}<' + '\/script></body></html>');
   w.document.close();
 }
 function appPdf(id){
