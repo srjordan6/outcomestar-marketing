@@ -481,6 +481,14 @@ function readInputValue(el, f) {
   return el.value.trim();
 }
 
+function themeCardSync(){
+  document.querySelectorAll('.web-theme-card').forEach(function(l){
+    var r = l.querySelector('input[type=radio]');
+    var on = r && r.checked;
+    l.style.borderColor = on ? 'var(--orange)' : '#E3E7ED';
+    l.style.background = on ? '#FFF7EF' : '#fff';
+  });
+}
 let SITE_STATUS = null;
 async function loadSiteStatus(){
   try {
@@ -3796,6 +3804,7 @@ async function uploadHero(){
 }
 async function openWebsitePillar(){
   if (!getToken()) { showToast('Set your API token first','error'); return; }
+  if (!SITE_STATUS) { try { await loadSiteStatus(); } catch(e){} }
   currentPillar='website';
   document.getElementById('view-pillars').classList.add('hidden');
   document.getElementById('view-pillar').classList.remove('hidden');
@@ -3874,13 +3883,17 @@ function renderWebsiteConfig(band){
     html += '<h3 style="font-family:Lora,serif;color:var(--navy);margin-top:18px">Theme <span style="font-size:12px;color:#7A8A9E;font-family:Poppins">(10 for this age group \u00b7 one active at a time)</span></h3>';
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px">' + themes.map(function(t){
       var on = (t.key === curTheme);
-      return '<label style="width:calc(50% - 4px);border:2px solid '+(on?'var(--orange)':'#E3E7ED')+';border-radius:10px;padding:9px 12px;cursor:pointer;background:'+(on?'#FFF7EF':'#fff')+'">'
-        + '<input type="radio" name="web-theme" value="'+t.key+'" '+(on?'checked':'')+' style="margin-right:8px">'
+      return '<label class="web-theme-card" style="width:calc(50% - 4px);border:2px solid '+(on?'var(--orange)':'#E3E7ED')+';border-radius:10px;padding:9px 12px;cursor:pointer;background:'+(on?'#FFF7EF':'#fff')+'">'
+        + '<input type="radio" name="web-theme" value="'+t.key+'" '+(on?'checked':'')+' style="margin-right:8px" onchange="themeCardSync()">'
         + '<b style="color:var(--navy)">'+escapeHTML(t.name)+'</b>'
         + (t.built?' <span style="font-size:10px;color:#10B981;font-weight:600">BUILT</span>':' <span style="font-size:10px;color:#7A8A9E">pre-launch sprint</span>')
         + '<div style="font-size:11px;color:#7A8A9E;margin-top:2px;margin-left:22px">'+escapeHTML(t.vibe)+'</div></label>';
     }).join('') + '</div>';
-    if (band==='band_6_12') html += '<div style="font-size:11.5px;color:#7A8A9E;margin-top:6px">Currently live: Mission Control at <a href="https://app.outcomestar.app/john" target="_blank" style="color:var(--orange)">app.outcomestar.app/john</a></div>';
+    if (band==='band_6_12') {
+      var liveTheme = (themes.find(function(t){return t.key===curTheme;})||{}).name || 'Mission Control';
+      var liveUrl = (SITE_STATUS && (SITE_STATUS.url || (SITE_STATUS.slug ? ('https://app.outcomestar.app/' + SITE_STATUS.slug) : null))) || 'https://app.outcomestar.app/john';
+      html += '<div style="font-size:11.5px;color:#7A8A9E;margin-top:6px">Currently live: ' + escapeHTML(liveTheme) + ' at <a href="' + liveUrl + '" target="_blank" style="color:var(--orange)">' + escapeHTML(liveUrl.replace('https://','')) + '</a></div>';
+    }
   }
   html += '<h3 style="font-family:Lora,serif;color:var(--navy);margin-top:18px">Privacy & safety</h3>';
   var forcedKeys = ['first_name_only_public','no_address_or_phone_public','nondescript_slug_required'].concat(Object.keys(cat.privacy_forced||{}));
