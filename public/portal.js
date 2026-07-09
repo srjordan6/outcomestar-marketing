@@ -2001,6 +2001,18 @@ function progForAffil(a) {
   return ps.find(p => p.title === a.organization_name) || null;
 }
 
+function ecSetHeader(title, desc) {
+  const t = document.getElementById('pillar-view-title'); if (t) t.textContent = title;
+  const d = document.getElementById('pillar-view-desc'); if (d) d.textContent = desc || '';
+}
+function ecCrumbHtml(parts) {
+  return '<div class="pillar-breadcrumb" style="margin:0 0 14px">' + parts.map(function(p, i) {
+    return i < parts.length - 1
+      ? '<button class="crumb-back" onclick="' + p.go + '">' + escapeHTML(p.label) + '</button> \u203a '
+      : '<span class="crumb-here">' + escapeHTML(p.label) + '</span>';
+  }).join('') + '</div>';
+}
+
 function renderEcSections() {
   const counts = { awards: EC_AWARDS.length, sessions: EC_SESSIONS.length, camps: 0, coaches: 0 };
   for (const k of Object.keys(CAT_MAP)) counts[k] = 0;
@@ -2023,6 +2035,7 @@ function renderEcSections() {
     '<button class="ec-card" onclick="renderUnassignedList()">' +
     '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
     '<div class="ec-count">'+unassigned+' <span>on record</span></div></button>';
+  ecSetHeader('Extracurricular', 'Programs, activities, service, and coach relationships. Each one is a signal the engine reads for engagement, breadth, and sustained involvement.');
   document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + '</div>';
 }
 
@@ -2060,10 +2073,15 @@ function renderCategoryList(catCode) {
       '<div><div class="ec-name">'+escapeHTML(p.title)+'</div><div class="ec-desc">'+escapeHTML(orgs)+'</div></div>' +
       '<div class="ec-count">'+byCode[p.code].length+' <span>on record</span></div></button>';
   }).join('');
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="ecEditForCategory(\''+catCode+'\')">Add ' + t.label + ' entry</button>' +
+  let html = ecCrumbHtml([
+    { label: 'Extracurricular', go: 'renderEcSections()' },
+    { label: t ? t.label : catName }
+  ]);
+  html += '<div class="ec-bar"><button class="save-btn" onclick="ecEditForCategory(\''+catCode+'\')">Add ' + t.label + ' entry</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>';
   if (!withEntries.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry \u2014 you will pick the program (e.g. ' + escapeHTML(catProgs.slice(0, 3).map(p => p.title).join(', ')) + ') as part of the form.</div>';
   else html += '<div class="ec-grid">' + cards + '</div>';
+  ecSetHeader(t ? t.label : catName, t ? t.desc : '');
   document.getElementById('sections-container').innerHTML = html;
 }
 
@@ -2075,7 +2093,12 @@ function renderProgramEntries(catCode, progCode) {
   const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
   const t = EC_SECTIONS.find(x => x.code === catCode);
   const isArts = !!(prog && prog.category === 'Creative, Visual & Performing Arts');
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
+  let html = ecCrumbHtml([
+    { label: 'Extracurricular', go: 'renderEcSections()' },
+    { label: t ? t.label : '', go: "renderCategoryList('" + catCode + "')" },
+    { label: prog ? prog.title : 'Program' }
+  ]);
+  html += '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else {
@@ -2089,6 +2112,7 @@ function renderProgramEntries(catCode, progCode) {
     }).join('');
     html += '<div class="ec-grid">' + cards + '</div>';
   }
+  ecSetHeader(prog ? prog.title : 'Program', t ? t.label : '');
   document.getElementById('sections-container').innerHTML = html;
 }
 
@@ -2099,7 +2123,14 @@ function renderEntryDetail(catCode, progCode, affilId) {
   const a = EC_DATA.find(x => x.id === affilId);
   const prog = (EC_PROGRAMS || []).find(p => p.code === progCode);
   if (!a) { renderProgramEntries(catCode, progCode); return; }
-  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
+  const tSec = EC_SECTIONS.find(x => x.code === catCode);
+  let html = ecCrumbHtml([
+    { label: 'Extracurricular', go: 'renderEcSections()' },
+    { label: tSec ? tSec.label : '', go: "renderCategoryList('" + catCode + "')" },
+    { label: prog ? prog.title : 'Program', go: "renderProgramEntries('" + catCode + "','" + progCode + "')" },
+    { label: a.organization_name + (a.role ? ' \u2014 ' + a.role : '') }
+  ]);
+  html += '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
   html += ecRow(a);
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
     const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
@@ -2110,6 +2141,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
     else html += perfs.map(perfRow).join('');
   }
+  ecSetHeader(a.organization_name + (a.role ? ' \u2014 ' + a.role : ''), prog ? prog.title : '');
   document.getElementById('sections-container').innerHTML = html;
 }
 
@@ -2183,7 +2215,8 @@ async function perfDelete(id) {
 function renderUnassignedList() {
   PROG_VIEW = null; ENTRY_VIEW = null; CAT_FILTER = null; EC_VIEW = 'unassigned'; EC_FILTER = 'program';
   const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && !progForAffil(a));
-  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>' +
+  let html = ecCrumbHtml([{ label: 'Extracurricular', go: 'renderEcSections()' }, { label: 'Needs a program' }]) +
+    '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>' +
     '<div class="cr-waiting">Open each entry (Edit) and pick its program so it shows in the right category.</div>';
   html += rows.map(ecRow).join('');
   document.getElementById('sections-container').innerHTML = html;
