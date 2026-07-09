@@ -4073,9 +4073,17 @@ function ucaBackTarget(code){
   if (REPORT_FORMS.some(function(f){return f[0]===code;})) return 'renderReportsList()';
   return 'renderUcaFormsList()';
 }
+function adCrumb(parts){
+  return ecCrumbHtml([{ label: 'Applications, Resumes, and Reports', go: 'renderAppsDocsHome()' }].concat(parts));
+}
+function ucaCrumbParent(code){
+  if (RESUME_FORMS.some(function(f){return f[0]===code;})) return { label: 'Resumes', go: 'renderResumesList()' };
+  if (REPORT_FORMS.some(function(f){return f[0]===code;})) return { label: 'Reports', go: 'renderReportsList()' };
+  return { label: 'Applications', go: 'renderUcaFormsList()' };
+}
 async function renderReportsList(){
   await ucaLoadSaved();
-  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderAppsDocsHome()">Back</button></div><div class="ec-grid">';
+  let html = adCrumb([{ label: 'Reports' }]) + '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderAppsDocsHome()">Back</button></div><div class="ec-grid">';
   html += REPORT_FORMS.map(function(f){
     var n = UCA_SAVED.filter(function(x){ return x.form_code === f[0]; }).length;
     return '<button class="ec-card" onclick="renderUcaTopic(\'' + f[0] + '\')">'
@@ -4087,7 +4095,7 @@ async function renderReportsList(){
 }
 async function renderResumesList(){
   await ucaLoadSaved();
-  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderAppsDocsHome()">Back</button></div><div class="ec-grid">';
+  let html = adCrumb([{ label: 'Resumes' }]) + '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderAppsDocsHome()">Back</button></div><div class="ec-grid">';
   html += RESUME_FORMS.map(function(f){
     var n = UCA_SAVED.filter(function(x){ return x.form_code === f[0]; }).length;
     return '<button class="ec-card" onclick="renderUcaTopic(\'' + f[0] + '\')">'
@@ -4336,7 +4344,7 @@ async function ucaLoadSaved(){
 }
 async function renderUcaFormsList(){
   await ucaLoadSaved();
-  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderAppsDocsHome()">Back</button></div><div class="ec-grid">';
+  let html = adCrumb([{ label: 'Applications' }]) + '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderAppsDocsHome()">Back</button></div><div class="ec-grid">';
   html += UCA_FORMS.map(function(f){
     var n = UCA_SAVED.filter(function(x){ return x.form_code === f[0]; }).length;
     return '<button class="ec-card" onclick="renderUcaTopic(\'' + f[0] + '\')">'
@@ -4350,7 +4358,7 @@ function ucaFormName(code){ var f=UCA_FORMS.concat(RESUME_FORMS, REPORT_FORMS).f
 async function renderUcaTopic(code){
   await ucaLoadSaved();
   var list = UCA_SAVED.filter(function(x){ return x.form_code === code; });
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="ucaCreate(\'' + code + '\')">Create ' + ucaFormName(code) + '</button>'
+  let html = adCrumb([ucaCrumbParent(code), { label: ucaFormName(code) }]) + '<div class="ec-bar"><button class="save-btn" onclick="ucaCreate(\'' + code + '\')">Create ' + ucaFormName(code) + '</button>'
     + '<button class="save-btn save-btn-ghost" onclick="'+ucaBackTarget(code)+'">Back</button></div>';
   if (!list.length) html += '<div class="cr-waiting">No saved ' + ucaFormName(code) + ' yet. Create one \u2014 it pre-fills from your records.</div>';
   else html += list.map(function(x){
@@ -4464,7 +4472,7 @@ function buildReportSections(d){
   secs.push(S('COURSEWORK', d.courses.map(function(c){ return [c.course_name, ['Grade '+(c.grade_level!=null?c.grade_level:''), c.grade_received?('Grade: '+c.grade_received):'', c.course_code, c.sced_code?('SCED '+c.sced_code):''].filter(Boolean).join(' \u00b7 ')]; })));
   secs.push(S('TESTS & ASSESSMENTS', d.tests.map(function(t){ return [t.test_name||'Test', [t.test_date, t.total_score||t.score].filter(Boolean).join(' \u00b7 ')]; })));
   var skl=(d.sk&&(d.sk.skills||[]))||[], att=skl.filter(function(s){return s.acquired||s.proficiency;});
-  secs.push(S('SKILLS', att.slice(0,40).map(function(s){ return [s.title||s.skill_title||s.skill_code, [s.proficiency, s.acquired_date].filter(Boolean).join(' \u00b7 ')]; })));
+  secs.push(S('SKILLS', att.slice(0,40).map(function(s){ return [s.title||s.skill_title||s.custom_title||skillTitle(s.skill_code), [s.proficiency, s.acquired_date].filter(Boolean).join(' \u00b7 ')]; })));
   var ml=((d.mil&&d.mil.custom)||[]).concat(((d.mil&&d.mil.milestones)||[]).filter(function(m){return m.achieved||m.achieved_date;}));
   secs.push(S('MILESTONES', ml.slice(0,30).map(function(m){ return [m.title||m.milestone_title||m.code, m.achieved_date||m.date||(m.achieved?'achieved':'')]; })));
   secs.push(S('ACTIVITIES & AFFILIATIONS', d.acts.map(function(x){ return [x.organization_name||'Activity', [x.role, x.role_start_date, x.weekly_hours?(x.weekly_hours+' hrs/wk'):'', x.coach_name?('Coach: '+x.coach_name):''].filter(Boolean).join(' \u00b7 ')]; })));
