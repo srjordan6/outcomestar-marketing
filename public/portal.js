@@ -2012,6 +2012,39 @@ function ecCrumbHtml(parts) {
       : '<span class="crumb-here">' + escapeHTML(p.label) + '</span>';
   }).join('') + '</div>';
 }
+function ecTrailCrumb(leaf) {
+  const parts = [{ label: 'Extracurricular', go: 'renderEcSections()' }];
+  const view = ENTRY_VIEW || PROG_VIEW;
+  if (view) {
+    const t = EC_SECTIONS.find(x => x.code === view.cat);
+    parts.push({ label: t ? t.label : '', go: "renderCategoryList('" + view.cat + "')" });
+    const prog = (EC_PROGRAMS || []).find(p => p.code === view.code);
+    parts.push({ label: prog ? prog.title : 'Program', go: "renderProgramEntries('" + view.cat + "','" + view.code + "')" });
+    if (ENTRY_VIEW) {
+      const a = EC_DATA.find(x => x.id === ENTRY_VIEW.id);
+      if (a) parts.push({ label: a.organization_name, go: "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" });
+    }
+  } else if (CAT_FILTER) {
+    const code = Object.keys(CAT_MAP).find(function(k){ return CAT_MAP[k] === CAT_FILTER; });
+    parts.push({ label: CAT_FILTER, go: "renderCategoryList('" + code + "')" });
+  }
+  parts.push({ label: leaf });
+  return ecCrumbHtml(parts);
+}
+function readSkillsFromForm() {
+  const out = [];
+  const sel = document.querySelector('.ec-in.ec-skills');
+  if (sel) Array.from(sel.selectedOptions).forEach(function(o){ if (o.value) out.push(o.value); });
+  const cus = document.querySelector('.ec-in.ec-skills-custom');
+  if (cus) cus.value.split(',').map(function(x){ return x.trim(); }).filter(Boolean).forEach(function(x){ out.push(x); });
+  return Array.from(new Set(out));
+}
+const LM_KINDS = { rank: 'Rank', merit_badge: 'Merit badge', award: 'Award' };
+function latestMilestone(affilId) {
+  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && (s.milestone_kind || 'rank') !== 'training');
+  ms.sort(function(a, b){ return (b.event_date || '').localeCompare(a.event_date || ''); });
+  return ms[0] || null;
+}
 
 function renderEcSections() {
   const counts = { awards: EC_AWARDS.length, sessions: EC_SESSIONS.length, camps: 0, coaches: 0 };
@@ -2093,6 +2126,7 @@ function renderProgramEntries(catCode, progCode) {
   const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
   const t = EC_SECTIONS.find(x => x.code === catCode);
   const isArts = !!(prog && prog.category === 'Creative, Visual & Performing Arts');
+  const isLead = !!(prog && prog.category === 'Leadership, Civic & Career Prep');
   let html = ecCrumbHtml([
     { label: 'Extracurricular', go: 'renderEcSections()' },
     { label: t ? t.label : '', go: "renderCategoryList('" + catCode + "')" },
@@ -2105,7 +2139,10 @@ function renderProgramEntries(catCode, progCode) {
     const cards = rows.map(a => {
       const period = (a.role_start_date || '') + (a.role_end_date ? ' \u2192 ' + a.role_end_date : (a.role_start_date ? ' \u2192 present' : ''));
       const perfN = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === a.id).length;
-      const right = isArts ? '<div class="ec-count">' + perfN + ' <span>performances</span></div>' : '<div class="pillar-arrow">\u203a</div>';
+      const lm = isLead ? latestMilestone(a.id) : null;
+      const right = isArts ? '<div class="ec-count">' + perfN + ' <span>performances</span></div>'
+        : isLead ? '<div class="ec-count" style="font-size:13px;max-width:180px">' + (lm ? escapeHTML(lm.title) : '\u2014') + ' <span>' + (lm ? 'latest ' + (LM_KINDS[lm.milestone_kind || 'rank'] || 'rank').toLowerCase() : 'no rank yet') + '</span></div>'
+        : '<div class="pillar-arrow">\u203a</div>';
       return '<button class="ec-card" onclick="renderEntryDetail(\''+catCode+'\',\''+progCode+'\',\''+a.id+'\')">' +
         '<div><div class="ec-name">'+escapeHTML(a.organization_name)+(a.role ? ' \u2014 '+escapeHTML(a.role) : '')+'</div>' +
         '<div class="ec-desc">'+escapeHTML(period)+'</div></div>' + right + '</button>';
@@ -2141,6 +2178,24 @@ function renderEntryDetail(catCode, progCode, affilId) {
     if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
     else html += perfs.map(perfRow).join('');
   }
+  if (prog && prog.category === 'Leadership, Civic & Career Prep') {
+    const all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
+      .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
+    const ranks = all.filter(s => (s.milestone_kind || 'rank') !== 'training');
+    const trainings = all.filter(s => s.milestone_kind === 'training');
+    const lm = ranks[0] || null;
+    if (lm) html += '<div class="ac-est" style="margin-top:20px">Latest ' + escapeHTML((LM_KINDS[lm.milestone_kind || 'rank'] || 'Rank').toLowerCase()) + ': <b>' + escapeHTML(lm.title) + '</b>' + (lm.event_date ? ' \u00b7 ' + escapeHTML(lm.event_date) : '') + '</div>';
+    html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, merit badges &amp; awards</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>';
+    if (!ranks.length) html += '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>';
+    else html += ranks.map(lmRow).join('');
+    html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Training log</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>';
+    if (!trainings.length) html += '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>';
+    else html += trainings.map(lmRow).join('');
+  }
   ecSetHeader(a.organization_name + (a.role ? ' \u2014 ' + a.role : ''), prog ? prog.title : '');
   document.getElementById('sections-container').innerHTML = html;
 }
@@ -2150,8 +2205,20 @@ function perfRow(p) {
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || 'Performance') +
     (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) : '') + '</div>' +
     '<div class="ec-meta">' + bits + (p.location ? (bits ? ' \u00b7 ' : '') + escapeHTML(p.location) : '') + '</div>' +
+    renderRowSkillsAndBadge(p) +
     (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
     '<div class="ec-actions"><button onclick="perfEdit(\'' + p.id + '\')">Edit</button>' +
+    '<button onclick="perfDelete(\'' + p.id + '\')">Delete</button></div></div>';
+}
+
+function lmRow(p) {
+  const kind = LM_KINDS[p.milestone_kind || 'rank'] || (p.milestone_kind === 'training' ? 'Training' : 'Rank');
+  return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || kind) +
+    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) : '') + '</div>' +
+    '<div class="ec-meta">' + escapeHTML(p.milestone_kind === 'training' ? 'Training' : kind) + (p.location ? ' \u00b7 ' + escapeHTML(p.location) : '') + '</div>' +
+    renderRowSkillsAndBadge(p) +
+    (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
+    '<div class="ec-actions"><button onclick="lmEdit(\'' + p.id + '\')">Edit</button>' +
     '<button onclick="perfDelete(\'' + p.id + '\')">Delete</button></div></div>';
 }
 
@@ -2165,7 +2232,7 @@ function perfEdit(id) {
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
   if (!p) return;
   const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
-  document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+  document.getElementById('sections-container').innerHTML = ecTrailCrumb(id ? 'Edit performance' : 'Log performance') + '<div class="ec-form">' +
     perfField('pf-title', 'Performance / concert name *', p.title) +
     perfField('pf-date', 'Date *', p.event_date, 'date') +
     perfField('pf-instrument', 'Instrument', p.instrument) +
@@ -2173,9 +2240,57 @@ function perfEdit(id) {
     perfField('pf-composer', 'Composer(s)', p.composer) +
     perfField('pf-location', 'Venue / location', p.location) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
+    skillsGainedField(p.skills_gained, CAT_FILTER) +
     '<label class="ec-check"><input type="checkbox" id="pf-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="perfSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+}
+
+function lmEdit(id, presetKind) {
+  if (!ENTRY_VIEW) return;
+  const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10), milestone_kind: presetKind || 'rank' };
+  if (!p) return;
+  const kind = p.milestone_kind || 'rank';
+  const isTraining = kind === 'training';
+  const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
+  const kindSel = isTraining ? '' :
+    '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind">' +
+    Object.keys(LM_KINDS).map(function(k){ return '<option value="'+k+'"'+(kind===k?' selected':'')+'>'+LM_KINDS[k]+'</option>'; }).join('') +
+    '</select></label>';
+  document.getElementById('sections-container').innerHTML = ecTrailCrumb(isTraining ? (id ? 'Edit training' : 'Log training') : (id ? 'Edit rank / badge / award' : 'Log rank / badge / award')) + '<div class="ec-form">' +
+    kindSel +
+    perfField('lm-title', (isTraining ? 'Training name *' : 'Rank / badge / award name *'), p.title) +
+    perfField('lm-date', (isTraining ? 'Training date *' : 'Date attained *'), p.event_date, 'date') +
+    perfField('lm-location', 'Location', p.location) +
+    '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
+    skillsGainedField(p.skills_gained, CAT_FILTER) +
+    '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
+    '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+}
+
+async function lmSave(id, fixedKind) {
+  if (!ENTRY_VIEW) return;
+  const v = function(k){ const el = document.getElementById(k); return el ? (el.value || '').trim() : ''; };
+  const item = {
+    event_type: 'leadership_milestone',
+    title: v('lm-title'), event_date: v('lm-date'),
+    milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
+    location: v('lm-location') || null,
+    notes: v('lm-notes') || null,
+    skills_gained: readSkillsFromForm(),
+    show_on_showcase: document.getElementById('lm-showcase').checked,
+    related_affiliation_id: ENTRY_VIEW.id
+  };
+  if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
+  if (id) item.id = id;
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    showToast('Saved', 'success');
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
+    EC_SESSIONS = d.sessions || [];
+    renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 async function perfSave(id) {
@@ -2190,6 +2305,7 @@ async function perfSave(id) {
     show_on_showcase: document.getElementById('pf-showcase').checked
   };
   if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
+  item.skills_gained = readSkillsFromForm();
   if (id) item.id = id;
   item.related_affiliation_id = ENTRY_VIEW.id;
   try {
@@ -2348,7 +2464,7 @@ function ecEdit(id, presetProgCode) {
   if (!a) return;
   const showPicker = EC_FILTER === 'program' || a.program_code || a.affiliation_type === 'program' || a.affiliation_type === 'activity';
   const c = document.getElementById('sections-container');
-  c.innerHTML = '<div class="ec-form">' +
+  c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
