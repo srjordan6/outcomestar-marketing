@@ -74,6 +74,8 @@ a{color:var(--orange)}
     <label>Student email (optional — school-issued preferred)</label>
     <input id="f-semail" type="email" placeholder="For free access, we confirm both parent and student emails">
     <div class="row">
+      <div><label>Birth date</label>
+        <input id="f-sbdate" type="date"></div>
       <div><label>Current grade</label>
         <select id="f-sgrade"><option value="">Select…</option>
           <option value="none">Not in school yet</option>
@@ -83,8 +85,6 @@ a{color:var(--orange)}
           <option value="7">7</option><option value="8">8</option><option value="9">9</option>
           <option value="10">10</option><option value="11">11</option><option value="12">12</option>
         </select></div>
-      <div><label>Birth year</label>
-        <select id="f-syear"><option value="">Select…</option></select></div>
     </div>
 
     <!-- ===== Pricing policy ===== -->
@@ -96,7 +96,7 @@ a{color:var(--orange)}
         <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Ages 0&ndash;10</td><td style="text-align:right;font-weight:600;color:#1B7A3D">Free</td></tr>
         <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Ages 11&ndash;13</td><td style="text-align:right;font-weight:600">$119.99/yr</td></tr>
         <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Ages 14&ndash;16</td><td style="text-align:right;font-weight:600">$249.99/yr</td></tr>
-        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Ages 17&ndash;18</td><td style="text-align:right;font-weight:600">$399/yr</td></tr>
+        <tr style="border-bottom:1px solid #EEF1F6"><td style="padding:6px 0">Ages 17&ndash;18</td><td style="text-align:right;font-weight:600">$399.99/yr</td></tr>
         <tr><td style="padding:6px 0">Ages 19 and up (alumni archive)</td><td style="text-align:right;font-weight:600">$12.99/yr</td></tr>
       </table>
       <div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:17px;margin-top:18px">Storage pricing</div>
@@ -162,13 +162,14 @@ a{color:var(--orange)}
   }
 })();
 (function(){
-  var y=document.getElementById('f-syear'), now=new Date().getFullYear();
-  for(var i=now;i>=now-19;i--){ var o=document.createElement('option'); o.value=i; o.textContent=i; y.appendChild(o); }
   document.getElementById('vpc-block').style.display='block';
-  y.onchange=function(){};
+  var bd=document.getElementById('f-sbdate'), t=new Date();
+  bd.max=t.toISOString().slice(0,10);
+  var min=new Date(t.getFullYear()-19, t.getMonth(), t.getDate());
+  bd.min=min.toISOString().slice(0,10);
 })();
 /* Restore form data if the parent backed out of Stripe checkout */
-var SIGNUP_FIELDS=['f-code','f-pfirst','f-plast','f-pdisplay','f-pemail','f-sfirst','f-slast','f-semail','f-sgrade','f-syear','f-vpcplan'];
+var SIGNUP_FIELDS=['f-code','f-pfirst','f-plast','f-pdisplay','f-pemail','f-sfirst','f-slast','f-semail','f-sgrade','f-sbdate','f-vpcplan'];
 function saveSignupDraft(){
   var d={}; SIGNUP_FIELDS.forEach(function(id){ var el=document.getElementById(id); if(el) d[id]=el.value; });
   try{ sessionStorage.setItem('signup_draft', JSON.stringify(d)); }catch(e){}
@@ -189,7 +190,7 @@ document.getElementById('f-go').onclick = async function(){
     code:g('f-code')||null, parent_email:g('f-pemail'), parent_display_name:g('f-pdisplay'),
     parent_first_name:g('f-pfirst'), parent_last_name:g('f-plast'),
     student_first_name:g('f-sfirst'), student_last_name:g('f-slast'),
-    student_grade:g('f-sgrade'), student_birth_year:parseInt(g('f-syear'),10)||null,
+    student_grade:g('f-sgrade'), student_birth_date:g('f-sbdate')||null,
     student_email:g('f-semail')||null,
     storage_plan_key:document.getElementById('f-vpcplan').value,
     password:g('f-pass'),
@@ -202,12 +203,13 @@ document.getElementById('f-go').onclick = async function(){
   if(window.turnstile && !body.turnstile_token){ err.textContent='Complete the security check first. If it never loads, your network may be blocking Cloudflare\u2019s challenge domains \u2014 try another network or DNS.'; err.style.display='block'; return; }
   var OPTIONAL_FIELDS={student_email:1,storage_plan_key:1,code:1,turnstile_token:1};
   for (var k in body){ if(!OPTIONAL_FIELDS[k] && (body[k]===''||body[k]===null)){ err.textContent='Please complete every field.'; err.style.display='block'; return; } }
-  /* Grade vs birth-year sanity check (mirrors the server rule) */
-  var _age=new Date().getFullYear()-body.student_birth_year;
+  /* Grade vs birth-date sanity check (mirrors the server rule) */
+  var _bd=new Date(body.student_birth_date+'T00:00:00'), _t=new Date();
+  var _age=_t.getFullYear()-_bd.getFullYear()-((_t.getMonth()<_bd.getMonth()||( _t.getMonth()===_bd.getMonth()&&_t.getDate()<_bd.getDate()))?1:0);
   var _win={'none':[0,6],'pre-k':[2,6],'k':[4,7]}[body.student_grade] || (isNaN(parseInt(body.student_grade,10)) ? [0,19] : [parseInt(body.student_grade,10)+4, parseInt(body.student_grade,10)+8]);
   if(_age<_win[0] || _age>_win[1]){
     var _lbl={'none':'not yet in school','pre-k':'in Pre-K','k':'in kindergarten'}[body.student_grade] || ('in grade '+body.student_grade);
-    err.textContent='A student '+_lbl+' is usually '+_win[0]+'\u2013'+_win[1]+' years old \u2014 check the grade and birth year.';
+    err.textContent='A student '+_lbl+' is usually '+_win[0]+'\u2013'+_win[1]+' years old, but this birth date makes the student '+_age+' \u2014 check the grade and birth date.';
     err.style.display='block'; return;
   }
   if(!body.accept_user_agreement||!body.accept_privacy_policy){ err.textContent='Both agreements must be accepted.'; err.style.display='block'; return; }
