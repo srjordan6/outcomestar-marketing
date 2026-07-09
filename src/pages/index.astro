@@ -1,214 +1,89 @@
-﻿---
-import Layout from "../layouts/Layout.astro";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>outcomestar — Every outcome. One star.</title>
+<meta name="description" content="One longitudinal record for your child's whole journey — academics, athletics, activities, applications. From first milestones to college admission.">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style is:global>
+:root{--navy:#201868;--orange:#F07800;--paper:#FAFAF7;--gray:#7A8A9E;--ink:#1a1a2e}
+*{box-sizing:border-box}body{margin:0;font-family:Poppins,sans-serif;background:var(--paper);color:var(--ink);line-height:1.6}
+h1,h2,h3{font-family:Lora,Georgia,serif;color:var(--navy);margin:0}
+.wrap{max-width:1020px;margin:0 auto;padding:0 24px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 18px;border-bottom:1px solid #E5E2D9;background:#fff}
+.topbar nav{display:flex;gap:18px;font-size:14px;align-items:center;flex-wrap:wrap}
+.topbar nav a{color:var(--navy);text-decoration:none}
+.topbar nav a.cta-in{color:#fff;background:var(--navy);padding:6px 14px;border-radius:8px;font-weight:600}
+.topbar nav a.cta-up{color:#fff;background:var(--orange);padding:6px 14px;border-radius:8px;font-weight:600}
+.btn{display:inline-block;background:var(--orange);color:#fff;font-weight:600;padding:12px 28px;border-radius:10px;text-decoration:none;border:0;font-size:16px;cursor:pointer}
+.hero{padding:64px 0 48px;text-align:center}
+.hero h1{font-size:clamp(32px,5.5vw,54px);line-height:1.15;letter-spacing:-.01em}
+.hero h1 span{color:var(--orange)}
+.hero p{max-width:640px;margin:18px auto 30px;font-size:18px;color:#4A5563}
+.rule{width:110px;border-bottom:3px solid var(--orange);margin:22px auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;padding:36px 0 20px}
+.card{background:#fff;border:1px solid #E3E7ED;border-radius:14px;padding:26px}
+.card h3{font-size:19px;margin-bottom:8px}
+.card p{margin:0;color:#4A5563;font-size:14.5px}
+.band{background:var(--navy);color:#fff;text-align:center;padding:56px 24px;margin-top:48px}
+.band h2{color:#fff;font-size:30px}
+.band p{color:#C9C6E4;max-width:620px;margin:14px auto 26px}
+footer{border-top:1px solid #E5E2D9;margin-top:0;padding:26px 20px;text-align:center;font-size:13px;color:var(--gray);background:var(--paper)}
+footer a{color:var(--navy);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a href="https://outcomestar.app/"><img src="/outcomestar_logo_primary.png" alt="outcomestar" style="height:40px"></a>
+  <nav>
+    <a href="/about">About</a>
+    <a href="/insights">Insights</a>
+    <a href="/faq">FAQ</a>
+    <a href="/contact">Contact</a>
+    <a href="/portal" class="cta-in">Sign in</a>
+    <a href="/signup" class="cta-up">Create account</a>
+  </nav>
+</div>
 
-const portfolios = [{
-  name: "John Ray Jordan",
-  classYear: "Class of 2032",
-  focus: "Distance & Breaststroke",
-  href: "https://app.outcomestar.app/john",
-}];
-
-const pillars = [
-  { num: "01", name: "Personal", description: "Character, values, identity. The narrative voice that ties everything else together. Often the hardest pillar to track â€” and the one that decides borderline applications." },
-  { num: "02", name: "Academics", description: "Course trajectory, grades, standardized tests, academic competitions, summer programs. The foundation every other pillar gets weighed against." },
-  { num: "03", name: "Extra Curricular", description: "Sports, arts, leadership, sustained commitments. Where students compound â€” and where committees look for depth rather than the longest list." },
-  { num: "04", name: "Career", description: "Internships, ventures, mentorships, real work that pays or builds something. The pillar that distinguishes seventeen-year-olds with adult-level initiative." },
-  { num: "05", name: "Higher Education", description: "Target schools, scholarship paths, application strategy, recruiting touchpoints. The pillar that closes the loop on the other four." },
-];
----
-
-<Layout title="OutcomeStar">
-
-  <!-- HERO -->
-  <section>
-    <div class="max-w-5xl mx-auto px-6 py-24 md:py-32">
-      <p class="font-body text-xs uppercase tracking-[0.3em] text-srj-orange font-semibold mb-8">OutcomeStar</p>
-      <h1 class="font-headline text-srj-navy text-4xl md:text-6xl font-semibold mb-10 leading-[1.05] tracking-tight">A documented record of every outcome that earned the seat.</h1>
-      <div class="w-24 h-[3px] bg-srj-orange mb-10"></div>
-      <p class="font-body text-lg md:text-xl text-srj-gray-dark max-w-3xl leading-relaxed font-light">Each student carries a portfolio of academic, athletic, and leadership evidence built year over year. OutcomeStar is the place that record lives &mdash; citable, comparable, and ready for the people who decide.</p>
-    </div>
+<div class="wrap">
+  <section class="hero">
+    <h1>Every outcome.<br><span>One star.</span></h1>
+    <div class="rule"></div>
+    <p>One longitudinal record for your child's whole journey &mdash; academics, athletics, arts, leadership, and service &mdash; organized from first milestones through college applications, so senior fall is an export, not a scramble.</p>
+    <a class="btn" href="/signup">Get started</a>
   </section>
 
-  <!-- CURRENT PORTFOLIOS -->
-  <section class="bg-white border-y border-srj-gray-light">
-    <div class="max-w-5xl mx-auto px-6 py-12">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-navy font-semibold mb-6">Current portfolios</p>
-      <ul>
-        {portfolios.map((p) => (
-          <li>
-            <a href={p.href} class="group flex items-baseline justify-between gap-6 py-4 hover:bg-srj-gray-light/40 -mx-4 px-4 rounded transition-colors">
-              <div>
-                <p class="font-headline text-srj-navy text-xl font-medium group-hover:text-srj-orange transition-colors">{p.name}</p>
-                <p class="font-body text-sm text-srj-gray mt-1">{p.classYear} &middot; {p.focus}</p>
-              </div>
-              <span class="font-body text-sm text-srj-gray group-hover:text-srj-orange transition-colors font-medium">View &rarr;</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
+  <section class="grid">
+    <div class="card"><h3>Five pillars, one record</h3><p>Personal, Academics, Extracurricular, Career, and Higher Education &mdash; every course, test, race, recital, rank, and role captured once and reused everywhere.</p></div>
+    <div class="card"><h3>Applications that fill themselves</h3><p>Generate filled college application forms, tailored resumes, and comprehensive reports directly from your child's verified record.</p></div>
+    <div class="card"><h3>A website that grows up</h3><p>A family memory book at 5, a developmental portfolio at 10, a professional launchpad at 16 &mdash; privacy guardrails enforced at every age, in English and your home language.</p></div>
+    <div class="card"><h3>Athletics, tracked properly</h3><p>Personal records, time standards, and progress analytics &mdash; recruitment-ready data instead of scattered screenshots.</p></div>
+    <div class="card"><h3>Built by a parent</h3><p>Created for one family's road to college and opened to yours. Your data stays yours &mdash; export any time.</p></div>
+    <div class="card"><h3>Private by default</h3><p>Child sites use first-name-only public pages, nondescript links, and no-index protection. Law first, parent second, child by age.</p></div>
   </section>
+</div>
 
-  <!-- WHAT IT IS -->
-  <section class="py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">What it is</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 leading-tight">Evidence, organized once. Used everywhere it counts.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <div class="space-y-6 font-body text-srj-gray-dark text-lg leading-relaxed">
-        <p>Selective universities, scholarship committees, and recruiting coaches don't decide on a transcript alone. They look at the full record &mdash; the trajectory of academic work, athletic results, leadership roles, and the through-line that connects who a student was in middle school to who they're becoming in twelfth grade.</p>
-        <p>Families know this. But the record sits scattered across email threads, results sites, coach DMs, school portals, and screenshots on a parent's phone. By application season it's irretrievable.</p>
-        <p class="text-srj-navy font-medium">OutcomeStar is the system of record. Capture once. Cite forever.</p>
-      </div>
-    </div>
-  </section>
+<div class="band">
+  <h2>Founding cohort now open</h2>
+  <p>Founding families shape the product and lock in founding pricing.</p>
+  <a class="btn" href="/signup">Create your account</a>
+</div>
 
-  <!-- FIVE PILLARS -->
-  <section class="bg-srj-gray-light/40 border-y border-srj-gray-light py-20 md:py-28">
-    <div class="max-w-6xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">The taxonomy</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 max-w-2xl leading-tight">Five pillars. The categories admissions officers actually evaluate.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <p class="font-body text-srj-gray-dark text-lg leading-relaxed max-w-3xl mb-12">OutcomeStar organizes a student's life into five pillars. Every event a student earns &mdash; a swim meet result, a science fair award, a leadership election, an internship, a standardized test score &mdash; gets recorded into the pillar where it belongs. Categorized once, retrievable forever.</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {pillars.map((pillar) => (
-          <div class="bg-white border border-srj-gray-light rounded-lg p-6 hover:border-srj-orange transition-colors">
-            <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-3">{pillar.num}</p>
-            <h3 class="font-headline text-srj-navy text-xl font-medium mb-3">{pillar.name}</h3>
-            <p class="font-body text-srj-gray-dark text-sm leading-relaxed">{pillar.description}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
+<footer>
+  <a href="/user-agreement">Terms of Service</a> &nbsp;&middot;&nbsp; <a href="/privacy-policy">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="/contact">Contact</a>
+  <div style="margin-top:6px">&copy; 2026 SRJ Consulting &amp; Services LLC &middot; outcomestar.app &middot; Every outcome. One star.</div>
+</footer>
 
-  <!-- CAPTURE -->
-  <section class="py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">Capture</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 leading-tight">Paste it in. We'll take it from there.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <div class="space-y-6 font-body text-srj-gray-dark text-lg leading-relaxed">
-        <p>OutcomeStar reads structured data from the places students already earn it. A USA Swimming meet result page. A SwimCloud athlete profile. A music competition results sheet. An SAT score report. An academic competition table.</p>
-        <p>Open the source. Copy the relevant section. Paste it into OutcomeStar. The platform recognizes the format, extracts the structured fields &mdash; date, event, result, place, finals round, personal-best status, improvement margin &mdash; and writes the row into the right pillar. No retyping. No copy-paste into spreadsheets that get abandoned by junior year.</p>
-        <p>Each event type has its own extractor that knows how to parse its specific source. Swim races today. Music performances and academic competitions next. New event types add without disrupting the data already captured.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- BENCHMARKS -->
-  <section class="bg-srj-gray-light/40 border-y border-srj-gray-light py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">Benchmarks</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 leading-tight">Raw results, compared against the people who decide.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <div class="space-y-6 font-body text-srj-gray-dark text-lg leading-relaxed">
-        <p>A 200 freestyle time on its own is just a number. A 200 freestyle time benchmarked against NCAA Division I qualifying standards is a recruiting conversation. OutcomeStar computes the benchmarks that make raw results readable to the people who use them.</p>
-        <p>For competitive swimmers, the Power Index translates a student's full race history into a single score weighted against current D1 qualifying times. Recomputed on every new result. Track the trajectory month over month, not just the absolute number.</p>
-        <p>Benchmarks for academic competitions, music performances, and standardized tests follow the same pattern: compare the student's record against the standards the receiving committees actually use.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- SHOWCASE -->
-  <section class="py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">Showcase</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 leading-tight">A citable public portfolio at outcomestar.app/[student].</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <div class="space-y-6 font-body text-srj-gray-dark text-lg leading-relaxed">
-        <p>Every student gets a public portfolio page at a clean URL on their name. The page hydrates live from the family's private record &mdash; results, milestones, computed benchmarks, target schools &mdash; with the student's permission and on their schedule.</p>
-        <p>Send the URL to a college coach as a recruiting touchpoint. Hand it to a guidance counselor. Cite it in a scholarship application. Use it in conversations with admissions officers who want to see the trajectory, not just the snapshot.</p>
-        <p>Per-student themes let the showcase match the student's voice. The first theme &mdash; Mission Control &mdash; reads like a flight-deck telemetry display. Editorial Resume Mode is in development. Theme choice belongs to the student; the underlying record stays the same.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- AUDIENCE SPLIT -->
-  <section class="bg-srj-gray-light/40 border-y border-srj-gray-light py-20 md:py-28">
-    <div class="max-w-5xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">Built for both sides</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 leading-tight">A workspace for the family. A presentation for the deciders.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-12"></div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <div>
-          <h3 class="font-headline text-srj-navy text-2xl font-medium mb-4">For families</h3>
-          <p class="font-body text-srj-gray-dark leading-relaxed mb-4">A private parent portal with milestone summaries, computed metrics, target school benchmarks, and printable reports for guidance counselors and recruiting outreach. Read-only view of the data; manual support handles edits.</p>
-          <p class="font-body text-srj-gray-dark leading-relaxed">Owned by the family. Tenant-isolated from every other family. Data exports available. No lock-in.</p>
-        </div>
-        <div>
-          <h3 class="font-headline text-srj-navy text-2xl font-medium mb-4">For the people who decide</h3>
-          <p class="font-body text-srj-gray-dark leading-relaxed mb-4">A public showcase page that admissions officers, scholarship committees, and recruiting coaches can open in one click. Citable URL, structured evidence, clear context.</p>
-          <p class="font-body text-srj-gray-dark leading-relaxed">The student's chosen theme over the standard taxonomy. Recognizable to anyone who's reviewed thousands of applications.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- MISSION -->
-  <section class="py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">The mission</p>
-      <h2 class="font-headline text-srj-navy text-3xl md:text-4xl font-medium mb-6 leading-tight">Top-of-funnel admissions shouldn't only belong to the families who can buy a $40,000 consultant.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <div class="space-y-6 font-body text-srj-gray-dark text-lg leading-relaxed">
-        <p>OutcomeStar exists because every family deserves the structure, planning, and visibility that wealthy families already buy from independent admissions consultants.</p>
-        <p>Pilot families pay nothing. Paid plans subsidize free access. Per-family operating cost is a design constraint, not a budget number &mdash; we choose deterministic parsers over per-call AI bills, open-weight models over rented APIs, and self-hostable infrastructure over vendor dependency.</p>
-        <p class="text-srj-navy font-medium">If a family can't afford a tier, the tier doesn't exist for that family. They get the platform.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- STATUS -->
-  <section class="bg-srj-gray-light/40 border-y border-srj-gray-light py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-4">Status</p>
-      <h2 class="font-headline text-srj-navy text-2xl md:text-3xl font-medium mb-6 leading-tight">An honest map of what works today, what is being built, and what is planned.</h2>
-      <div class="w-16 h-[3px] bg-srj-orange mb-10"></div>
-      <div class="space-y-10">
-        <div>
-          <p class="font-body text-xs uppercase tracking-wider font-semibold mb-3"><span class="text-emerald-600">&#9679;</span> <span class="text-srj-navy">Live today</span></p>
-          <ul class="space-y-2 font-body text-srj-gray-dark">
-            <li>&middot; Public portfolio for John Ray Jordan at outcomestar.app/john</li>
-            <li>&middot; USA Swimming race result capture via paste-text pipeline</li>
-            <li>&middot; Power Index benchmark against NCAA Division I qualifying standards</li>
-            <li>&middot; Multi-tenant data isolation for family workspaces</li>
-            <li>&middot; Structured event log across all five pillars</li>
-          </ul>
-        </div>
-        <div>
-          <p class="font-body text-xs uppercase tracking-wider font-semibold mb-3"><span class="text-srj-orange">&#9679;</span> <span class="text-srj-navy">In development</span></p>
-          <ul class="space-y-2 font-body text-srj-gray-dark">
-            <li>&middot; Cohort signup for school-based pilot enrollment</li>
-            <li>&middot; Parent portal with milestone summaries and printable reports</li>
-            <li>&middot; Music performance and academic competition capture extractors</li>
-            <li>&middot; Per-student showcase theme library (Mission Control, Resume Mode)</li>
-            <li>&middot; Target schools dashboard with NCES and Scorecard data integration</li>
-            <li>&middot; Common App data alignment for senior-year applications</li>
-          </ul>
-        </div>
-        <div>
-          <p class="font-body text-xs uppercase tracking-wider font-semibold mb-3"><span class="text-srj-gray">&#9679;</span> <span class="text-srj-navy">Planned</span></p>
-          <ul class="space-y-2 font-body text-srj-gray-dark">
-            <li>&middot; Pricing tiers and public account creation</li>
-            <li>&middot; Additional school cohorts beyond Frisco ISD</li>
-            <li>&middot; Scholarship application alignment tools</li>
-            <li>&middot; College recruiting outreach helpers</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ROACH PILOT -->
-  <section class="py-20 md:py-28">
-    <div class="max-w-3xl mx-auto px-6">
-      <div class="border-2 border-srj-orange rounded-lg p-8 md:p-10 bg-white">
-        <p class="font-body text-xs uppercase tracking-wider text-srj-orange font-semibold mb-3">Coming Fall 2026</p>
-        <h2 class="font-headline text-srj-navy text-2xl md:text-3xl font-medium mb-4 leading-tight">Launching with Roach Middle School families.</h2>
-        <p class="font-body text-srj-gray-dark leading-relaxed">OutcomeStar opens to Roach Middle School families as a free pilot in the 2026-2027 school year. Cohort signup, the parent portal, the full data-capture workflow, and the showcase pages will be available before the start of the school year. If you are a Roach family and want to be notified when enrollment opens, email <a href="mailto:support@outcomestar.app" class="text-srj-orange font-semibold hover:text-srj-orange-dark transition-colors">support@outcomestar.app</a>.</p>
-      </div>
-    </div>
-  </section>
-
-</Layout>
+<script is:inline>
+  window.chatwootSettings = { position: "right", type: "standard", launcherTitle: "Chat with us" };
+  (function(d,t) {
+    var BASE_URL="https://app.chatwoot.com";
+    var g=d.createElement(t),s=d.getElementsByTagName(t)[0];
+    g.src=BASE_URL+"/packs/js/sdk.js"; g.defer=true; g.async=true;
+    s.parentNode.insertBefore(g,s);
+    g.onload=function(){ window.chatwootSDK.run({ websiteToken: "mEkEt6yeVufjCJ5jSYBUN96J", baseUrl: BASE_URL }); }
+  })(document,"script");
+</script>
+</body>
+</html>
