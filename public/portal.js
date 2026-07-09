@@ -1843,7 +1843,7 @@ let EC_VIEW = null;
 const EC_SECTIONS = [
   { code: 'cat_stem',        label: 'STEM, Tech & Coding',              desc: 'Robotics, coding, science, math clubs' },
   { code: 'cat_leadership',  label: 'Leadership, Civic & Career Prep',  desc: 'Scouts, cadets, NHS, student gov, business clubs' },
-  { code: 'cat_arts',        label: 'Creative, Visual & Performing Arts', desc: 'Band, theater, art, film, dance' },
+  { code: 'cat_arts',        label: 'Creative, Visual & Performing Arts', desc: 'Music, band, theater, art, film, dance' },
   { code: 'cat_academic',    label: 'Academic, Language & Culture',     desc: 'Debate, language, mock trial, quiz bowl' },
   { code: 'cat_sports_main', label: 'Mainstream Sports & Athletics',    desc: 'Soccer, swim, basketball, baseball, football' },
   { code: 'cat_sports_alt',  label: 'Alternative, Combat & Niche Sports', desc: 'Martial arts, fencing, climbing, cycling, sailing' },
