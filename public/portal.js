@@ -1967,11 +1967,15 @@ async function openExtracurricular() {
   } catch (e) { c.innerHTML = '<div class="save-status err">' + escapeHTML(e.message) + '</div>'; }
 }
 
+function skillTitle(code) {
+  const sk = (SKILLS_CATALOG || []).find(s => s.code === code);
+  return sk ? (sk.title || code) : code;
+}
 function renderRowSkillsAndBadge(x) {
   const parts = [];
   if (x.show_on_showcase) parts.push('<span class="ec-badge ec-badge-pub">Public</span>');
   const sk = (x.skills_gained || []).filter(Boolean);
-  if (sk.length) parts.push(sk.slice(0,6).map(c => '<span class="ec-chip">' + escapeHTML(c) + '</span>').join('') + (sk.length > 6 ? ' <span class="ec-chip-more">+' + (sk.length - 6) + '</span>' : ''));
+  if (sk.length) parts.push(sk.slice(0,6).map(c => '<span class="ec-chip">' + escapeHTML(skillTitle(c)) + '</span>').join('') + (sk.length > 6 ? ' <span class="ec-chip-more">+' + (sk.length - 6) + '</span>' : ''));
   return parts.length ? '<div class="ec-chips">' + parts.join(' ') + '</div>' : '';
 }
 
@@ -5364,7 +5368,7 @@ function deriveCareerPrefill(pd, reportCards, ec) {
   const skills = new Set();
   const scan = arr => (arr || []).forEach(a => (a.skills_gained || []).forEach(sk => sk && skills.add(sk)));
   if (ec) { scan(ec.affiliations); scan(ec.activities); scan(ec.awards); scan(ec.sessions); }
-  if (skills.size) out.special_skills = Array.from(skills).join(', ');
+  if (skills.size) out.special_skills = Array.from(skills).map(skillTitle).join(', ');
   return out;
 }
 function derivedRow(label, value, source) {
