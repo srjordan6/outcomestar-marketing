@@ -3886,12 +3886,12 @@ function renderWebsiteConfig(band){
       return '<label class="web-theme-card" style="width:calc(50% - 4px);border:2px solid '+(on?'var(--orange)':'#E3E7ED')+';border-radius:10px;padding:9px 12px;cursor:pointer;background:'+(on?'#FFF7EF':'#fff')+'">'
         + '<input type="radio" name="web-theme" value="'+t.key+'" '+(on?'checked':'')+' style="margin-right:8px" onchange="themeCardSync()">'
         + '<b style="color:var(--navy)">'+escapeHTML(t.name)+'</b>'
-        + (t.built?' <span style="font-size:10px;color:#10B981;font-weight:600">BUILT</span>':' <span style="font-size:10px;color:#7A8A9E">pre-launch sprint</span>')
+        + (t.built?'':' <span style="font-size:10px;color:#7A8A9E">pre-launch sprint</span>')
         + '<div style="font-size:11px;color:#7A8A9E;margin-top:2px;margin-left:22px">'+escapeHTML(t.vibe)+'</div></label>';
     }).join('') + '</div>';
     if (band==='band_6_12') {
       var liveTheme = (themes.find(function(t){return t.key===curTheme;})||{}).name || 'Mission Control';
-      var liveUrl = (SITE_STATUS && (SITE_STATUS.url || (SITE_STATUS.slug ? ('https://app.outcomestar.app/' + SITE_STATUS.slug) : null))) || 'https://app.outcomestar.app/john';
+      var liveUrl = (SITE_STATUS && (SITE_STATUS.url || (SITE_STATUS.slug ? ('https://app.outcomestar.app/' + SITE_STATUS.slug) : null))) || 'https://app.outcomestar.app/jrj';
       html += '<div style="font-size:11.5px;color:#7A8A9E;margin-top:6px">Currently live: ' + escapeHTML(liveTheme) + ' at <a href="' + liveUrl + '" target="_blank" style="color:var(--orange)">' + escapeHTML(liveUrl.replace('https://','')) + '</a></div>';
     }
   }
