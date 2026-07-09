@@ -2061,7 +2061,92 @@ function renderProgramEntries(catCode, progCode) {
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else html += rows.map(ecRow).join('');
+  if (prog && prog.category === 'Creative, Visual & Performing Arts') {
+    const affilIds = rows.map(a => a.id);
+    const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && affilIds.indexOf(s.related_affiliation_id) !== -1)
+      .sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''));
+    html += '<div class="ec-bar" style="margin-top:26px;align-items:center">' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Performances &amp; concerts</span>' +
+      (rows.length ? '<button class="save-btn" onclick="perfEdit(null)">Log performance</button>' : '') + '</div>';
+    if (!rows.length) html += '<div class="cr-waiting">Add a program entry first, then log performances under it.</div>';
+    else if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
+    else html += perfs.map(perfRow).join('');
+  }
   document.getElementById('sections-container').innerHTML = html;
+}
+
+function perfRow(p) {
+  const bits = [p.instrument, p.music_played, p.composer].filter(Boolean).map(escapeHTML).join(' \u00b7 ');
+  return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || 'Performance') +
+    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) : '') + '</div>' +
+    '<div class="ec-meta">' + bits + (p.location ? (bits ? ' \u00b7 ' : '') + escapeHTML(p.location) : '') + '</div>' +
+    (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
+    '<div class="ec-actions"><button onclick="perfEdit(\'' + p.id + '\')">Edit</button>' +
+    '<button onclick="perfDelete(\'' + p.id + '\')">Delete</button></div></div>';
+}
+
+function perfField(id, label, val, type) {
+  return '<label class="ec-lbl">' + label +
+    '<input class="ec-in" id="' + id + '" type="' + (type || 'text') + '" value="' + escapeHTML(val == null ? '' : String(val)) + '"></label>';
+}
+
+function perfEdit(id) {
+  if (!PROG_VIEW) return;
+  const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
+  if (!p) return;
+  const back = 'renderProgramEntries(\'' + PROG_VIEW.cat + '\',\'' + PROG_VIEW.code + '\')';
+  document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    perfField('pf-title', 'Performance / concert name *', p.title) +
+    perfField('pf-date', 'Date *', p.event_date, 'date') +
+    perfField('pf-instrument', 'Instrument', p.instrument) +
+    perfField('pf-music', 'Music played (piece or program)', p.music_played) +
+    perfField('pf-composer', 'Composer(s)', p.composer) +
+    perfField('pf-location', 'Venue / location', p.location) +
+    '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
+    '<label class="ec-check"><input type="checkbox" id="pf-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
+    '<div class="ec-bar"><button class="save-btn" onclick="perfSave(\'' + (id || '') + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+}
+
+async function perfSave(id) {
+  if (!PROG_VIEW) return;
+  const v = k => (document.getElementById(k).value || '').trim();
+  const item = {
+    event_type: 'music_performance',
+    title: v('pf-title'), event_date: v('pf-date'),
+    instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
+    composer: v('pf-composer') || null, location: v('pf-location') || null,
+    notes: v('pf-notes') || null,
+    show_on_showcase: document.getElementById('pf-showcase').checked
+  };
+  if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
+  if (id) {
+    item.id = id;
+    const ex = (EC_SESSIONS || []).find(x => x.id === id);
+    if (ex) item.related_affiliation_id = ex.related_affiliation_id;
+  } else {
+    const prog = (EC_PROGRAMS || []).find(p => p.code === PROG_VIEW.code);
+    const anchor = EC_DATA.find(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
+    if (!anchor) { showToast('Add a program entry first', 'error'); return; }
+    item.related_affiliation_id = anchor.id;
+  }
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    showToast('Saved', 'success');
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
+    EC_SESSIONS = d.sessions || [];
+    renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function perfDelete(id) {
+  if (!confirm('Delete this performance?')) return;
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { delete_ids: [id] });
+    EC_SESSIONS = (EC_SESSIONS || []).filter(s => s.id !== id);
+    if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
+    showToast('Deleted', 'success');
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 function renderUnassignedList() {
