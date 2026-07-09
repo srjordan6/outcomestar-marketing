@@ -1899,9 +1899,23 @@ async function ecLoadSkills() {
   } catch (e) { if (!SKILLS_CATALOG) SKILLS_CATALOG = []; }
   return SKILLS_CATALOG;
 }
-function skillsGainedField(current) {
+const EC_CAT_SKILL_DOMAINS = {
+  'STEM, Tech & Coding': ['Advanced Tech & Computer Science Extracurriculars','Digital Literacy & Technology','Elementary Science & Technology','Early Academics: Math, Literacy & Science'],
+  'Leadership, Civic & Career Prep': ['Leadership, Civics & Community Engagement','Social Dynamics, Leadership & Peer Skills','Professional Skills & Career Prep','Complex Legal, Civic & Emergency Navigation'],
+  'Creative, Visual & Performing Arts': ['Fine Arts, Music & Performance Extracurriculars','High-Level Creative Arts & Performance','Language, Music & Drama Extracurriculars','Advanced Arts, Portfolio & Creative Publishing','Fine Motor, Art & Writing Prep'],
+  'Academic, Language & Culture': ['Academic Literacy, Writing & Math','Advanced High School Academics & Critical Thinking','Middle School & Early High School Academics','Language, Voice & Early Literacy','Intellectual Autonomy & Media Literacy','Early Academics: Math, Literacy & Science'],
+  'Mainstream Sports & Athletics': ['Competitive Sports & Varsity Preparation','Elite Athletics & Lifelong Fitness','Team Sports & Athletic Strategy','Youth Sports & Physical Athletics','Gross Motor & Early Sports Skills'],
+  'Alternative, Combat & Niche Sports': ['Competitive Sports & Varsity Preparation','Elite Athletics & Lifelong Fitness','Youth Sports & Physical Athletics','Physical & Gross Motor','Gross Motor & Early Sports Skills'],
+  'Strategy, Gaming & Hobbies': ['Digital Literacy & Technology','Cognitive, Sensory & Pre-Academics','Fine Motor & Coordination'],
+  'Nature, Environment & Animals': ['Elementary Science & Technology','Lifelong Personal Health & Wellness','Real-World Self-Sufficiency & Auto Skills'],
+  'Domestic, Life Skills & Trades': ['Intermediate Life Skills & Kitchen Safety','Life Skills, Home Chores & Social Nuance','Real-World Self-Sufficiency & Auto Skills','Financial Literacy & Money Management','Advanced Financial Independence','Fine Motor & Coordination'],
+  'Community, Inclusivity & Lifestyle': ['Leadership, Civics & Community Engagement','Social Dynamics, Leadership & Peer Skills','Social, Emotional & Autonomy','Identity, Boundaries & Emotional Maturity']
+};
+function skillsGainedField(current, catName) {
   const list = (current || []).filter(Boolean);
-  const opts = (SKILLS_CATALOG || []).map(sk =>
+  const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
+  const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1 || list.includes(sk.code));
+  const opts = pool.map(sk =>
     '<option value="' + (sk.code || '') + '"' + (list.includes(sk.code) ? ' selected' : '') + '>' +
     escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
     '</option>').join('');
@@ -2014,6 +2028,7 @@ function renderEcSections() {
 
 let CAT_FILTER = null;
 let PROG_VIEW = null;
+let ENTRY_VIEW = null;
 function openEcSection(code) {
   EC_VIEW = code;
   AWARDS_FILTER = null;
@@ -2028,6 +2043,7 @@ function openEcSection(code) {
 
 function renderCategoryList(catCode) {
   PROG_VIEW = null;
+  ENTRY_VIEW = null;
   const catName = CAT_MAP[catCode];
   const t = EC_SECTIONS.find(x => x.code === catCode);
   const catProgs = (EC_PROGRAMS || []).filter(p => p.category === catName);
@@ -2053,23 +2069,45 @@ function renderCategoryList(catCode) {
 
 function renderProgramEntries(catCode, progCode) {
   PROG_VIEW = { cat: catCode, code: progCode };
+  ENTRY_VIEW = null;
   CAT_FILTER = CAT_MAP[catCode];
   const prog = (EC_PROGRAMS || []).find(p => p.code === progCode);
   const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
   const t = EC_SECTIONS.find(x => x.code === catCode);
+  const isArts = !!(prog && prog.category === 'Creative, Visual & Performing Arts');
   let html = '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
-  else html += rows.map(ecRow).join('');
+  else {
+    const cards = rows.map(a => {
+      const period = (a.role_start_date || '') + (a.role_end_date ? ' \u2192 ' + a.role_end_date : (a.role_start_date ? ' \u2192 present' : ''));
+      const perfN = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === a.id).length;
+      const right = isArts ? '<div class="ec-count">' + perfN + ' <span>performances</span></div>' : '<div class="pillar-arrow">\u203a</div>';
+      return '<button class="ec-card" onclick="renderEntryDetail(\''+catCode+'\',\''+progCode+'\',\''+a.id+'\')">' +
+        '<div><div class="ec-name">'+escapeHTML(a.organization_name)+(a.role ? ' \u2014 '+escapeHTML(a.role) : '')+'</div>' +
+        '<div class="ec-desc">'+escapeHTML(period)+'</div></div>' + right + '</button>';
+    }).join('');
+    html += '<div class="ec-grid">' + cards + '</div>';
+  }
+  document.getElementById('sections-container').innerHTML = html;
+}
+
+function renderEntryDetail(catCode, progCode, affilId) {
+  PROG_VIEW = { cat: catCode, code: progCode };
+  ENTRY_VIEW = { cat: catCode, code: progCode, id: affilId };
+  CAT_FILTER = CAT_MAP[catCode];
+  const a = EC_DATA.find(x => x.id === affilId);
+  const prog = (EC_PROGRAMS || []).find(p => p.code === progCode);
+  if (!a) { renderProgramEntries(catCode, progCode); return; }
+  let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
+  html += ecRow(a);
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
-    const affilIds = rows.map(a => a.id);
-    const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && affilIds.indexOf(s.related_affiliation_id) !== -1)
-      .sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''));
+    const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
+      .sort((x, y) => (y.event_date || '').localeCompare(x.event_date || ''));
     html += '<div class="ec-bar" style="margin-top:26px;align-items:center">' +
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Performances &amp; concerts</span>' +
-      (rows.length ? '<button class="save-btn" onclick="perfEdit(null)">Log performance</button>' : '') + '</div>';
-    if (!rows.length) html += '<div class="cr-waiting">Add a program entry first, then log performances under it.</div>';
-    else if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
+      '<button class="save-btn" onclick="perfEdit(null)">Log performance</button></div>';
+    if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
     else html += perfs.map(perfRow).join('');
   }
   document.getElementById('sections-container').innerHTML = html;
@@ -2091,10 +2129,10 @@ function perfField(id, label, val, type) {
 }
 
 function perfEdit(id) {
-  if (!PROG_VIEW) return;
+  if (!ENTRY_VIEW) return;
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
   if (!p) return;
-  const back = 'renderProgramEntries(\'' + PROG_VIEW.cat + '\',\'' + PROG_VIEW.code + '\')';
+  const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     perfField('pf-title', 'Performance / concert name *', p.title) +
     perfField('pf-date', 'Date *', p.event_date, 'date') +
@@ -2109,7 +2147,7 @@ function perfEdit(id) {
 }
 
 async function perfSave(id) {
-  if (!PROG_VIEW) return;
+  if (!ENTRY_VIEW) return;
   const v = k => (document.getElementById(k).value || '').trim();
   const item = {
     event_type: 'music_performance',
@@ -2120,22 +2158,14 @@ async function perfSave(id) {
     show_on_showcase: document.getElementById('pf-showcase').checked
   };
   if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
-  if (id) {
-    item.id = id;
-    const ex = (EC_SESSIONS || []).find(x => x.id === id);
-    if (ex) item.related_affiliation_id = ex.related_affiliation_id;
-  } else {
-    const prog = (EC_PROGRAMS || []).find(p => p.code === PROG_VIEW.code);
-    const anchor = EC_DATA.find(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
-    if (!anchor) { showToast('Add a program entry first', 'error'); return; }
-    item.related_affiliation_id = anchor.id;
-  }
+  if (id) item.id = id;
+  item.related_affiliation_id = ENTRY_VIEW.id;
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
     showToast('Saved', 'success');
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
-    renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
+    renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -2144,13 +2174,14 @@ async function perfDelete(id) {
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { delete_ids: [id] });
     EC_SESSIONS = (EC_SESSIONS || []).filter(s => s.id !== id);
-    if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
+    if (ENTRY_VIEW) renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+    else if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
     showToast('Deleted', 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
 
 function renderUnassignedList() {
-  PROG_VIEW = null; CAT_FILTER = null; EC_VIEW = 'unassigned'; EC_FILTER = 'program';
+  PROG_VIEW = null; ENTRY_VIEW = null; CAT_FILTER = null; EC_VIEW = 'unassigned'; EC_FILTER = 'program';
   const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && !progForAffil(a));
   let html = '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>' +
     '<div class="cr-waiting">Open each entry (Edit) and pick its program so it shows in the right category.</div>';
@@ -2162,6 +2193,7 @@ function ecEditForCategory(catCode) {
   EC_FILTER = 'program';
   CAT_FILTER = CAT_MAP[catCode];
   PROG_VIEW = null;
+  ENTRY_VIEW = null;
   ecEdit(null);
 }
 
@@ -2169,6 +2201,7 @@ function ecEditForProgram(catCode, progCode) {
   EC_FILTER = 'program';
   CAT_FILTER = CAT_MAP[catCode];
   PROG_VIEW = { cat: catCode, code: progCode };
+  ENTRY_VIEW = null;
   ecEdit(null, progCode);
 }
 
@@ -2298,10 +2331,10 @@ function ecEdit(id, presetProgCode) {
       ecField('coach_email', 'Coach email', a.coach_email) : '') +
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
-    skillsGainedField(a.skills_gained) +
+    skillsGainedField(a.skills_gained, CAT_FILTER) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
-    '<button class="save-btn save-btn-ghost" onclick="' + (PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
+    '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
 }
 
 function ecProgramPicker(a) {
@@ -2341,7 +2374,8 @@ async function ecSave(id) {
     showToast('Saved', 'success');
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/affiliations');
     EC_DATA = d.affiliations || [];
-    if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
+    if (ENTRY_VIEW) renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+    else if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
     else if (EC_VIEW === 'unassigned') renderEcSections();
     else if (CAT_FILTER) { const code = Object.keys(CAT_MAP).find(k => CAT_MAP[k] === CAT_FILTER); renderCategoryList(code); } else openEcType(EC_FILTER);
   } catch (e) { showToast(e.message, 'error'); }
@@ -2352,7 +2386,9 @@ async function ecDelete(id) {
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/affiliations', { delete_ids: [id] });
     EC_DATA = EC_DATA.filter(a => a.id !== id);
-    if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
+    if (ENTRY_VIEW && ENTRY_VIEW.id === id) { const ev = ENTRY_VIEW; ENTRY_VIEW = null; renderProgramEntries(ev.cat, ev.code); }
+    else if (ENTRY_VIEW) renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+    else if (PROG_VIEW) renderProgramEntries(PROG_VIEW.cat, PROG_VIEW.code);
     else if (EC_VIEW === 'unassigned') renderUnassignedList();
     else if (CAT_FILTER) { const code = Object.keys(CAT_MAP).find(k => CAT_MAP[k] === CAT_FILTER); renderCategoryList(code); } else openEcType(EC_FILTER);
     showToast('Deleted', 'success');
