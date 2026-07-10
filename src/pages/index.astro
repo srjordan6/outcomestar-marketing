@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>outcomestar — Every outcome. One star.</title>
-<meta name="description" content="One longitudinal record for your child's whole journey — academics, athletics, activities, applications. From first milestones to college admission.">
+<meta name="description" content="Stop scrambling senior fall. One longitudinal record for your child's whole journey — academics, athletics, activities, applications — kept by you, from first milestones to college admission.">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style is:global>
@@ -17,18 +17,36 @@ h1,h2,h3{font-family:Lora,Georgia,serif;color:var(--navy);margin:0}
 .topbar nav a.cta-in{color:#fff;background:var(--navy);padding:6px 14px;border-radius:8px;font-weight:600}
 .topbar nav a.cta-up{color:#fff;background:var(--orange);padding:6px 14px;border-radius:8px;font-weight:600}
 .btn{display:inline-block;background:var(--orange);color:#fff;font-weight:600;padding:12px 28px;border-radius:10px;text-decoration:none;border:0;font-size:16px;cursor:pointer}
-.hero{padding:64px 0 48px;text-align:center}
+.btn:hover{background:#C46300}
+.cta-row{text-align:center;padding:8px 0 40px}
+.cta-row .sub{display:block;margin-top:8px;font-size:13px;color:var(--gray)}
+.kicker{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--orange);margin-bottom:8px}
+.sect-head{text-align:center;padding-top:44px}
+.sect-head h2{font-size:clamp(24px,3.4vw,32px)}
+.sect-head p{max-width:640px;margin:12px auto 0;color:#4A5563;font-size:16px}
+.hero{padding:64px 0 40px;text-align:center}
 .hero h1{font-size:clamp(32px,5.5vw,54px);line-height:1.15;letter-spacing:-.01em}
 .hero h1 span{color:var(--orange)}
-.hero p{max-width:640px;margin:18px auto 30px;font-size:18px;color:#4A5563}
+.hero p{max-width:660px;margin:18px auto 30px;font-size:18px;color:#4A5563}
 .rule{width:110px;border-bottom:3px solid var(--orange);margin:22px auto}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;padding:36px 0 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;padding:32px 0 20px}
 .card{background:#fff;border:1px solid #E3E7ED;border-radius:14px;padding:26px}
 .card h3{font-size:19px;margin-bottom:8px}
 .card p{margin:0;color:#4A5563;font-size:14.5px}
+.card.pain{border-top:4px solid var(--orange)}
+.do-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px 26px;padding:28px 0 12px}
+.do-item{background:#fff;border:1px solid #E3E7ED;border-radius:12px;padding:16px 18px;font-size:14.5px;color:#4A5563;display:flex;gap:12px;align-items:flex-start}
+.do-item b{color:var(--navy);font-weight:600}
+.do-item .tick{color:var(--orange);font-weight:700;font-size:16px;line-height:1.4}
+.timeline{background:#fff;border:1px solid #E3E7ED;border-radius:14px;padding:24px 26px;margin:28px 0 8px}
+.tl-row{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid #EFEDE6;font-size:14.5px}
+.tl-row:last-child{border-bottom:0}
+.tl-when{font-weight:600;color:var(--navy)}
+.tl-what{color:#4A5563}
 .band{background:var(--navy);color:#fff;text-align:center;padding:56px 24px;margin-top:48px}
 .band h2{color:#fff;font-size:30px}
 .band p{color:#C9C6E4;max-width:620px;margin:14px auto 26px}
+@media(max-width:760px){.tl-row{grid-template-columns:1fr}}
 footer{border-top:1px solid #E5E2D9;margin-top:0;padding:26px 20px;text-align:center;font-size:13px;color:var(--gray);background:var(--paper)}
 footer a{color:var(--navy);text-decoration:none}
 </style>
@@ -47,26 +65,91 @@ footer a{color:var(--navy);text-decoration:none}
 </div>
 
 <div class="wrap">
+
+  <!-- ===== HERO: the pain ===== -->
   <section class="hero">
-    <h1>Every outcome.<br><span>One star.</span></h1>
+    <h1>Senior fall is coming.<br><span>Will you be ready?</span></h1>
     <div class="rule"></div>
-    <p>One longitudinal record for your child's whole journey &mdash; academics, athletics, arts, leadership, and service &mdash; organized from first milestones through college applications, so senior fall is an export, not a scramble.</p>
-    <a class="btn" href="/signup">Get started</a>
+    <p>Every family hits the same wall: applications open in August and suddenly you're excavating twelve years of report cards, race times, certificates, and half-remembered dates from shoeboxes, screenshots, and three dead school portals &mdash; on a deadline.</p>
+    <a class="btn" href="/signup">Start the record instead</a>
   </section>
 
-  <section class="grid">
-    <div class="card"><h3>Five pillars, one record</h3><p>Personal, Academics, Extracurricular, Career, and Higher Education &mdash; every course, test, race, recital, rank, and role captured once and reused everywhere.</p></div>
-    <div class="card"><h3>Applications that fill themselves</h3><p>Generate filled college application forms, tailored resumes, and comprehensive reports directly from your child's verified record.</p></div>
-    <div class="card"><h3>A website that grows up</h3><p>A family memory book at 5, a developmental portfolio at 10, a professional launchpad at 16 &mdash; privacy guardrails enforced at every age, in English and your home language.</p></div>
-    <div class="card"><h3>Athletics, tracked properly</h3><p>Personal records, time standards, and progress analytics &mdash; recruitment-ready data instead of scattered screenshots.</p></div>
-    <div class="card"><h3>Built by a parent</h3><p>Created for one family's road to college and opened to yours. Your data stays yours &mdash; generate a report of everything stored, any time.</p></div>
-    <div class="card"><h3>Private by default</h3><p>Child sites use first-name-only public pages, nondescript links, and no-index protection. Law first, parent second, child by age.</p></div>
+  <!-- ===== PAIN: name the three problems ===== -->
+  <section class="sect-head">
+    <span class="kicker">The problem</span>
+    <h2>Three things go wrong in every admissions season</h2>
   </section>
+  <section class="grid">
+    <div class="card pain"><h3>The shoebox problem</h3><p>The evidence of your child's whole journey lives in camera rolls, email attachments, gym bags, and portals that lock you out the day they graduate. When applications ask for specifics, nobody can find them.</p></div>
+    <div class="card pain"><h3>The timeline anxiety</h3><p>Should a sophomore be testing yet? How many activities is enough? Is this course load rigorous? Without benchmarks, every month carries a quiet fear that you're already behind.</p></div>
+    <div class="card pain"><h3>The teenager problem</h3><p>Every tracking app assumes your student will faithfully log in and update it. They won't. The tool gets abandoned by October and the record stops exactly when it matters most.</p></div>
+  </section>
+  <div class="cta-row">
+    <a class="btn" href="/signup">Solve all three &mdash; create your account</a>
+    <span class="sub">Free for ages 0&ndash;10 &middot; cancel anytime &middot; your record is never deleted</span>
+  </div>
+
+  <!-- ===== VALUE: how outcomestar changes it ===== -->
+  <section class="sect-head">
+    <span class="kicker">The fix</span>
+    <h2>One record, kept by you, from first steps to first choice</h2>
+    <p>outcomestar is the longitudinal record of your child's whole journey. You capture each milestone once, in minutes, as it happens &mdash; and twelve years later, senior fall is an export, not a scramble.</p>
+  </section>
+  <section class="grid">
+    <div class="card"><h3>You hold the record</h3><p>No student login exists to be abandoned. Parents run the control room; the student gets a polished public website and application-ready documents built from it. Nothing depends on a teenager's mood.</p></div>
+    <div class="card"><h3>You always know what's next</h3><p>Grade-by-grade benchmarks from kindergarten through senior fall measure the record against where it should be &mdash; testing windows, course rigor, activity depth &mdash; so anxiety becomes a checklist.</p></div>
+    <div class="card"><h3>Yours, permanently</h3><p>Cancel anytime and the structured record remains; generate a report containing everything stored, free, whenever you want. Files cost money to store &mdash; the record itself is never held hostage.</p></div>
+  </section>
+  <div class="cta-row">
+    <a class="btn" href="/signup">Get started in five minutes</a>
+  </div>
+
+  <!-- ===== SPECIFICS: exactly what we do ===== -->
+  <section class="sect-head">
+    <span class="kicker">What you get</span>
+    <h2>Specifically, outcomestar does this</h2>
+  </section>
+  <section class="do-list">
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Five-pillar record</b> &mdash; Personal, Academics, Extracurricular, Career, Higher Education: every course, grade, test, race, recital, rank, role, and award, captured once.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Verified transcript intake</b> &mdash; official transcripts imported and parsed into the record, course by course.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Generated applications</b> &mdash; college application forms filled directly from the record when application season arrives.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Tailored resumes &amp; reports</b> &mdash; academic resumes, activity lists, and comprehensive family reports produced on demand.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>A student website that grows up</b> &mdash; memory book at 5, portfolio at 10, professional launchpad at 16 &mdash; in English and your home language.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Privacy enforced by age</b> &mdash; first-name-only public pages, nondescript links, no search indexing for minors. Law first, parent second, child by age.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Athletics tracked properly</b> &mdash; personal records, time standards, and progress analytics; recruitment-ready data instead of screenshots.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Leadership &amp; skills tracking</b> &mdash; ranks, badges, training logs, and a 500-skill catalog mapped to what colleges and majors actually require.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Target-school intelligence</b> &mdash; build your list against live institutional data: admit rates, test ranges, costs.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Recommendation letters, organized</b> &mdash; request, collect, and package recommendations with clean shareable forms and PDFs.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Media that's safe</b> &mdash; photos, videos, and documents stored privately with per-file public control, on plans from 10 to 100 GB.</span></div>
+    <div class="do-item"><span class="tick">&#10003;</span><span><b>Your data, exportable</b> &mdash; a report containing all stored data, free, any time. No lock-in, ever.</span></div>
+  </section>
+  <div class="cta-row">
+    <a class="btn" href="/signup">Create your account</a>
+    <span class="sub">Ages 0&ndash;10 free with age verification &middot; annual plans by age band</span>
+  </div>
+
+  <!-- ===== TIMELINE ===== -->
+  <section class="sect-head">
+    <span class="kicker">How it plays out</span>
+    <h2>The road is long. The work each year is small.</h2>
+  </section>
+  <section class="timeline">
+    <div class="tl-row"><div class="tl-when">Ages 0&ndash;10</div><div class="tl-what">Free. Capture firsts, milestones, sports, and keepsakes &mdash; ten minutes a month builds a record no memory can match.</div></div>
+    <div class="tl-row"><div class="tl-when">Middle school</div><div class="tl-what">Courses, activities, and early achievements start shaping the story &mdash; benchmarks show where depth is building.</div></div>
+    <div class="tl-row"><div class="tl-when">Grades 9&ndash;11</div><div class="tl-what">Transcripts, test scores, leadership ranks, and athletic times accumulate verified &mdash; the profile colleges actually evaluate.</div></div>
+    <div class="tl-row"><div class="tl-when">Senior fall</div><div class="tl-what">Applications, resumes, and recommendation packets generate from twelve years of record &mdash; an export, not a scramble.</div></div>
+  </section>
+  <div class="cta-row" style="padding-top:20px">
+    <a class="btn" href="/signup">Start where you are today</a>
+    <span class="sub">Whether your child is 3 or 16 &mdash; the best day to start the record is today</span>
+  </div>
+
 </div>
 
+<!-- ===== FOUNDING BAND ===== -->
 <div class="band">
   <h2>Founding cohort now open</h2>
-  <p>Founding families shape the product and lock in founding pricing.</p>
+  <p>Founding families shape the product and lock in founding pricing for the life of the account.</p>
   <a class="btn" href="/signup">Create your account</a>
 </div>
 
