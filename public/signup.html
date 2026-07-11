@@ -227,7 +227,7 @@ document.getElementById('f-go').onclick = async function(){
   };
   if(body.password.length < 12){ err.textContent='Password must be at least 12 characters - a 4-word passphrase works well.'; err.style.display='block'; return; }
   if(body.password !== g('f-pass2')){ err.textContent='Passwords do not match.'; err.style.display='block'; return; }
-  if(window.turnstile && !body.turnstile_token){ err.textContent='Complete the security check first. If it never loads, your network may be blocking Cloudflare\u2019s challenge domains \u2014 try another network or DNS.'; err.style.display='block'; return; }
+  if(window.turnstile && !body.turnstile_token){ try{ turnstile.reset(); }catch(e){} } /* v0.12.113: no token no longer blocks - server fail-open handles widget outages */
   var OPTIONAL_FIELDS={student_email:1,storage_plan_key:1,code:1,turnstile_token:1};
   for (var k in body){ if(!OPTIONAL_FIELDS[k] && (body[k]===''||body[k]===null)){ err.textContent='Please complete every field.'; err.style.display='block'; return; } }
   /* Grade vs birth-date sanity check (mirrors the server rule) */
