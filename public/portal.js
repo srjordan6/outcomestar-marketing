@@ -4155,6 +4155,10 @@ async function openBillingPillar(){
       +'</div>';
   }).join('')+'</div>';
   html+='<div style="font-size:12px;color:#7A8A9E;margin-top:14px">Plans renew annually. 90-day grace period after lapse before any file deletion. Export everything as a ZIP free, any time. Purchases are processed by Stripe; a storage purchase also serves as verified parental consent for students under 13.</div>';
+  html+='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #E5E2D9">'
+    +'<button class="save-btn save-btn-ghost" onclick="openBillingPortal()">Manage plan \u00b7 payment method \u00b7 cancel</button>'
+    +'<div style="font-size:12px;color:#7A8A9E;margin-top:8px">Opens your secure Stripe billing portal: change or cancel a plan, update the card, download invoices. Cancelling stops renewals \u2014 your records are never deleted.</div>'
+    +'</div>';
   html+='</div>';
   c.innerHTML=html;
 }
@@ -4167,6 +4171,16 @@ async function startCheckout(planKey, stackable){
         cancel_url: location.href });
     if (r.checkout_url) location.href = r.checkout_url;
     else showToast('Checkout unavailable','error');
+  } catch(e){ showToast(e.message,'error'); }
+}
+/* v178: Stripe Customer Portal - manage / cancel plans, update card, invoices */
+async function openBillingPortal(){
+  try {
+    showToast('Opening your billing portal\u2026','success');
+    const r = await apiPost('/focms/v1/auth/billing-portal-session',
+      { return_url: location.origin + location.pathname });
+    if (r.portal_url) location.href = r.portal_url;
+    else showToast('Billing portal unavailable','error');
   } catch(e){ showToast(e.message,'error'); }
 }
 let WEBCFG = null;
