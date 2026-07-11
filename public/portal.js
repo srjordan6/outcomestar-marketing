@@ -21,6 +21,27 @@ async function resolveContext(){
     }
     if (d.tenant_name) document.getElementById('hdr-sub').textContent = d.tenant_name;
     identifyChatwoot(d);
+    loadHeaderPhoto();
+  } catch(e){}
+}
+
+/* v179: header avatar - show the student's site photo when one is uploaded,
+   else keep the outcomestar star (inline SVG in portal.html). */
+async function loadHeaderPhoto(){
+  try {
+    const wc = await apiGet('/focms/v1/student/' + STUDENT_ID + '/website-config');
+    if (!wc || !wc.site_slug) return;
+    var img = new Image();
+    img.alt = STUDENT_FIRST || 'Student';
+    img.onload = function(){
+      var el = document.getElementById('hdr-icon');
+      if (!el) return;
+      img.style.cssText = 'width:36px;height:36px;border-radius:8px;object-fit:cover;object-position:center 20%;display:block';
+      el.innerHTML = '';
+      el.appendChild(img);
+      el.style.background = 'transparent';
+    };
+    img.src = 'https://focms-api.onrender.com/focms/v1/public/site/' + encodeURIComponent(wc.site_slug) + '/hero';
   } catch(e){}
 }
 
