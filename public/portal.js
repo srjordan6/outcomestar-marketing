@@ -20,7 +20,29 @@ async function resolveContext(){
       document.title = "Log " + d.student_first_name + "'s Data \u00b7 " + (d.tenant_name || 'outcomestar');
     }
     if (d.tenant_name) document.getElementById('hdr-sub').textContent = d.tenant_name;
+    identifyChatwoot(d);
   } catch(e){}
+}
+
+/* v177: tie Chatwoot chats to the signed-in parent so conversation history
+   persists across sessions/devices and support sees who is asking. */
+function identifyChatwoot(d){
+  var apply = function(){
+    try{
+      window.$chatwoot.setUser('tenant-' + (d.tenant_id || TENANT_ID), {
+        name: d.tenant_name || 'outcomestar family',
+        email: sessionStorage.getItem('focms_email') || undefined
+      });
+      window.$chatwoot.setCustomAttributes({
+        tenant_id: d.tenant_id || TENANT_ID,
+        student_first_name: d.student_first_name || '',
+        student_age_band: d.student_age_band || '',
+        surface: 'parent_portal'
+      });
+    }catch(e){}
+  };
+  if (window.$chatwoot) apply();
+  else window.addEventListener('chatwoot:ready', apply, { once: true });
 }
 
 const PILLARS = [
@@ -94,6 +116,7 @@ async function doLogin() {
     var d = await r.json();
     if (!r.ok) { err.textContent = (d.detail && d.detail.message) || 'Sign-in failed.'; err.style.display = 'block'; if (window.turnstile) turnstile.reset(); return; }
     sessionStorage.setItem('focms_token', d.api_token);
+    try{ sessionStorage.setItem('focms_email', email); }catch(e){}
     location.reload();
   } catch (e) { err.textContent = 'Network error - try again.'; err.style.display = 'block'; }
 }
