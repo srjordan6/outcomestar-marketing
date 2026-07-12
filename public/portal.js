@@ -4666,10 +4666,22 @@ async function rcParsePaste() {
     el.removeAttribute('readonly');
     el.value = v;
   };
-  if (d.term) {
-    const t = document.getElementById('rc-term');
-    if (t && Array.prototype.some.call(t.options, function (o) { return o.value === d.term; })) t.value = d.term;
+  // v201: the columns only exist if the term is set. If the card did not name a
+  // term, infer it from the grades that came back - a card with Q3/Q4/FIN is a
+  // full year, Q1/Q2 only is a semester - otherwise the grades have nowhere to go.
+  let term = d.term || '';
+  const subs = d.subjects || [];
+  const any = function (k) { return subs.some(function (s) { return s[k]; }); };
+  if (!term) {
+    if (any('fin') || any('q3') || any('q4') || (any('sem1') && any('sem2'))) term = 'Full year';
+    else if (any('q1') || any('q2') || any('sem1')) term = 'Semester 1';
   }
+  const t = document.getElementById('rc-term');
+  if (t && term && Array.prototype.some.call(t.options, function (o) { return o.value === term; })) {
+    t.value = term;
+  }
+  term = t ? t.value : term;
+
   setv('school_year', d.school_year);
   setv('gpa_unweighted', d.gpa_unweighted);
   setv('gpa_weighted', d.gpa_weighted);
@@ -4700,10 +4712,11 @@ async function rcParsePaste() {
       teacher: s.teacher || (hit ? hit.teacher_name : '') || '',
       q1: s.q1 || '', q2: s.q2 || '', sem1: s.sem1 || '',
       q3: s.q3 || '', q4: s.q4 || '', sem2: s.sem2 || '',
-      fin: s.fin || '', grade: s.grade || ''
+      fin: s.fin || '',
+      // Single-grade shape has one cell: use the most final value available.
+      grade: s.grade || s.fin || s.sem2 || s.sem1 || s.q1 || ''
     };
   });
-  const term = document.getElementById('rc-term').value;
   document.getElementById('rc-head').innerHTML = rcHeaderRow(term);
   document.getElementById('rc-subjects').innerHTML =
     rows.map(function (s) { return rcSubjectRowHtml(s, term); }).join('');
