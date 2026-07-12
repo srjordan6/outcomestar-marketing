@@ -3240,9 +3240,10 @@ function schoolEdit(id) {
       ecField('boarding_students', 'Boarding students', sc.boarding_students, false, 'number')
     ) +
     ecRowTwo(
-      ecField('start_date', 'Start date', sc.start_date, false, 'date'),
-      ecField('end_date', 'End date', sc.end_date, false, 'date')
+      ecField('start_date', 'First day at this school (overall)', sc.start_date, false, 'date'),
+      ecField('end_date', 'Last day at this school (blank = still attending)', sc.end_date, false, 'date')
     ) +
+    '<div class="ec-hint">Overall dates for the whole time at this school. Year-by-year attendance is recorded separately on each grade\u2019s school-year record.</div>' +
     '<label class="ec-check"><input type="checkbox" class="ec-in" data-k="is_current_school"' + (sc.is_current_school ? ' checked' : '') + '> This is the current school</label>' +
     ecArea('notes', 'Notes', sc.notes) +
     '<div class="ec-bar">' +
@@ -4339,22 +4340,50 @@ function renderYearRecordsBlock(g, rows) {
     (rows.length ? cards : '<div class="cr-waiting" style="margin-bottom:16px">No school year on file. Add one to track a mid-year transfer or a repeated grade.</div>');
 }
 
+/* v190: school-year picker - never assume the year. Blank until chosen. */
+function schoolYearOpts(sel) {
+  const now = new Date();
+  const curStart = (now.getMonth() >= 6) ? now.getFullYear() : now.getFullYear() - 1;
+  let out = '<option value="">-- pick a school year --</option>';
+  for (let y = curStart + 1; y >= curStart - 14; y--) {
+    const label = y + '-' + String((y + 1) % 100).padStart(2, '0');
+    out += '<option value="' + label + '"' + (sel === label ? ' selected' : '') + '>' + label + '</option>';
+  }
+  return out;
+}
+
+/* v190: picking a saved school fills the name box, so the two fields can never
+   disagree (previously the text box kept a different, prefilled school). */
+function yrSchoolPick(sel) {
+  const nameEl = document.querySelector('.ec-in[data-k="school_name"]');
+  if (!nameEl) return;
+  const sc = SCHOOLS.find(x => x.id === sel.value);
+  nameEl.removeAttribute('readonly');
+  nameEl.value = sc ? (sc.school_name || '') : '';
+}
+
 function yrEdit(id, gradeSeed) {
-  const yr = id ? YEAR_RECORDS.find(x => x.id === id) : { grade_level: (gradeSeed != null ? gradeSeed : ACAD_YEAR), school_year: nextSchoolYear(), is_full_year: true };
+  const yr = id ? YEAR_RECORDS.find(x => x.id === id) : { grade_level: (gradeSeed != null ? gradeSeed : ACAD_YEAR), is_full_year: true };
   if (!yr) return;
-  if (!yr.school_name && CURRENT_SCHOOL && CURRENT_SCHOOL.school_name) yr.school_name = CURRENT_SCHOOL.school_name;
+  // v190: do NOT assume the school. Only prefill when there is exactly one school
+  // on file, and never overwrite a school already chosen on the record.
+  if (!yr.school_id && !yr.school_name && SCHOOLS.length === 1) {
+    yr.school_id = SCHOOLS[0].id;
+    yr.school_name = SCHOOLS[0].school_name;
+  }
   const gradeOpts = [];
   for (let g = 0; g <= 12; g++) gradeOpts.push('<option value="' + g + '"' + (yr.grade_level === g ? ' selected' : '') + '>' + GRADE_LABELS[g] + '</option>');
   const schoolOpts = '<option value="">-- pick from School Profiles --</option>' +
     SCHOOLS.map(sc => '<option value="' + sc.id + '"' + (yr.school_id === sc.id ? ' selected' : '') + '>' + escapeHTML(sc.school_name) + '</option>').join('');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    '<div class="ec-hint" style="margin-bottom:10px">One record per <b>grade year</b>. A student who attends the same school for several years gets one record per year \u2014 that is what carries that year\u2019s teachers, attendance, and grades. The school itself is only entered once, under School Profile.</div>' +
     ecRowTwo(
       '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts.join('') + '</select></label>',
-      ecField('school_year', 'School year *', yr.school_year, true)
+      '<label class="ec-lbl">School year *<select class="ec-in" data-k="school_year">' + schoolYearOpts(yr.school_year) + '</select></label>'
     ) +
     ecRowTwo(
-      '<label class="ec-lbl">School (from profiles)<select class="ec-in" data-k="school_id">' + schoolOpts + '</select></label>',
-      ecField('school_name', 'Or type school name', yr.school_name)
+      '<label class="ec-lbl">School (from profiles)<select class="ec-in" data-k="school_id" onchange="yrSchoolPick(this)">' + schoolOpts + '</select></label>',
+      ecField('school_name', 'Or type school name (if not in profiles)', yr.school_name)
     ) +
     // v0.12.119: MULTIPLE teachers per year, each with the subject they taught.
     // Elementary years commonly have two (e.g. ELA/Social Studies + Math/Science).
@@ -4365,9 +4394,10 @@ function yrEdit(id, gradeSeed) {
     '<button type="button" class="save-btn save-btn-ghost" onclick="yrAddTeacher()">+ Add another teacher</button>' +
     '<div class="ec-hint">Pick from the teachers you have already added. Not listed? Add them under Academics \u2192 Teachers first.</div>' +
     '<label class="ec-check"><input type="checkbox" class="ec-in" data-k="is_full_year"' + (yr.is_full_year !== false ? ' checked' : '') + '> Full-year attendance</label>' +
+    '<div class="ec-hint">Leave ticked for a normal full year. Untick and set the dates below only for a mid-year start, transfer, or withdrawal.</div>' +
     ecRowTwo(
-      ecField('attendance_from', 'Attended from', yr.attendance_from, false, 'date'),
-      ecField('attendance_to', 'Attended to', yr.attendance_to, false, 'date')
+      ecField('attendance_from', 'Attended from (this year only)', yr.attendance_from, false, 'date'),
+      ecField('attendance_to', 'Attended to (this year only)', yr.attendance_to, false, 'date')
     ) +
     ecRowTwo(
       ecField('gpa_unweighted', 'GPA unweighted', yr.gpa_unweighted, false, 'number'),
