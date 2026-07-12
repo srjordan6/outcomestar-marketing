@@ -3184,8 +3184,13 @@ function schoolEdit(id) {
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country }) +
     ecRowTwo(
-      ecField('school_ceeb_code', 'CEEB code', sc.school_ceeb_code || sc.ceeb_code),
-      ecField('school_type', 'School type (public / independent / charter / religious / home)', sc.school_type)
+      ecField('school_ceeb_code', 'CEEB code (optional)', sc.school_ceeb_code || sc.ceeb_code),
+      '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type">' +
+        ['', 'Public', 'Independent / Private', 'Charter', 'Magnet', 'Religious / Parochial',
+         'Home school', 'Online / Virtual', 'Other'].map(function (o) {
+          return '<option value="' + escapeHTML(o) + '"' +
+            ((sc.school_type || '') === o ? ' selected' : '') + '>' + (o || '-- pick --') + '</option>';
+        }).join('') + '</select></label>'
     ) +
     ecField('street_address', 'Street address', sc.street_address) +
     ecRowTwo(
