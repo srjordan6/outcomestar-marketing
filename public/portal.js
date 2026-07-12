@@ -3086,7 +3086,7 @@ async function courseEdit(id) {
       + '<input type="hidden" class="ec-in" data-k="sced_code" id="sced-code-field" value="' + escapeHTML(c.sced_code || '') + '">'
       + ecField('course_code', "School's course identifier (from the school's catalog/schedule)", c.course_code)
       + '</div>') +
-    schoolPickerField({ key: 'school_name', label: 'School', value: c.school_name || (sch.school_name||''), level: 'k12' }) +
+    schoolChoiceField({ key: 'school_name', label: 'School', value: c.school_name || (sch.school_name || ''), school_id: c.school_id }) +
     (schoolMeta ? ('<div>' + schoolMeta + '</div>') : '') +
     teacherPickerField(c) +
     '<label class="ec-lbl">Class period<select class="ec-in" data-k="period">' +
@@ -3286,7 +3286,7 @@ async function tutorEdit(id) {
       '<label class="ec-lbl">Subject *<select class="ec-in" data-k="subject">' + subjOpts + '</select></label>',
       '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts + '</select></label>') +
     ecField('subject_other', 'If Other, name the subject', c.subject_other) +
-    schoolPickerField({ key: 'school_name', label: 'School / tutoring provider', value: c.school_name || (sch.school_name || ''), level: 'k12' }) +
+    schoolChoiceField({ key: 'school_name', label: 'School / tutoring provider', value: c.school_name || (sch.school_name || ''), school_id: c.school_id }) +
     ecRowTwo(
       ecField('teacher_name', 'Teacher / tutor', c.teacher_name),
       ecField('teacher_email', 'Teacher / tutor email', c.teacher_email, false, 'email')) +
@@ -3360,11 +3360,9 @@ function openSchoolProfiles() {
 function schoolRow(sc) {
   const addr = [sc.street_address, sc.city_town, sc.state_province, sc.zip_postal_code].filter(Boolean).join(', ');
   const cur = sc.is_current_school ? '<span class="ec-badge ec-badge-pub">Current</span>' : '';
-  const ceeb = sc.school_ceeb_code || sc.ceeb_code;
   return '<div class="ec-row"><div>' +
     '<div class="ec-title">' + escapeHTML(sc.school_name || '(unnamed)') + '</div>' +
-    '<div class="ec-meta">' + escapeHTML(addr) + (ceeb ? ' \u00b7 CEEB ' + escapeHTML(ceeb) : '') + '</div>' +
-    (sc.counselor_name ? '<div class="ec-meta">Counselor: ' + escapeHTML(sc.counselor_name) + (sc.counselor_phone ? ' \u00b7 ' + escapeHTML(sc.counselor_phone) : '') + '</div>' : '') +
+    '<div class="ec-meta">' + escapeHTML(addr) + '</div>' +
     '<div class="ec-chips">' + cur + '</div>' +
     '</div><div class="ec-actions">' +
     '<button onclick="schoolEdit(\'' + sc.id + '\')">Edit</button>' +
@@ -3409,15 +3407,15 @@ function schoolEdit(id) {
       )
     ) +
     countryField('country', sc.country) +
-    ecRowTwo(
-      ecField('counselor_name', 'Counselor name', sc.counselor_name),
-      ecField('counselor_position', 'Counselor position', sc.counselor_position)
-    ) +
-    ecRowTwo(
-      ecField('counselor_phone', 'Counselor phone', sc.counselor_phone),
-      ecField('counselor_email', 'Counselor email', sc.counselor_email)
-    ) +
-    ecField('counselor_fax', 'Counselor fax', sc.counselor_fax) +
+    // v193: counselor details live on the Counselors card, not here. A school can
+    // change counselors, and the counselor needs their own record for the Common
+    // App School Report anyway. Existing values round-trip so nothing is lost.
+    '<input type="hidden" class="ec-in" data-k="counselor_name" value="' + escapeHTML(sc.counselor_name || '') + '">' +
+    '<input type="hidden" class="ec-in" data-k="counselor_position" value="' + escapeHTML(sc.counselor_position || '') + '">' +
+    '<input type="hidden" class="ec-in" data-k="counselor_phone" value="' + escapeHTML(sc.counselor_phone || '') + '">' +
+    '<input type="hidden" class="ec-in" data-k="counselor_email" value="' + escapeHTML(sc.counselor_email || '') + '">' +
+    '<input type="hidden" class="ec-in" data-k="counselor_fax" value="' + escapeHTML(sc.counselor_fax || '') + '">' +
+    '<div class="ec-hint">Counselor details are entered under <b>Academics \u2192 Counselors</b>.</div>' +
     ecRowTwo(
       '<label class="ec-lbl">Grading scale<select class="ec-in" data-k="grading_scale">' + gradeOpts + '</select></label>',
       '<label class="ec-lbl">Max grade offered<select class="ec-in" data-k="max_grade_offered">' + maxOpts + '</select></label>'
@@ -3494,7 +3492,8 @@ async function schoolSave(id) {
       fill('state', picked.state);
       fill('zip_postal_code', picked.zip);
       fill('zip', picked.zip);
-      fill('counselor_phone', picked.phone);
+      // Do NOT fill counselor_phone from the school's main number - the counselor
+      // has their own record under Academics -> Counselors.
     }
   } catch (e) {}
   if (!item.school_name) { showToast('School name required', 'error'); return; }
@@ -3779,6 +3778,48 @@ function yrTeacherPick(sel) {
   if (!nameField) return;
   const opt = sel.options[sel.selectedIndex];
   nameField.value = sel.value ? (opt ? opt.textContent : '') : '';
+}
+
+/* v194: OUTSIDE School Profile, a school is chosen from the schools already on
+   file - never re-searched. School Profile is the single place a school is added.
+   Writes both school_id (the link) and school_name (the label). */
+function schoolChoiceField(opts) {
+  opts = opts || {};
+  const key = opts.key || 'school_name';
+  const label = opts.label || 'School';
+  const curId = opts.school_id || '';
+  const curName = opts.value || '';
+  let sel = curId;
+  if (!sel && curName) {
+    const hit = SCHOOLS.find(function (s) { return s.school_name === curName; });
+    if (hit) sel = hit.id;
+  }
+  if (!sel && SCHOOLS.length === 1) sel = SCHOOLS[0].id;   // only one school: use it
+  if (!SCHOOLS.length) {
+    return '<label class="ec-lbl">' + escapeHTML(label) +
+      '<div class="cr-waiting" style="margin:4px 0">No school on file yet. Add one under ' +
+      '<b>Academics \u2192 School Profile</b>, then it will appear here.</div>' +
+      '<input type="hidden" class="ec-in" data-k="' + key + '" value="' + escapeHTML(curName) + '">' +
+      '</label>';
+  }
+  const opt = '<option value="">-- pick a school --</option>' +
+    SCHOOLS.map(function (s) {
+      return '<option value="' + s.id + '"' + (s.id === sel ? ' selected' : '') + '>' +
+        escapeHTML(s.school_name) + '</option>';
+    }).join('');
+  const selName = (SCHOOLS.find(function (s) { return s.id === sel; }) || {}).school_name || curName;
+  return '<label class="ec-lbl">' + escapeHTML(label) +
+    '<select class="ec-in" data-k="school_id" onchange="schoolChoicePick(this)">' + opt + '</select>' +
+    '<input type="hidden" class="ec-in" data-k="' + key + '" value="' + escapeHTML(selName) + '">' +
+    '<div class="ec-hint">Schools come from <b>Academics \u2192 School Profile</b>.</div>' +
+    '</label>';
+}
+
+function schoolChoicePick(sel) {
+  const nameEl = document.querySelector('.ec-in[data-k="school_name"]');
+  if (!nameEl) return;
+  const sc = SCHOOLS.find(function (s) { return s.id === sel.value; });
+  nameEl.value = sc ? (sc.school_name || '') : '';
 }
 
 function schoolPickerField(opts) {
@@ -4332,7 +4373,8 @@ function spLastPicked() {
 
 // Back-compat shim: report-card code calls schoolSelectField + DOE_PICKED
 function schoolSelectField(selectedName) {
-  return schoolPickerField({ key: 'school_name', label: 'School', value: selectedName || lastKnownSchoolName(), level: 'k12' });
+  // v194: report cards choose from schools on file, never re-search.
+  return schoolChoiceField({ key: 'school_name', label: 'School', value: selectedName || lastKnownSchoolName() });
 }
 Object.defineProperty(window, 'DOE_PICKED', { get: () => spLastPicked(), set: () => {}, configurable: true });
 
@@ -6130,7 +6172,7 @@ function teacherEdit(id) {
       ecField('subject_taught', 'Subject taught', t.subject_taught),
       ecField('title_position', 'Title / position', t.title_position)
     ) +
-    schoolPickerField({ key: 'school_name', label: 'School', value: t.school_name, level: 'k12' }) +
+    schoolChoiceField({ key: 'school_name', label: 'School', value: t.school_name, school_id: t.school_id }) +
     ecField('street_address', 'School street address', t.street_address) +
     ecRowTwo(
       ecField('city_town', 'City', t.city_town),
