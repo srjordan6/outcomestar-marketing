@@ -2662,7 +2662,7 @@ async function openAcademicsBands() {
   document.getElementById('view-pillars').classList.add('hidden');
   document.getElementById('view-pillar').classList.remove('hidden');
   document.getElementById('pillar-view-title').textContent = 'Academics';
-  document.getElementById('pillar-view-desc').textContent = 'Start with School Profile, then Teachers \u2014 both are reused everywhere. After that, pick a grade band and school year to enter grades and coursework. Every year from Pre-K through 12th grade is tracked.';
+  document.getElementById('pillar-view-desc').textContent = 'Set up the school and teachers once, then log courses by year, then enter grades from the report card. Every year from Pre-K through 12th grade is tracked.';
   const c = document.getElementById('sections-container');
   c.innerHTML = '<div class="ac-est">Loading\u2026</div>';
   try {
@@ -2698,10 +2698,6 @@ function renderAcadBands() {
       '<div><div class="ec-name">School Profile</div><div class="ec-desc">CEEB, address, counselor, grading scale, class size, boarding, curriculum</div></div>' +
       '<div class="ec-count">' + (SCHOOLS.length || '—') + ' <span>schools on file</span></div>' +
     '</button>' +
-    '<button class="ec-card" onclick="openReportCards(null)">' +
-      '<div><div class="ec-name">Report Cards</div><div class="ec-desc">Quarterly, mid-year, and final report cards per grade</div></div>' +
-      '<div class="ec-count">' + (REPORT_CARDS.length || '—') + ' <span>on file</span></div>' +
-    '</button>' +
     '<button class="ec-card" onclick="openTeachers()">' +
       '<div><div class="ec-name">Teachers</div><div class="ec-desc">Name, school, address, phone, and email — reused across courses and recommenders</div></div>' +
       '<div class="ec-count">' + (TEACHERS.length || '—') + ' <span>on file</span></div>' +
@@ -2710,14 +2706,21 @@ function renderAcadBands() {
       '<div><div class="ec-name">Private Tutoring</div><div class="ec-desc">Subject, tutor, school year, description, skills gained, grade or certificate of completion</div></div>' +
       '<div class="ec-count">' + (TUTORING.length || '—') + ' <span>on file</span></div>' +
     '</button>';
+  const step3cards =
+    '<button class="ec-card" onclick="openReportCards(null)">' +
+      '<div><div class="ec-name">Report Cards</div><div class="ec-desc">Quarterly, mid-year, and final report cards per grade — this is where grades are entered</div></div>' +
+      '<div class="ec-count">' + (REPORT_CARDS.length || '—') + ' <span>on file</span></div>' +
+    '</button>';
   const legacy = '<div class="ec-bar" style="margin-top:16px"><button class="save-btn save-btn-ghost" onclick="openAcademics()">Open full Academics data-entry form</button></div>';
-  // v190: setup cards first - the school and its teachers are reused by every
-  // grade year, so entering them first is the order that actually works.
-  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once</div>';
-  const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 Enter grades by year</div>';
+  // v192: three steps. Set up the school and teachers, then log the schedule,
+  // then enter the grades from the report card.
+  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once \u2014 school, teachers, tutoring</div>';
+  const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 Enter courses / subjects by year</div>';
+  const step3 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 3 \u00b7 Enter grades (report cards)</div>';
   document.getElementById('sections-container').innerHTML =
     step1 + '<div class="ec-grid">' + extras + '</div>' +
-    step2 + '<div class="ec-grid">' + cards + '</div>' + legacy;
+    step2 + '<div class="ec-grid">' + cards + '</div>' +
+    step3 + '<div class="ec-grid">' + step3cards + '</div>' + legacy;
 }
 
 async function openAcadBand(code) {
