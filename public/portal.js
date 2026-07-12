@@ -3182,7 +3182,7 @@ function schoolEdit(id) {
   const caf = sc.courses_available_flags || {};
   const flagCode = (k, label) => '<label class="ec-check"><input type="checkbox" class="ec-in" data-caf="' + k + '"' + (caf[k] ? ' checked' : '') + '> ' + label + '</label>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
-    ecField('school_name', 'School name', sc.school_name, true) +
+    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country }) +
     ecRowTwo(
       ecField('school_ceeb_code', 'CEEB code', sc.school_ceeb_code || sc.ceeb_code),
       ecField('school_type', 'School type (public / independent / charter / religious / home)', sc.school_type)
@@ -3252,6 +3252,33 @@ async function schoolSave(id) {
     }
   });
   if (Object.keys(flags).length) item.courses_available_flags = flags;
+  // v181: school name is now a type-ahead (schoolPickerField). It emits its own
+  // country select as school_name_country - fold it into the real country field
+  // and auto-fill CEEB + address from the picked NCES/DOE record.
+  if (item.school_name_country) {
+    if (!item.country) item.country = item.school_name_country;
+    delete item.school_name_country;
+  }
+  try {
+    const picked = (typeof spLastPicked === 'function') ? spLastPicked() : null;
+    if (picked && picked.name === item.school_name) {
+      // Only fill keys this form actually renders (data-k must exist), so we
+      // never post a field the API does not know about.
+      const fill = function (k, v) {
+        if (!v || item[k]) return;
+        if (document.querySelector('.ec-in[data-k="' + k + '"]')) item[k] = v;
+      };
+      fill('school_ceeb_code', picked.leaid);
+      fill('street_address', picked.street);
+      fill('city_town', picked.city);
+      fill('city', picked.city);
+      fill('state_province', picked.state);
+      fill('state', picked.state);
+      fill('zip_postal_code', picked.zip);
+      fill('zip', picked.zip);
+      fill('counselor_phone', picked.phone);
+    }
+  } catch (e) {}
   if (!item.school_name) { showToast('School name required', 'error'); return; }
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/school-profiles', { items: [item] });
