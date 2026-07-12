@@ -3490,9 +3490,41 @@ let SP_SEQ = 0;
 const SP_STATE = {};   // pickerId -> picked school payload
 
 function schoolPickerField(opts) {
-  // opts: { key, label, value, level ('k12'|'college'), teacherHost(bool) }
+  // v181: CASCADING picker - country -> state -> district -> school.
+  // NCES stores abbreviated uppercase names ("ISBELL EL"), so free-text search
+  // could never find "Isbell Elementary". Cascading selects remove the guesswork.
+  // opts: { key, label, value, level ('k12'|'college'), country }
   const id = 'sp' + (++SP_SEQ);
   const level = opts.level || 'k12';
+  const label = opts.label || 'School';
+  const val = opts.value || '';
+  const cVal = opts.country || PROFILE_COUNTRY || 'US';
+  if (level !== 'k12') return schoolPickerFieldLegacy(opts);
+  setTimeout(function () { spCascadeInit(id, cVal); }, 0);
+  return '<label class="ec-lbl">' + escapeHTML(label) +
+    '<div class="sp-row">' +
+    '<select class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" ' +
+      'onchange="spCascadeCountry(\'' + id + '\')">' + countryOptions(cVal) + '</select>' +
+    '</div>' +
+    '<div class="sp-row" id="' + id + '-cascade">' +
+      '<select id="' + id + '-state" onchange="spCascadeState(\'' + id + '\')">' +
+        '<option value="">-- state --</option></select>' +
+      '<select id="' + id + '-district" onchange="spCascadeDistrict(\'' + id + '\')" disabled>' +
+        '<option value="">-- school district --</option></select>' +
+      '<select id="' + id + '-school" onchange="spCascadePick(\'' + id + '\')" disabled>' +
+        '<option value="">-- school --</option></select>' +
+    '</div>' +
+    '<input class="ec-in" data-k="' + opts.key + '" id="' + id + '-input" type="text" ' +
+      'placeholder="School name (or type it if not listed)" autocomplete="off" ' +
+      'value="' + escapeHTML(val) + '">' +
+    '<div class="ec-hint" id="' + id + '-hint">Pick state \u2192 district \u2192 school. Not listed (private, home, or outside the US)? Just type the name above.</div>' +
+    '</label>';
+}
+
+// Legacy free-text picker retained for college/IPEDS lookups.
+function schoolPickerFieldLegacy(opts) {
+  const id = 'sp' + (++SP_SEQ);
+  const level = opts.level || 'college';
   const label = opts.label || 'School';
   const val = opts.value || '';
   const recentOpts = SCHOOLS.map(sc => '<option value="' + escapeHTML(sc.school_name) + '">').join('');
@@ -3508,9 +3540,88 @@ function schoolPickerField(opts) {
     'placeholder="Type school name" ' +
     'value="' + escapeHTML(val) + '" oninput="spSearch(\'' + id + '\', this.value)" list="' + id + '-recent"></div>' +
     '<datalist id="' + id + '-recent">' + recentOpts + '</datalist>' +
-    '<div class="ec-hint" id="' + id + '-hint">US schools: type a name, append a state code to narrow (e.g. Frisco High TX). Outside the US: pick the country and type the school \u2014 it saves as a manual entry.</div>' +
+    '<div class="ec-hint" id="' + id + '-hint">Type the institution name.</div>' +
     '<div id="' + id + '-results" class="doe-results"></div></label>';
 }
+
+/* ---- cascading picker: state -> district -> school ---- */
+const SP_SCHOOLS_CACHE = {};
+
+async function spCascadeInit(id, country) {
+  const stSel = document.getElementById(id + '-state');
+  if (!stSel) return;
+  const c = (country || 'US').toUpperCase();
+  const wrap = document.getElementById(id + '-cascade');
+  if (c !== 'US') { if (wrap) wrap.style.display = 'none'; return; }
+  if (wrap) wrap.style.display = '';
+  try {
+    const d = await apiGet('/focms/v1/catalogs/k12/states?country=US');
+    stSel.innerHTML = '<option value="">-- state --</option>' +
+      (d.states || []).map(s => '<option value="' + s + '">' + s + '</option>').join('');
+  } catch (e) { /* leave manual entry available */ }
+}
+
+function spCascadeCountry(id) {
+  const c = document.getElementById(id + '-country');
+  spCascadeInit(id, c ? c.value : 'US');
+}
+
+async function spCascadeState(id) {
+  const st = document.getElementById(id + '-state').value;
+  const dSel = document.getElementById(id + '-district');
+  const scSel = document.getElementById(id + '-school');
+  dSel.innerHTML = '<option value="">-- school district --</option>';
+  scSel.innerHTML = '<option value="">-- school --</option>';
+  dSel.disabled = true; scSel.disabled = true;
+  if (!st) return;
+  dSel.innerHTML = '<option value="">loading districts\u2026</option>';
+  try {
+    const d = await apiGet('/focms/v1/catalogs/k12/districts?state=' + encodeURIComponent(st));
+    dSel.innerHTML = '<option value="">-- school district --</option>' +
+      (d.districts || []).map(x => '<option value="' + x.leaid + '">' +
+        escapeHTML(x.district_name) + ' (' + x.schools + ')</option>').join('');
+    dSel.disabled = false;
+  } catch (e) {
+    dSel.innerHTML = '<option value="">could not load districts</option>';
+  }
+}
+
+async function spCascadeDistrict(id) {
+  const leaid = document.getElementById(id + '-district').value;
+  const scSel = document.getElementById(id + '-school');
+  scSel.innerHTML = '<option value="">-- school --</option>';
+  scSel.disabled = true;
+  if (!leaid) return;
+  scSel.innerHTML = '<option value="">loading schools\u2026</option>';
+  try {
+    const d = await apiGet('/focms/v1/catalogs/k12/schools?leaid=' + encodeURIComponent(leaid));
+    SP_SCHOOLS_CACHE[id] = d.schools || [];
+    scSel.innerHTML = '<option value="">-- school --</option>' +
+      (d.schools || []).map((x, i) => '<option value="' + i + '">' + escapeHTML(x.name) + '</option>').join('');
+    scSel.disabled = false;
+  } catch (e) {
+    scSel.innerHTML = '<option value="">could not load schools</option>';
+  }
+}
+
+function spCascadePick(id) {
+  const i = document.getElementById(id + '-school').value;
+  const list = SP_SCHOOLS_CACHE[id] || [];
+  if (i === '' || !list[i]) return;
+  const s = list[i];
+  const input = document.getElementById(id + '-input');
+  if (input) { input.removeAttribute('readonly'); input.value = s.name; }
+  SP_PICKED = { name: s.name, leaid: s.ncessch, street: s.street, city: s.city,
+                state: s.state, zip: s.zip, phone: s.phone, district: s.district_name };
+  // Feed the same store the legacy picker uses, so spLastPicked() (courseSave,
+  // schoolSave auto-fill) sees the pick.
+  SP_STATE[id] = SP_PICKED;
+  SP_STATE.last = SP_PICKED;
+  const hint = document.getElementById(id + '-hint');
+  if (hint) hint.textContent = [s.district_name, s.city, s.state, s.zip].filter(Boolean).join(' \u00b7 ');
+}
+
+let SP_PICKED = null;
 
 const COUNTRIES = [
   ['US','United States'],
