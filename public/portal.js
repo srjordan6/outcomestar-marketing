@@ -3296,6 +3296,29 @@ async function schoolSave(id) {
     }
   } catch (e) {}
   if (!item.school_name) { showToast('School name required', 'error'); return; }
+  // v187: whitelist + type-coerce before POST. Anything not a real column (picker
+  // scratch keys, stray data-k) is dropped, and integer columns are sent as ints -
+  // posting a string into an int column was throwing a 500.
+  const SCHOOL_INT_KEYS = ['graduating_class_size', 'boarding_students'];
+  SCHOOL_INT_KEYS.forEach(function (k) {
+    if (item[k] === '' || item[k] == null) { delete item[k]; return; }
+    const n = parseInt(item[k], 10);
+    if (isNaN(n)) delete item[k]; else item[k] = n;
+  });
+  const SCHOOL_ALLOWED = ['id', 'school_name', 'school_leaid', 'school_ceeb_code', 'ceeb_code',
+    'school_type', 'street_address', 'street_address_line_2', 'city_town', 'state_province',
+    'country', 'zip_postal_code', 'is_current_school', 'enrollment_kind', 'start_date', 'end_date',
+    'expected_graduation_date', 'counselor_name', 'counselor_position', 'counselor_phone',
+    'counselor_email', 'counselor_fax', 'notes', 'grading_scale', 'max_grade_offered',
+    'schedule_type', 'courses_available_flags', 'courses_available_notes',
+    'graduating_class_size', 'boarding_students', 'curriculum_notes'];
+  Object.keys(item).forEach(function (k) {
+    if (SCHOOL_ALLOWED.indexOf(k) === -1) delete item[k];
+  });
+  // A 12-digit value here is an NCES id, not a CEEB code - never store it as CEEB.
+  if (item.school_ceeb_code && String(item.school_ceeb_code).replace(/\D/g, '').length > 6) {
+    delete item.school_ceeb_code;
+  }
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/school-profiles', { items: [item] });
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/school-profiles');
