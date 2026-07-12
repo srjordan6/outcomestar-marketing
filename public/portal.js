@@ -2806,7 +2806,8 @@ function courseRow(c) {
   const showcase = c.show_on_showcase ? '<span class="ec-badge ec-badge-pub">Public</span>' : '';
   const yr = [c.school_year, c.term].filter(Boolean).join(' \u00b7 ');
   return '<div class="ec-row"><div>' +
-    '<div class="ec-title">' + escapeHTML(c.course_name) + '</div>' +
+    '<div class="ec-title">' + escapeHTML(c.course_name) +
+      (c.course_code ? ' <span class="ec-chip">' + escapeHTML(c.course_code) + '</span>' : '') + '</div>' +
     '<div class="ec-meta">Grade ' + c.grade_level +
     (c.period ? ' \u00b7 Period ' + escapeHTML(c.period) : '') +
     (yr ? ' \u00b7 ' + escapeHTML(yr) : '') +
@@ -2858,7 +2859,7 @@ async function bulkCourses() {
     '<div class="ec-lbl" style="margin-top:12px">Courses this term (up to 10)</div>' +
     '<div id="bulk-rows">' + rowsHtml + '</div>' +
     '<button type="button" class="save-btn save-btn-ghost" onclick="bulkAddRow()">+ Add course row</button>' +
-    '<div class="ec-hint">One dropdown, every course \u2014 the full federal SCED catalog (1,791 courses), grouped by subject. The subject is set automatically from the course you pick. Teachers come from Academics \u2192 Teachers. Grades go on the Report Card. Blank rows are skipped.</div>' +
+    '<div class="ec-hint">One dropdown, every course \u2014 the full federal SCED catalog (1,791 courses), grouped by subject; the subject is set automatically from the course you pick. <b>Course #</b> is the district\u2019s own identifier from the school schedule or course catalog (e.g. MTH1043). Teachers come from Academics \u2192 Teachers. Grades go on the Report Card. Blank rows are skipped.</div>' +
     '<div class="ec-bar">' +
     '<button class="save-btn" onclick="bulkSave()">Save all courses</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openAcadYear(' + g + ')">Cancel</button>' +
@@ -2878,7 +2879,7 @@ function bulkRowHtml(c) {
   // The subject is derived from the course, so there is no separate subject column.
   const freeText = !!(c.course_name && !c.sced_code);
   return '<div class="bulk-row" id="' + rid + '" data-id="' + escapeHTML(c.id || '') + '" ' +
-    'style="display:grid;grid-template-columns:80px 1fr 1.1fr auto;gap:6px;align-items:center;margin-bottom:6px">' +
+    'style="display:grid;grid-template-columns:74px 1fr 110px 1fr auto;gap:6px;align-items:center;margin-bottom:6px">' +
     '<select class="ec-in bk-period">' + per + '</select>' +
     '<span class="bk-course-wrap">' +
       '<select class="ec-in bk-course" style="width:100%" onchange="bkCoursePick(\'' + rid + '\', this.value)">' +
@@ -2889,6 +2890,9 @@ function bulkRowHtml(c) {
       '<input type="hidden" class="bk-sced" value="' + escapeHTML(c.sced_code || '') + '">' +
       '<input type="hidden" class="bk-subject" value="' + escapeHTML(c.subject || '') + '">' +
     '</span>' +
+    '<input class="ec-in bk-code" type="text" placeholder="Course #" ' +
+      'title="The district\'s own course number, from the school schedule or course catalog" ' +
+      'value="' + escapeHTML(c.course_code || '') + '">' +
     '<select class="ec-in bk-teacher">' + tch + '</select>' +
     '<button type="button" class="rep-del" title="Remove" onclick="this.closest(\'.bulk-row\').remove()">\u00d7</button>' +
     '</div>';
@@ -2975,6 +2979,7 @@ async function bulkSave() {
     const it = {
       course_name: name,
       sced_code: (row.querySelector('.bk-sced').value || '').trim() || null,
+      course_code: (row.querySelector('.bk-code').value || '').trim() || null,
       subject: (row.querySelector('.bk-subject').value || '').trim() || null,
       grade_level: g,
       period: row.querySelector('.bk-period').value || null,
@@ -4675,10 +4680,7 @@ function yrEdit(id, gradeSeed) {
       '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts.join('') + '</select></label>',
       '<label class="ec-lbl">School year *<select class="ec-in" data-k="school_year">' + schoolYearOpts(yr.school_year) + '</select></label>'
     ) +
-    ecRowTwo(
-      '<label class="ec-lbl">School (from profiles)<select class="ec-in" data-k="school_id" onchange="yrSchoolPick(this)">' + schoolOpts + '</select></label>',
-      ecField('school_name', 'Or type school name (if not in profiles)', yr.school_name)
-    ) +
+    schoolChoiceField({ key: 'school_name', label: 'School', value: yr.school_name, school_id: yr.school_id }) +
     // v0.12.119: MULTIPLE teachers per year, each with the subject they taught.
     // Elementary years commonly have two (e.g. ELA/Social Studies + Math/Science).
     '<div class="ec-lbl">Teachers this year</div>' +
