@@ -2700,7 +2700,11 @@ function renderAcadBands() {
     '</button>' +
     '<button class="ec-card" onclick="openTeachers()">' +
       '<div><div class="ec-name">Teachers</div><div class="ec-desc">Name, school, address, phone, and email — reused across courses and recommenders</div></div>' +
-      '<div class="ec-count">' + (TEACHERS.length || '—') + ' <span>on file</span></div>' +
+      '<div class="ec-count">' + (TEACHERS.filter(function(t){return (t.role||'teacher')!=='counselor';}).length || '—') + ' <span>on file</span></div>' +
+    '</button>' +
+    '<button class="ec-card" onclick="openCounselors()">' +
+      '<div><div class="ec-name">Counselors</div><div class="ec-desc">School counselor — name, title, school, phone, and email. Required on the Common App and school reports.</div></div>' +
+      '<div class="ec-count">' + (TEACHERS.filter(function(t){return (t.role||'teacher')==='counselor';}).length || '—') + ' <span>on file</span></div>' +
     '</button>' +
     '<button class="ec-card" onclick="openTutoring()">' +
       '<div><div class="ec-name">Private Tutoring</div><div class="ec-desc">Subject, tutor, school year, description, skills gained, grade or certificate of completion</div></div>' +
@@ -2711,16 +2715,15 @@ function renderAcadBands() {
       '<div><div class="ec-name">Report Cards</div><div class="ec-desc">Quarterly, mid-year, and final report cards per grade — this is where grades are entered</div></div>' +
       '<div class="ec-count">' + (REPORT_CARDS.length || '—') + ' <span>on file</span></div>' +
     '</button>';
-  const legacy = '<div class="ec-bar" style="margin-top:16px"><button class="save-btn save-btn-ghost" onclick="openAcademics()">Open full Academics data-entry form</button></div>';
-  // v192: three steps. Set up the school and teachers, then log the schedule,
-  // then enter the grades from the report card.
-  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once \u2014 school, teachers, tutoring</div>';
+  // v193: legacy "full Academics data-entry form" button removed - the stepped
+  // cards above are now the only entry path.
+  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once \u2014 school, teachers, counselors, tutoring</div>';
   const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 Enter courses / subjects by year</div>';
   const step3 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 3 \u00b7 Enter grades (report cards)</div>';
   document.getElementById('sections-container').innerHTML =
     step1 + '<div class="ec-grid">' + extras + '</div>' +
     step2 + '<div class="ec-grid">' + cards + '</div>' +
-    step3 + '<div class="ec-grid">' + step3cards + '</div>' + legacy;
+    step3 + '<div class="ec-grid">' + step3cards + '</div>';
 }
 
 async function openAcadBand(code) {
@@ -2764,8 +2767,7 @@ function openAcadYear(g) {
   const noun = NOUN_BY_BAND[b.code] || 'entry';
   const rows = ACAD_COURSES.filter(c => c.grade_level === g);
   let html = '<div class="ec-bar">' +
-    '<button class="save-btn" onclick="bulkCourses()">Add courses (schedule grid)</button>' +
-    '<button class="save-btn save-btn-ghost" onclick="courseEdit(null)">Add one ' + noun.toLowerCase() + ' (full detail)</button>' +
+    '<button class="save-btn" onclick="bulkCourses()">Add / edit courses</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadYearGrid(BANDS.find(x=>x.code===ACAD_BAND))">Back to years</button>' +
     '</div>' +
     '<div class="ec-desc" style="margin-bottom:10px">' + GRADE_LABELS[g] + ' \u00b7 ' + rows.length + ' ' + noun.toLowerCase() + (rows.length === 1 ? '' : 's') + '</div>';
@@ -2869,8 +2871,9 @@ function bulkRowHtml(c) {
   const per = PERIOD_OPTS.map(p => '<option value="' + p + '"' +
     ((c.period || '') === p ? ' selected' : '') + '>' + (p || 'Per.') + '</option>').join('');
   const tch = '<option value="">-- teacher --</option>' +
-    (TEACHERS || []).map(t => '<option value="' + t.id + '"' +
-      (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name || '') + '</option>').join('');
+    (TEACHERS || []).filter(function (t) { return (t.role || 'teacher') !== 'counselor'; })
+      .map(t => '<option value="' + t.id + '"' +
+        (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name || '') + '</option>').join('');
   // v192: ONE course column. All 1,791 SCED courses, grouped by subject area.
   // The subject is derived from the course, so there is no separate subject column.
   const freeText = !!(c.course_name && !c.sced_code);
@@ -3733,11 +3736,12 @@ const SP_STATE = {};   // pickerId -> picked school payload
 function yrTeacherRowHtml(t) {
   t = t || {};
   const opts = '<option value="">-- pick a teacher --</option>' +
-    (TEACHERS || []).map(function (x) {
-      return '<option value="' + x.id + '"' +
-        (t.teacher_id === x.id ? ' selected' : '') + '>' +
-        escapeHTML(x.teacher_name || '') + '</option>';
-    }).join('');
+    (TEACHERS || []).filter(function (x) { return (x.role || 'teacher') !== 'counselor'; })
+      .map(function (x) {
+        return '<option value="' + x.id + '"' +
+          (t.teacher_id === x.id ? ' selected' : '') + '>' +
+          escapeHTML(x.teacher_name || '') + '</option>';
+      }).join('');
   return '<div class="yr-t-row" style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center;margin-bottom:6px">' +
     '<select class="yr-t-id ec-in" style="width:100%">' + opts + '</select>' +
     '<input class="yr-t-subj ec-in" type="text" placeholder="Subject(s) taught" value="' +
@@ -4706,8 +4710,11 @@ async function yrDelete(id) {
 
 /* ============ v42: Teacher registry ============ */
 function teacherPickerField(c) {
+  // v0.12.121: course teacher picker lists TEACHERS only - counselors live in the
+  // same registry but never teach a course.
+  const pool = TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; });
   const opts = ['<option value="">-- pick a teacher --</option>']
-    .concat(TEACHERS.map(t => '<option value="' + t.id + '"' + (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name + (t.subject_taught ? ' (' + t.subject_taught + ')' : '')) + '</option>'))
+    .concat(pool.map(t => '<option value="' + t.id + '"' + (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name + (t.subject_taught ? ' (' + t.subject_taught + ')' : '')) + '</option>'))
     .join('');
   return '<label class="ec-lbl">Teacher' +
     '<select class="ec-in" data-k="teacher_id" onchange="onTeacherPick(this.value)">' + opts + '</select>' +
@@ -4726,12 +4733,31 @@ function onTeacherPick(id) {
 }
 
 function openTeachers() {
+  TCH_ROLE = 'teacher';
+  const rows = TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; });
   let html = '<div class="ec-bar">' +
     '<button class="save-btn" onclick="teacherEdit(null)">Add teacher</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>';
-  if (!TEACHERS.length) html += '<div class="cr-waiting">No teachers yet.</div>';
-  else html += TEACHERS.map(teacherRow).join('');
+  if (!rows.length) html += '<div class="cr-waiting">No teachers yet.</div>';
+  else html += rows.map(teacherRow).join('');
+  document.getElementById('sections-container').innerHTML = html;
+}
+
+/* v0.12.121: counselors use the same registry (role='counselor'), so they are
+   entered once and reused on the Common App, school reports, and recommendations. */
+let TCH_ROLE = 'teacher';
+
+function openCounselors() {
+  TCH_ROLE = 'counselor';
+  const rows = TEACHERS.filter(function (t) { return (t.role || 'teacher') === 'counselor'; });
+  let html = '<div class="ec-bar">' +
+    '<button class="save-btn" onclick="teacherEdit(null)">Add counselor</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
+    '</div>' +
+    '<div class="ec-desc" style="margin-bottom:10px">The school counselor submits the School Report and Mid-Year Report on the Common App \u2014 their name and email are needed there.</div>';
+  if (!rows.length) html += '<div class="cr-waiting">No counselors yet.</div>';
+  else html += rows.map(teacherRow).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
 
@@ -6079,13 +6105,15 @@ function recCopyAll(){
 
 function teacherRow(t) {
   const loc = [t.city_town, t.state_province].filter(Boolean).join(', ');
+  const isC = (t.role || 'teacher') === 'counselor';
+  const tag = isC ? ' <span class="pillar-badge">Counselor</span>' : '';
   return '<div class="ec-row"><div>' +
-    '<div class="ec-title">' + escapeHTML(t.teacher_name) + (t.subject_taught ? ' - ' + escapeHTML(t.subject_taught) : '') + '</div>' +
+    '<div class="ec-title">' + escapeHTML(t.teacher_name) + (t.subject_taught ? ' - ' + escapeHTML(t.subject_taught) : '') + tag + '</div>' +
     '<div class="ec-meta">' + escapeHTML([t.school_name, loc].filter(Boolean).join(' - ')) +
     (t.school_phone ? ' - ' + escapeHTML(t.school_phone) : '') + '</div>' +
     (t.teacher_email ? '<div class="ec-meta">' + escapeHTML(t.teacher_email) + '</div>' : '') +
     '</div><div class="ec-actions">' +
-    askRecBtn(t.teacher_email, t.teacher_name, 'teacher') +
+    askRecBtn(t.teacher_email, t.teacher_name, isC ? 'counselor' : 'teacher') +
     addLetterBtn('', t.teacher_name) +
     '<button onclick="teacherEdit(\'' + t.id + '\')">Edit</button>' +
     '<button onclick="teacherDelete(\'' + t.id + '\')">Delete</button>' +
@@ -6124,6 +6152,10 @@ function teacherEdit(id) {
 async function teacherSave(id) {
   const item = {};
   if (id) item.id = id;
+  // v0.12.121: file the record under whichever list you opened (Teachers or
+  // Counselors). Editing an existing record keeps its own role.
+  const existing = id ? TEACHERS.find(x => x.id === id) : null;
+  item.role = existing ? (existing.role || 'teacher') : (TCH_ROLE || 'teacher');
   document.querySelectorAll('.ec-in').forEach(el => {
     const k = el.dataset.k; if (!k) return;
     const v = (el.value || '').trim(); if (v) item[k] = v;
