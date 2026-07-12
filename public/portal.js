@@ -4631,6 +4631,71 @@ function rcTermChange() {
   if (!subs.length) showToast('No courses logged for that term yet', 'error');
 }
 
+/* v199: read a pasted report card and fill the form. Nothing is saved - the
+   parent reviews every row, then presses Save. */
+async function rcParsePaste() {
+  const box = document.getElementById('rc-paste');
+  const st = document.getElementById('rc-paste-status');
+  const text = (box.value || '').trim();
+  if (text.length < 20) { st.textContent = 'Paste the report card first.'; st.className = 'save-status err'; return; }
+  st.textContent = 'Reading\u2026'; st.className = 'save-status';
+  let d;
+  try {
+    d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/report-card-parse', { text: text });
+  } catch (e) {
+    st.textContent = 'Could not read that. Enter the grades manually.';
+    st.className = 'save-status err';
+    return;
+  }
+  const setv = function (k, v) {
+    if (v == null || v === '') return;
+    const el = document.querySelector('.ec-in[data-k="' + k + '"]');
+    if (!el) return;
+    el.removeAttribute('readonly');
+    el.value = v;
+  };
+  if (d.term) {
+    const t = document.getElementById('rc-term');
+    if (t && Array.prototype.some.call(t.options, function (o) { return o.value === d.term; })) t.value = d.term;
+  }
+  setv('school_year', d.school_year);
+  setv('gpa_unweighted', d.gpa_unweighted);
+  setv('gpa_weighted', d.gpa_weighted);
+  setv('days_present', d.days_present);
+  setv('days_absent', d.days_absent);
+  setv('days_tardy', d.days_tardy);
+  setv('teacher_comments', d.teacher_comments);
+  if (d.grade_level != null) setv('grade_level', String(d.grade_level));
+
+  // Match each parsed course to a course already on file, so the period and
+  // teacher we already know are not lost to whatever the paste happened to show.
+  const gEl = document.querySelector('.ec-in[data-k="grade_level"]');
+  const g = gEl ? parseInt(gEl.value, 10) : ACAD_YEAR;
+  const known = (ACAD_COURSES || []).filter(function (c) { return c.grade_level === g; });
+  const rows = (d.subjects || []).map(function (s) {
+    const hit = known.find(function (c) {
+      const a = (c.course_name || '').toLowerCase();
+      const b = (s.subject || '').toLowerCase();
+      return a && b && (a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0);
+    });
+    return {
+      subject: hit ? hit.course_name : s.subject,
+      period: s.period || (hit ? hit.period : '') || '',
+      teacher: s.teacher || (hit ? hit.teacher_name : '') || '',
+      mp1: s.mp1 || '', mp2: s.mp2 || '', exam: s.exam || '',
+      sem1: '', sem2: '', grade: s.grade || ''
+    };
+  });
+  const term = document.getElementById('rc-term').value;
+  document.getElementById('rc-head').innerHTML = rcHeaderRow(term);
+  document.getElementById('rc-subjects').innerHTML =
+    rows.map(function (s) { return rcSubjectRowHtml(s, term); }).join('');
+  rcRecalc();
+  st.textContent = 'Read ' + rows.length + ' course' + (rows.length === 1 ? '' : 's') +
+    ' \u2014 check each row, then Save.';
+  st.className = 'save-status ok';
+}
+
 function rcEdit(id) {
   const rc = id ? REPORT_CARDS.find(x => x.id === id) : { school_year: nextSchoolYear() };
   if (!rc) return;
@@ -4648,6 +4713,17 @@ function rcEdit(id) {
   setTimeout(rcRecalc, 0);
   const urls = (rc.evidence_urls || []).join(', ');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    // v199: paste the report card and it fills the form for review.
+    '<div style="border:1px solid var(--orange);background:#FFF7EF;border-radius:10px;padding:12px 14px;margin-bottom:14px">' +
+      '<div style="font-family:Lora,serif;color:var(--navy);font-weight:600;margin-bottom:4px">Paste the report card</div>' +
+      '<div class="ec-hint" style="margin-bottom:6px">Copy the grades from the school portal (or the report-card email) and paste them here. ' +
+        'The courses, teachers, periods, and grades are read out and filled in below \u2014 you review everything before saving. Nothing is saved until you press Save.</div>' +
+      '<textarea id="rc-paste" class="ec-in" rows="4" style="width:100%" placeholder="Paste the report card here\u2026"></textarea>' +
+      '<div class="ec-bar" style="margin-top:8px">' +
+        '<button type="button" class="save-btn" onclick="rcParsePaste()">Read it and fill the form</button>' +
+        '<span id="rc-paste-status" class="save-status"></span>' +
+      '</div>' +
+    '</div>' +
     ecRowTwo(
       '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts.join('') + '</select></label>',
       '<label class="ec-lbl">Period<select class="ec-in" data-k="period_kind">' + perOpts + '</select></label>'
