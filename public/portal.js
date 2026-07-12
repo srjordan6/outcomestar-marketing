@@ -3191,11 +3191,15 @@ function schoolEdit(id) {
     // high-school-only capture when John reaches Grade 9.
     '<input type="hidden" class="ec-in" data-k="school_ceeb_code" value="' +
       escapeHTML(sc.school_ceeb_code || sc.ceeb_code || '') + '">' +
+    // v186: school_type must match the DB check constraint - lowercase codes only.
+    // Display labels are friendly; the stored value is the code.
     '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type">' +
-      ['', 'Public', 'Independent / Private', 'Charter', 'Magnet', 'Religious / Parochial',
-       'Home school', 'Online / Virtual', 'Other'].map(function (o) {
-        return '<option value="' + escapeHTML(o) + '"' +
-          ((sc.school_type || '') === o ? ' selected' : '') + '>' + (o || '-- pick --') + '</option>';
+      [['', '-- pick --'], ['public', 'Public'], ['private', 'Independent / Private'],
+       ['charter', 'Charter'], ['parochial', 'Religious / Parochial'],
+       ['home_school', 'Home school'], ['correspondence', 'Correspondence / Distance'],
+       ['education_provider', 'Education provider'], ['other', 'Other']].map(function (o) {
+        return '<option value="' + o[0] + '"' +
+          ((sc.school_type || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
       }).join('') + '</select></label>' +
     ecField('street_address', 'Street address', sc.street_address) +
     ecRowTwo(
