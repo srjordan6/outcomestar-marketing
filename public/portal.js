@@ -2662,7 +2662,7 @@ async function openAcademicsBands() {
   document.getElementById('view-pillars').classList.add('hidden');
   document.getElementById('view-pillar').classList.remove('hidden');
   document.getElementById('pillar-view-title').textContent = 'Academics';
-  document.getElementById('pillar-view-desc').textContent = 'Pick a grade band, then a school year. Every year from Pre-K through 12th grade is tracked.';
+  document.getElementById('pillar-view-desc').textContent = 'Start with School Profile, then Teachers \u2014 both are reused everywhere. After that, pick a grade band and school year to enter grades and coursework. Every year from Pre-K through 12th grade is tracked.';
   const c = document.getElementById('sections-container');
   c.innerHTML = '<div class="ac-est">Loading\u2026</div>';
   try {
@@ -2711,7 +2711,13 @@ function renderAcadBands() {
       '<div class="ec-count">' + (TUTORING.length || '—') + ' <span>on file</span></div>' +
     '</button>';
   const legacy = '<div class="ec-bar" style="margin-top:16px"><button class="save-btn save-btn-ghost" onclick="openAcademics()">Open full Academics data-entry form</button></div>';
-  document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + extras + '</div>' + legacy;
+  // v190: setup cards first - the school and its teachers are reused by every
+  // grade year, so entering them first is the order that actually works.
+  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once</div>';
+  const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 Enter grades by year</div>';
+  document.getElementById('sections-container').innerHTML =
+    step1 + '<div class="ec-grid">' + extras + '</div>' +
+    step2 + '<div class="ec-grid">' + cards + '</div>' + legacy;
 }
 
 async function openAcadBand(code) {
@@ -2755,7 +2761,8 @@ function openAcadYear(g) {
   const noun = NOUN_BY_BAND[b.code] || 'entry';
   const rows = ACAD_COURSES.filter(c => c.grade_level === g);
   let html = '<div class="ec-bar">' +
-    '<button class="save-btn" onclick="courseEdit(null)">Add ' + noun.toLowerCase() + '</button>' +
+    '<button class="save-btn" onclick="bulkCourses()">Add courses (schedule grid)</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="courseEdit(null)">Add one ' + noun.toLowerCase() + ' (full detail)</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadYearGrid(BANDS.find(x=>x.code===ACAD_BAND))">Back to years</button>' +
     '</div>' +
     '<div class="ec-desc" style="margin-bottom:10px">' + GRADE_LABELS[g] + ' \u00b7 ' + rows.length + ' ' + noun.toLowerCase() + (rows.length === 1 ? '' : 's') + '</div>';
@@ -2795,7 +2802,9 @@ function courseRow(c) {
   const yr = [c.school_year, c.term].filter(Boolean).join(' \u00b7 ');
   return '<div class="ec-row"><div>' +
     '<div class="ec-title">' + escapeHTML(c.course_name) + '</div>' +
-    '<div class="ec-meta">Grade ' + c.grade_level + (yr ? ' \u00b7 ' + escapeHTML(yr) : '') +
+    '<div class="ec-meta">Grade ' + c.grade_level +
+    (c.period ? ' \u00b7 Period ' + escapeHTML(c.period) : '') +
+    (yr ? ' \u00b7 ' + escapeHTML(yr) : '') +
     (c.school_name ? ' \u00b7 ' + escapeHTML(c.school_name) : '') +
     (c.teacher_name ? ' \u00b7 ' + escapeHTML(c.teacher_name) : '') + '</div>' +
     '<div class="ec-chips">' + tagStr + grade + ap + showcase + '</div>' +
@@ -2804,6 +2813,120 @@ function courseRow(c) {
     '<button onclick="courseEdit(\'' + c.id + '\')">Edit</button>' +
     '<button onclick="courseDelete(\'' + c.id + '\')">Delete</button>' +
     '</div></div>';
+}
+
+/* ================= v0.12.120: schedule grid - up to 10 courses at once =================
+   One header (school, school year, term) + a row per class period. This is how a
+   report card / schedule actually reads, so a full term is entered in one pass. */
+const PERIOD_OPTS = ['', '1', '2', '3', '4', '5', '6', '7', '8', 'A', 'B', 'Advisory', 'Homeroom'];
+const TERM_OPTS = ['', 'Full year', 'Semester 1', 'Semester 2', 'Quarter 1', 'Quarter 2',
+                  'Quarter 3', 'Quarter 4', 'Trimester 1', 'Trimester 2', 'Trimester 3'];
+
+async function bulkCourses() {
+  if (!SUBJECT_CATALOG.length) {
+    try { const d = await apiGet('/focms/v1/catalogs/subjects'); SUBJECT_CATALOG = d.subjects || []; } catch (e) {}
+  }
+  const g = ACAD_YEAR;
+  const existing = ACAD_COURSES.filter(c => c.grade_level === g);
+  const seed = existing.length ? existing : [];
+  const rowsHtml = (seed.length ? seed : Array.from({ length: 6 }, () => ({}))).map(bulkRowHtml).join('');
+  const schoolOpts = '<option value="">-- pick a school --</option>' +
+    SCHOOLS.map(s => '<option value="' + s.id + '"' +
+      ((seed[0] && seed[0].school_id === s.id) ? ' selected' : '') + '>' +
+      escapeHTML(s.school_name) + '</option>').join('');
+  const yrSel = (seed[0] && seed[0].school_year) || '';
+  const tmSel = (seed[0] && seed[0].term) || '';
+  document.getElementById('sections-container').innerHTML = '<div class="ec-form" style="max-width:100%">' +
+    '<div class="ec-desc" style="margin-bottom:10px"><b>' + GRADE_LABELS[g] + '</b> \u2014 enter the whole schedule at once. ' +
+      'The school, year, and term below apply to every row.</div>' +
+    '<div class="ec-two">' +
+      '<label class="ec-lbl">School<select class="ec-in" id="bulk-school">' + schoolOpts + '</select></label>' +
+      '<label class="ec-lbl">School year<select class="ec-in" id="bulk-year">' + schoolYearOpts(yrSel) + '</select></label>' +
+    '</div>' +
+    '<label class="ec-lbl">Term<select class="ec-in" id="bulk-term">' +
+      TERM_OPTS.map(t => '<option value="' + t + '"' + (tmSel === t ? ' selected' : '') + '>' + (t || '-- pick a term --') + '</option>').join('') +
+    '</select></label>' +
+    '<div class="ec-lbl" style="margin-top:12px">Courses this term (up to 10)</div>' +
+    '<div id="bulk-rows">' + rowsHtml + '</div>' +
+    '<button type="button" class="save-btn save-btn-ghost" onclick="bulkAddRow()">+ Add course row</button>' +
+    '<div class="ec-hint">Teacher list comes from Academics \u2192 Teachers. Leave a row blank to skip it.</div>' +
+    '<div class="ec-bar">' +
+    '<button class="save-btn" onclick="bulkSave()">Save all courses</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="openAcadYear(' + g + ')">Cancel</button>' +
+    '</div></div>';
+}
+
+function bulkRowHtml(c) {
+  c = c || {};
+  const per = PERIOD_OPTS.map(p => '<option value="' + p + '"' +
+    ((c.period || '') === p ? ' selected' : '') + '>' + (p || 'Per.') + '</option>').join('');
+  const subj = '<option value="">-- subject --</option>' +
+    (SUBJECT_CATALOG || []).map(s => '<option value="' + s.code + '"' +
+      (c.subject === s.code ? ' selected' : '') + '>' + escapeHTML(s.title) + '</option>').join('') +
+    '<option value="other"' + (c.subject === 'other' ? ' selected' : '') + '>Other</option>';
+  const tch = '<option value="">-- teacher --</option>' +
+    (TEACHERS || []).map(t => '<option value="' + t.id + '"' +
+      (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name || '') + '</option>').join('');
+  return '<div class="bulk-row" data-id="' + escapeHTML(c.id || '') + '" ' +
+    'style="display:grid;grid-template-columns:74px 1fr 1.4fr 1.2fr 80px auto;gap:6px;align-items:center;margin-bottom:6px">' +
+    '<select class="ec-in bk-period">' + per + '</select>' +
+    '<select class="ec-in bk-subject">' + subj + '</select>' +
+    '<input class="ec-in bk-name" type="text" placeholder="Course name" value="' + escapeHTML(c.course_name || '') + '">' +
+    '<select class="ec-in bk-teacher">' + tch + '</select>' +
+    '<input class="ec-in bk-grade" type="text" placeholder="Grade" value="' + escapeHTML(c.grade_received || '') + '">' +
+    '<button type="button" class="rep-del" title="Remove" onclick="this.closest(\'.bulk-row\').remove()">\u00d7</button>' +
+    '</div>';
+}
+
+function bulkAddRow() {
+  const wrap = document.getElementById('bulk-rows');
+  if (!wrap) return;
+  if (wrap.querySelectorAll('.bulk-row').length >= 10) {
+    showToast('10 courses per term is the maximum', 'error');
+    return;
+  }
+  wrap.insertAdjacentHTML('beforeend', bulkRowHtml({}));
+}
+
+async function bulkSave() {
+  const g = ACAD_YEAR;
+  const schoolId = document.getElementById('bulk-school').value;
+  const sc = SCHOOLS.find(x => x.id === schoolId);
+  const year = document.getElementById('bulk-year').value;
+  const term = document.getElementById('bulk-term').value;
+  const items = [];
+  document.querySelectorAll('#bulk-rows .bulk-row').forEach(function (row) {
+    const name = (row.querySelector('.bk-name').value || '').trim();
+    if (!name) return;                       // blank rows are skipped
+    const tSel = row.querySelector('.bk-teacher');
+    const tId = tSel.value;
+    const tName = (tSel.selectedIndex > 0) ? tSel.options[tSel.selectedIndex].textContent : null;
+    const it = {
+      course_name: name,
+      grade_level: g,
+      period: row.querySelector('.bk-period').value || null,
+      subject: row.querySelector('.bk-subject').value || null,
+      grade_received: (row.querySelector('.bk-grade').value || '').trim() || null,
+      teacher_id: tId || null,
+      teacher_name: tName || null,
+      school_id: schoolId || null,
+      school_name: sc ? sc.school_name : null,
+      school_year: year || null,
+      term: term || null
+    };
+    const id = row.dataset.id;
+    if (id) it.id = id;
+    items.push(it);
+  });
+  if (!items.length) { showToast('Add at least one course name', 'error'); return; }
+  if (items.length > 10) { showToast('10 courses per term is the maximum', 'error'); return; }
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: items, mode: 'upsert' });
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/courses?band=' + ACAD_BAND);
+    ACAD_COURSES = d.courses || [];
+    openAcadYear(g);
+    showToast('Saved ' + items.length + ' course' + (items.length === 1 ? '' : 's'), 'success');
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 async function courseEdit(id) {
@@ -2895,6 +3018,11 @@ async function courseEdit(id) {
     schoolPickerField({ key: 'school_name', label: 'School', value: c.school_name || (sch.school_name||''), level: 'k12' }) +
     (schoolMeta ? ('<div>' + schoolMeta + '</div>') : '') +
     teacherPickerField(c) +
+    '<label class="ec-lbl">Class period<select class="ec-in" data-k="period">' +
+      PERIOD_OPTS.map(function (p) {
+        return '<option value="' + p + '"' + ((c.period || '') === p ? ' selected' : '') + '>' +
+          (p || '-- period --') + '</option>';
+      }).join('') + '</select></label>' +
     gradingBlock +
     rigorBlock +
     ecField('teacher_name', isPre ? 'Teacher / caregiver' : 'Teacher', c.teacher_name) +
