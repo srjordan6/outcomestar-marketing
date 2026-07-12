@@ -3530,6 +3530,47 @@ let PROFILE_COUNTRY = (localStorage.getItem('focms_profile_country') || 'US');
 let SP_SEQ = 0;
 const SP_STATE = {};   // pickerId -> picked school payload
 
+/* ---- v0.12.119: multi-teacher rows on a year record ----
+   These inputs deliberately do NOT use the .ec-in class: that class is the
+   generic form collector, and these are a child list, not year-record columns. */
+function yrTeacherRowHtml(t) {
+  t = t || {};
+  const opts = '<option value="">-- pick a teacher --</option>' +
+    (TEACHERS || []).map(function (x) {
+      return '<option value="' + x.id + '"' +
+        (t.teacher_id === x.id ? ' selected' : '') + '>' +
+        escapeHTML(x.teacher_name || '') + '</option>';
+    }).join('');
+  return '<div class="yr-t-row" style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center;margin-bottom:6px">' +
+    '<select class="yr-t-id ec-in" style="width:100%">' + opts + '</select>' +
+    '<input class="yr-t-subj ec-in" type="text" placeholder="Subject(s) taught" value="' +
+      escapeHTML(t.subject_taught || '') + '" style="width:100%">' +
+    '<label class="ec-check" style="white-space:nowrap;font-size:11px">' +
+      '<input type="checkbox" class="yr-t-home"' + (t.is_homeroom ? ' checked' : '') + '> Homeroom</label>' +
+    '<button type="button" class="rep-del" title="Remove" ' +
+      'onclick="this.closest(\'.yr-t-row\').remove()">\u00d7</button>' +
+    '</div>';
+}
+
+function yrAddTeacher() {
+  const wrap = document.getElementById('yr-teachers');
+  if (wrap) wrap.insertAdjacentHTML('beforeend', yrTeacherRowHtml({}));
+}
+
+function yrReadTeachers() {
+  const out = [];
+  document.querySelectorAll('#yr-teachers .yr-t-row').forEach(function (row) {
+    const sel = row.querySelector('.yr-t-id');
+    const id = sel ? sel.value : '';
+    const name = (sel && sel.selectedIndex > 0) ? sel.options[sel.selectedIndex].textContent : '';
+    const subj = (row.querySelector('.yr-t-subj').value || '').trim();
+    const home = row.querySelector('.yr-t-home').checked;
+    if (!id) return;
+    out.push({ teacher_id: id, teacher_name: name, subject_taught: subj || null, is_homeroom: home });
+  });
+  return out;
+}
+
 function yrTeacherPick(sel) {
   // Keep the teacher's NAME alongside the id, so the year record still reads
   // correctly even if the teacher is later removed from the registry.
@@ -4315,20 +4356,14 @@ function yrEdit(id, gradeSeed) {
       '<label class="ec-lbl">School (from profiles)<select class="ec-in" data-k="school_id">' + schoolOpts + '</select></label>',
       ecField('school_name', 'Or type school name', yr.school_name)
     ) +
-    // v0.12.119: homeroom / main teacher for this grade year. Pulled from the
-    // Teachers registry so it is entered once and reused.
-    '<label class="ec-lbl">Teacher (homeroom / main teacher for this year)' +
-      '<select class="ec-in" data-k="homeroom_teacher_id" onchange="yrTeacherPick(this)">' +
-      '<option value="">-- pick a teacher --</option>' +
-      (TEACHERS || []).map(function (t) {
-        return '<option value="' + t.id + '"' +
-          (yr.homeroom_teacher_id === t.id ? ' selected' : '') + '>' +
-          escapeHTML(t.teacher_name || '') + '</option>';
-      }).join('') +
-    '</select></label>' +
-    '<input type="hidden" class="ec-in" data-k="homeroom_teacher_name" value="' +
-      escapeHTML(yr.homeroom_teacher_name || '') + '">' +
-    '<div class="ec-hint">Not listed? Add them under Academics \u2192 Teachers first, then pick them here.</div>' +
+    // v0.12.119: MULTIPLE teachers per year, each with the subject they taught.
+    // Elementary years commonly have two (e.g. ELA/Social Studies + Math/Science).
+    '<div class="ec-lbl">Teachers this year</div>' +
+    '<div id="yr-teachers">' +
+      ((yr.teachers && yr.teachers.length) ? yr.teachers : [{}]).map(yrTeacherRowHtml).join('') +
+    '</div>' +
+    '<button type="button" class="save-btn save-btn-ghost" onclick="yrAddTeacher()">+ Add another teacher</button>' +
+    '<div class="ec-hint">Pick from the teachers you have already added. Not listed? Add them under Academics \u2192 Teachers first.</div>' +
     '<label class="ec-check"><input type="checkbox" class="ec-in" data-k="is_full_year"' + (yr.is_full_year !== false ? ' checked' : '') + '> Full-year attendance</label>' +
     ecRowTwo(
       ecField('attendance_from', 'Attended from', yr.attendance_from, false, 'date'),
@@ -4371,6 +4406,7 @@ async function yrSave(id) {
     if (sc && !item.school_name) item.school_name = sc.school_name;
   }
   try {
+    item.teachers = yrReadTeachers();   // v0.12.119: multi-teacher child list
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/year-records', { items: [item] });
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/year-records');
     YEAR_RECORDS = d.years || [];
