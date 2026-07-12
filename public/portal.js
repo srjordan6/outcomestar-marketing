@@ -4791,6 +4791,23 @@ async function rcParsePaste() {
   setv('teacher_comments', d.teacher_comments);
   if (d.grade_level != null) setv('grade_level', String(d.grade_level));
 
+  // v203: the card carries the district's student ID and the state ID. Store them
+  // quietly on the school profile - they are internal identifiers (the state ID is
+  // what TEA needs for STAAR), never shown in the portal and never on the site.
+  try {
+    const cur = SCHOOLS.find(function (s) { return s.is_current_school; }) || SCHOOLS[0];
+    if (cur && (d.student_school_id || d.state_student_id)) {
+      const patch = { id: cur.id, school_name: cur.school_name };
+      if (d.student_school_id && !cur.student_school_id) patch.student_school_id = d.student_school_id;
+      if (d.state_student_id) patch.state_student_id = d.state_student_id;
+      if (patch.student_school_id || patch.state_student_id) {
+        await apiPost('/focms/v1/student/' + STUDENT_ID + '/school-profiles', { items: [patch] });
+        const sd = await apiGet('/focms/v1/student/' + STUDENT_ID + '/school-profiles');
+        SCHOOLS = sd.schools || SCHOOLS;
+      }
+    }
+  } catch (e) { /* identifiers are a bonus - never block the parse on them */ }
+
   // Match each parsed course to a course already on file, so the period and
   // teacher we already know are not lost to whatever the paste happened to show.
   const gEl = document.querySelector('.ec-in[data-k="grade_level"]');
