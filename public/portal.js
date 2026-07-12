@@ -2777,6 +2777,7 @@ function renderAcadBandView(b) {
 
 function courseRow(c) {
   const tags = [];
+  if (c.is_private_tutoring) tags.push('Tutoring');
   if (c.is_ap) tags.push('AP');
   if (c.is_ib) tags.push('IB');
   if (c.is_honors) tags.push('Honors');
@@ -2803,6 +2804,11 @@ async function courseEdit(id) {
   if (!SUBJECT_CATALOG.length) {
     try { const d = await apiGet('/focms/v1/catalogs/subjects'); SUBJECT_CATALOG = d.subjects || []; }
     catch(e){ showToast('Subject list failed to load: ' + e.message, 'error'); }
+  }
+  // v0.12.116: skills-gained chips need the catalog; Academics may open first.
+  if (!(typeof SKILLS_CATALOG !== 'undefined' && SKILLS_CATALOG && SKILLS_CATALOG.length)) {
+    try { const sk = await apiGet('/focms/v1/skills-catalog'); SKILLS_CATALOG = sk.skills || []; }
+    catch(e){ /* non-fatal: chips render empty */ }
   }
   const c = id ? ACAD_COURSES.find(x => x.id === id) : {};
   if (!c) return;
@@ -2886,7 +2892,16 @@ async function courseEdit(id) {
     gradingBlock +
     rigorBlock +
     ecField('teacher_name', isPre ? 'Teacher / caregiver' : 'Teacher', c.teacher_name) +
+    // ---- v0.12.116: Private Tutoring ----
+    '<label class="ec-lbl">Course type<select class="ec-in" data-k="course_type">' +
+      '<option value="regular"' + (c.course_type === 'private_tutoring' ? '' : ' selected') + '>Regular course</option>' +
+      '<option value="private_tutoring"' + (c.course_type === 'private_tutoring' ? ' selected' : '') + '>Private tutoring</option>' +
+    '</select></label>' +
+    ecField('teacher_email', isPre ? 'Teacher / caregiver email' : 'Teacher email', c.teacher_email, false, 'email') +
+    ecArea('course_description', 'Subject / course description', c.course_description) +
+    ecField('completion_award', 'Award or certificate of completion (if no letter grade)', c.completion_award) +
     ecArea('notes', 'Notes', c.notes) +
+    skillsGainedField(c.skills) +
     showcaseField(c.show_on_showcase) +
     '<div class="ec-bar">' +
     '<button class="save-btn" onclick="courseSave(\'' + (id || '') + '\')">Save</button>' +
@@ -2955,6 +2970,8 @@ async function courseSave(id) {
   });
   if (!item.course_name) { showToast('Course name is required', 'error'); return; }
   if (item.grade_level == null || isNaN(item.grade_level)) { showToast('Grade level required', 'error'); return; }
+  item.skills = readSkillsFromForm();          // v0.12.116 universal skills-gained
+  delete item.skills_gained;
   try {
     const picked = spLastPicked();
     const cCountry = (item.school_name_country || 'US');
@@ -2965,7 +2982,10 @@ async function courseSave(id) {
       await apiPost('/focms/v1/student/' + STUDENT_ID + '/school-profiles', { items: [pr] });
       const sd = await apiGet('/focms/v1/student/' + STUDENT_ID + '/school-profiles'); SCHOOLS = sd.schools || [];
     }
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: [item] });
+    // v0.12.116: upsert mode. Without it the API blanket-deletes every
+    // parent_portal course and re-inserts only what is posted - saving one
+    // course used to wipe all the others.
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: [item], mode: 'upsert' });
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/courses?band=' + ACAD_BAND);
     ACAD_COURSES = d.courses || [];
     openAcadYear(ACAD_YEAR != null ? ACAD_YEAR : (BANDS.find(x=>x.code===ACAD_BAND).lo));
