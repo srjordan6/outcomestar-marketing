@@ -2849,7 +2849,7 @@ async function bulkCourses() {
     '<div class="ec-lbl" style="margin-top:12px">Courses this term (up to 10)</div>' +
     '<div id="bulk-rows">' + rowsHtml + '</div>' +
     '<button type="button" class="save-btn save-btn-ghost" onclick="bulkAddRow()">+ Add course row</button>' +
-    '<div class="ec-hint">Teacher list comes from Academics \u2192 Teachers. Leave a row blank to skip it.</div>' +
+    '<div class="ec-hint">Pick a subject, then the course from the federal SCED catalog (1,791 courses). Teachers come from Academics \u2192 Teachers. Grades are entered on the Report Card, not here. Blank rows are skipped.</div>' +
     '<div class="ec-bar">' +
     '<button class="save-btn" onclick="bulkSave()">Save all courses</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openAcadYear(' + g + ')">Cancel</button>' +
@@ -2858,6 +2858,7 @@ async function bulkCourses() {
 
 function bulkRowHtml(c) {
   c = c || {};
+  const rid = 'bk' + (++BK_SEQ);
   const per = PERIOD_OPTS.map(p => '<option value="' + p + '"' +
     ((c.period || '') === p ? ' selected' : '') + '>' + (p || 'Per.') + '</option>').join('');
   const subj = '<option value="">-- subject --</option>' +
@@ -2867,15 +2868,90 @@ function bulkRowHtml(c) {
   const tch = '<option value="">-- teacher --</option>' +
     (TEACHERS || []).map(t => '<option value="' + t.id + '"' +
       (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name || '') + '</option>').join('');
-  return '<div class="bulk-row" data-id="' + escapeHTML(c.id || '') + '" ' +
-    'style="display:grid;grid-template-columns:74px 1fr 1.4fr 1.2fr 80px auto;gap:6px;align-items:center;margin-bottom:6px">' +
+  // v192: the course column is the 1,791-course SCED catalog, loaded per subject.
+  // Picking a subject fills this list; "Other" (or no match) lets you type freely.
+  if (c.subject && c.subject !== 'other') {
+    setTimeout(function () { bkLoadCourses(rid, c.subject, c.sced_code || '', c.course_name || ''); }, 0);
+  }
+  return '<div class="bulk-row" id="' + rid + '" data-id="' + escapeHTML(c.id || '') + '" ' +
+    'style="display:grid;grid-template-columns:74px 1fr 1.6fr 1.2fr auto;gap:6px;align-items:center;margin-bottom:6px">' +
     '<select class="ec-in bk-period">' + per + '</select>' +
-    '<select class="ec-in bk-subject">' + subj + '</select>' +
-    '<input class="ec-in bk-name" type="text" placeholder="Course name" value="' + escapeHTML(c.course_name || '') + '">' +
+    '<select class="ec-in bk-subject" onchange="bkSubjectPick(\'' + rid + '\', this.value)">' + subj + '</select>' +
+    '<span class="bk-course-wrap">' +
+      '<select class="ec-in bk-course" style="width:100%" onchange="bkCoursePick(\'' + rid + '\', this.value)">' +
+        '<option value="">-- pick a subject first --</option></select>' +
+      '<input class="ec-in bk-name" type="text" placeholder="Course name" style="width:100%;display:none;margin-top:4px" ' +
+        'value="' + escapeHTML(c.course_name || '') + '">' +
+      '<input type="hidden" class="bk-sced" value="' + escapeHTML(c.sced_code || '') + '">' +
+    '</span>' +
     '<select class="ec-in bk-teacher">' + tch + '</select>' +
-    '<input class="ec-in bk-grade" type="text" placeholder="Grade" value="' + escapeHTML(c.grade_received || '') + '">' +
     '<button type="button" class="rep-del" title="Remove" onclick="this.closest(\'.bulk-row\').remove()">\u00d7</button>' +
     '</div>';
+}
+
+let BK_SEQ = 0;
+const BK_COURSE_CACHE = {};
+
+async function bkLoadCourses(rid, subject, scedSel, nameSel) {
+  const row = document.getElementById(rid);
+  if (!row) return;
+  const sel = row.querySelector('.bk-course');
+  const txt = row.querySelector('.bk-name');
+  if (!subject || subject === 'other') {
+    sel.style.display = 'none';
+    txt.style.display = '';
+    return;
+  }
+  sel.style.display = '';
+  sel.innerHTML = '<option value="">loading\u2026</option>';
+  let list = BK_COURSE_CACHE[subject];
+  if (!list) {
+    try {
+      const d = await apiGet('/focms/v1/catalogs/courses?subject=' + encodeURIComponent(subject));
+      list = d.courses || [];
+      BK_COURSE_CACHE[subject] = list;
+    } catch (e) { list = []; }
+  }
+  sel.innerHTML = '<option value="">-- pick a course (' + list.length + ') --</option>' +
+    list.map(function (x) {
+      const on = (scedSel && x.code === scedSel);
+      return '<option value="' + x.code + '"' + (on ? ' selected' : '') + '>' + escapeHTML(x.title) + '</option>';
+    }).join('') +
+    '<option value="__other__">My course is not listed \u2014 type it</option>';
+  // Existing free-text course with no SCED code: keep the text box visible.
+  if (nameSel && !scedSel) {
+    sel.value = '__other__';
+    txt.style.display = '';
+  } else {
+    txt.style.display = 'none';
+  }
+}
+
+function bkSubjectPick(rid, subject) {
+  const row = document.getElementById(rid);
+  if (!row) return;
+  row.querySelector('.bk-sced').value = '';
+  row.querySelector('.bk-name').value = '';
+  bkLoadCourses(rid, subject, '', '');
+}
+
+function bkCoursePick(rid, code) {
+  const row = document.getElementById(rid);
+  if (!row) return;
+  const txt = row.querySelector('.bk-name');
+  const sced = row.querySelector('.bk-sced');
+  if (code === '__other__') {
+    txt.style.display = '';
+    txt.value = '';
+    sced.value = '';
+    txt.focus();
+    return;
+  }
+  txt.style.display = 'none';
+  const subject = row.querySelector('.bk-subject').value;
+  const hit = (BK_COURSE_CACHE[subject] || []).find(function (x) { return x.code === code; });
+  txt.value = hit ? hit.title : '';
+  sced.value = hit ? hit.code : '';
 }
 
 function bulkAddRow() {
@@ -2903,10 +2979,10 @@ async function bulkSave() {
     const tName = (tSel.selectedIndex > 0) ? tSel.options[tSel.selectedIndex].textContent : null;
     const it = {
       course_name: name,
+      sced_code: (row.querySelector('.bk-sced').value || '').trim() || null,
       grade_level: g,
       period: row.querySelector('.bk-period').value || null,
       subject: row.querySelector('.bk-subject').value || null,
-      grade_received: (row.querySelector('.bk-grade').value || '').trim() || null,
       teacher_id: tId || null,
       teacher_name: tName || null,
       school_id: schoolId || null,
