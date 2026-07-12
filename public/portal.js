@@ -2637,7 +2637,7 @@ let REPORT_CARDS = [];
 let YEAR_RECORDS = [];
 let TEACHERS = [];
 let RC_GRADE_FILTER = null;
-const SCHED_OPTS = ['Traditional 6-period','Traditional 7-period','Block','4x4 Block','Trimester','Modified block','Other'];
+const SCHED_OPTS = ['Self-contained (one teacher all day)','Departmentalized (core academic blocks)','Traditional 6-period','Traditional 7-period','Block','4x4 Block','Trimester','Modified block','Other'];
 const GRADING_OPTS = ['A-F letter','0-100 numeric','1-4 standards-based','Narrative / anecdotal','Pass/Fail','IB 1-7','Other'];
 const MAX_GRADE_OPTS = ['Pre-K','K','5','6','8','10','11','12','Other'];
 
@@ -3183,15 +3183,20 @@ function schoolEdit(id) {
   const flagCode = (k, label) => '<label class="ec-check"><input type="checkbox" class="ec-in" data-caf="' + k + '"' + (caf[k] ? ' checked' : '') + '> ' + label + '</label>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country }) +
-    ecRowTwo(
-      ecField('school_ceeb_code', 'CEEB code (optional)', sc.school_ceeb_code || sc.ceeb_code),
-      '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type">' +
-        ['', 'Public', 'Independent / Private', 'Charter', 'Magnet', 'Religious / Parochial',
-         'Home school', 'Online / Virtual', 'Other'].map(function (o) {
-          return '<option value="' + escapeHTML(o) + '"' +
-            ((sc.school_type || '') === o ? ' selected' : '') + '>' + (o || '-- pick --') + '</option>';
-        }).join('') + '</select></label>'
-    ) +
+    // v185: CEEB is hidden from the parent form. It is a College Board code that
+    // only matters for the HIGH SCHOOL at application time (Common App, SAT/ACT
+    // score sends, transcript delivery) - K-8 schools generally do not have one,
+    // and application forms autofill it from the school name. We still persist it
+    // (hidden round-trip, so an existing value is never wiped) and will surface a
+    // high-school-only capture when John reaches Grade 9.
+    '<input type="hidden" class="ec-in" data-k="school_ceeb_code" value="' +
+      escapeHTML(sc.school_ceeb_code || sc.ceeb_code || '') + '">' +
+    '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type">' +
+      ['', 'Public', 'Independent / Private', 'Charter', 'Magnet', 'Religious / Parochial',
+       'Home school', 'Online / Virtual', 'Other'].map(function (o) {
+        return '<option value="' + escapeHTML(o) + '"' +
+          ((sc.school_type || '') === o ? ' selected' : '') + '>' + (o || '-- pick --') + '</option>';
+      }).join('') + '</select></label>' +
     ecField('street_address', 'Street address', sc.street_address) +
     ecRowTwo(
       ecField('city_town', 'City', sc.city_town),
@@ -3273,7 +3278,9 @@ async function schoolSave(id) {
         if (!v || item[k]) return;
         if (document.querySelector('.ec-in[data-k="' + k + '"]')) item[k] = v;
       };
-      fill('school_ceeb_code', picked.leaid);
+      // NOTE: do NOT fill school_ceeb_code from the NCES id - they are different
+      // identifiers (CEEB = College Board; NCES = federal). Writing one into the
+      // other would corrupt the field we rely on for Common App / score sends.
       fill('street_address', picked.street);
       fill('city_town', picked.city);
       fill('city', picked.city);
@@ -3642,7 +3649,7 @@ function spCascadePick(id) {
   const hint = document.getElementById(id + '-hint');
   if (hint) {
     hint.textContent = [s.district_name, s.city, s.state, s.zip].filter(Boolean).join(' \u00b7 ') +
-      ' \u2014 address filled in below. CEEB is a College Board code (not in the federal school file) \u2014 enter it if your school gave you one.';
+      ' \u2014 address filled in below.';
   }
 }
 
