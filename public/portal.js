@@ -3182,7 +3182,7 @@ function schoolEdit(id) {
   const caf = sc.courses_available_flags || {};
   const flagCode = (k, label) => '<label class="ec-check"><input type="checkbox" class="ec-in" data-caf="' + k + '"' + (caf[k] ? ' checked' : '') + '> ' + label + '</label>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
-    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country }) +
+    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country, state: sc.state_province, leaid: sc.school_leaid }) +
     // v185: CEEB is hidden from the parent form. It is a College Board code that
     // only matters for the HIGH SCHOOL at application time (Common App, SAT/ACT
     // score sends, transcript delivery) - K-8 schools generally do not have one,
@@ -3285,6 +3285,8 @@ async function schoolSave(id) {
       // NOTE: do NOT fill school_ceeb_code from the NCES id - they are different
       // identifiers (CEEB = College Board; NCES = federal). Writing one into the
       // other would corrupt the field we rely on for Common App / score sends.
+      // The NCES id belongs in school_leaid.
+      if (picked.ncessch && !item.school_leaid) item.school_leaid = picked.ncessch;
       fill('street_address', picked.street);
       fill('city_town', picked.city);
       fill('city', picked.city);
@@ -3539,7 +3541,14 @@ function schoolPickerField(opts) {
   const val = opts.value || '';
   const cVal = opts.country || PROFILE_COUNTRY || 'US';
   if (level !== 'k12') return schoolPickerFieldLegacy(opts);
-  setTimeout(function () { spCascadeInit(id, cVal); }, 0);
+  // v188: when editing, restore state -> district -> school. The stored
+  // school_leaid is the 12-digit NCES school id; its first 7 digits are the
+  // district LEAID the cascade keys on.
+  const presetLeaid = opts.leaid ? String(opts.leaid).replace(/\D/g, '').slice(0, 7) : null;
+  const preset = (opts.state || presetLeaid)
+    ? { state: opts.state || null, leaid: presetLeaid, name: val }
+    : null;
+  setTimeout(function () { spCascadeInit(id, cVal, preset); }, 0);
   return '<label class="ec-lbl">' + escapeHTML(label) +
     '<select class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" ' +
       'onchange="spCascadeCountry(\'' + id + '\')">' + countryOptions(cVal) + '</select>' +
@@ -3584,7 +3593,7 @@ function schoolPickerFieldLegacy(opts) {
 /* ---- cascading picker: state -> district -> school ---- */
 const SP_SCHOOLS_CACHE = {};
 
-async function spCascadeInit(id, country) {
+async function spCascadeInit(id, country, preset) {
   const stSel = document.getElementById(id + '-state');
   if (!stSel) return;
   const c = (country || 'US').toUpperCase();
@@ -3595,6 +3604,26 @@ async function spCascadeInit(id, country) {
     const d = await apiGet('/focms/v1/catalogs/k12/states?country=US');
     stSel.innerHTML = '<option value="">-- state --</option>' +
       (d.states || []).map(s => '<option value="' + s + '">' + s + '</option>').join('');
+    // v188: restore the saved selection when editing an existing school.
+    if (preset && preset.state) {
+      stSel.value = preset.state;
+      await spCascadeState(id);
+      if (preset.leaid) {
+        const dSel = document.getElementById(id + '-district');
+        if (dSel) {
+          dSel.value = preset.leaid;
+          await spCascadeDistrict(id);
+          const scSel = document.getElementById(id + '-school');
+          const list = SP_SCHOOLS_CACHE[id] || [];
+          const want = (preset.name || '').trim().toLowerCase();
+          const idx = list.findIndex(function (x) {
+            return (x.name || '').trim().toLowerCase() === want ||
+                   (x.name_raw || '').trim().toLowerCase() === want;
+          });
+          if (scSel && idx >= 0) scSel.value = String(idx);
+        }
+      }
+    }
   } catch (e) { /* leave manual entry available */ }
 }
 
