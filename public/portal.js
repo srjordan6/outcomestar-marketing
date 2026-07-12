@@ -4485,11 +4485,13 @@ function rcSubjectsFromCourses(gradeLevel, term, existingGrades) {
   });
 }
 
-/* v197: term shape drives the grade columns on a report card.
-   Semester  -> two marking periods + optional exam -> semester average
-   Full year -> two semesters -> final year average
-   Quarter / Trimester / Summer -> a single grade
-   Averages compute automatically whenever the entries are numeric. */
+/* v200: modelled on the real district report card (Frisco ISD):
+     Pd | Course # | Course | Teacher | Q1 Q2 SEM1 Q3 Q4 SEM2 FIN | ABS TDY
+   SEM1 = avg(Q1,Q2), SEM2 = avg(Q3,Q4), FIN = avg(SEM1,SEM2) - all computed,
+   and overridable, because districts weight exams differently.
+     Full year -> all four quarters + both semesters + final
+     Semester   -> that semester's two quarters + the semester average
+     Quarter    -> one grade */
 function rcTermShape(term) {
   const t = (term || '').toLowerCase();
   if (t.indexOf('semester') === 0) return 'semester';
@@ -4502,15 +4504,15 @@ function rcNum(v) {
   return isNaN(n) ? null : n;
 }
 
-/* Average of the supplied values; null unless every entry is numeric.
-   Letter grades are left alone - averaging them is not meaningful. */
+/* Average; null unless every supplied entry is numeric (letter grades are left
+   alone - averaging them is not meaningful). */
 function rcAvg(vals) {
   const nums = [];
   for (let i = 0; i < vals.length; i++) {
     const raw = String(vals[i] == null ? '' : vals[i]).trim();
     if (!raw) continue;
     const n = rcNum(raw);
-    if (n === null) return null;          // a letter grade is present: no average
+    if (n === null) return null;
     nums.push(n);
   }
   if (!nums.length) return null;
@@ -4518,94 +4520,104 @@ function rcAvg(vals) {
   return Math.round((sum / nums.length) * 100) / 100;
 }
 
-/* Recompute every row's average, then the class-wide term average. */
+/* Fill a computed cell only when the parent has not typed over it. */
+function rcPut(el, val) {
+  if (!el) return;
+  if (el.dataset.touched === '1') return;
+  el.value = (val === null || val === undefined) ? '' : String(val);
+}
+
 function rcRecalc() {
   const shape = rcTermShape(document.getElementById('rc-term') ? document.getElementById('rc-term').value : '');
-  const rowAvgs = [];
+  const finals = [];
   document.querySelectorAll('#rc-subjects .rc-sub').forEach(function (row) {
-    const out = row.querySelector('.rc-avg');
-    if (!out) return;
-    let avg = null;
-    if (shape === 'semester') {
-      const mp1 = row.querySelector('.rc-mp1').value;
-      const mp2 = row.querySelector('.rc-mp2').value;
-      const ex = row.querySelector('.rc-exam').value;
-      // Exam, when present, counts as a third equal weight unless the school
-      // says otherwise - the parent can always overwrite the computed value.
-      avg = rcAvg(ex ? [mp1, mp2, ex] : [mp1, mp2]);
-    } else if (shape === 'year') {
-      avg = rcAvg([row.querySelector('.rc-s1').value, row.querySelector('.rc-s2').value]);
+    const q = function (c) { const e = row.querySelector('.' + c); return e ? e.value : ''; };
+    if (shape === 'year') {
+      const s1 = rcAvg([q('rc-q1'), q('rc-q2')]);
+      const s2 = rcAvg([q('rc-q3'), q('rc-q4')]);
+      rcPut(row.querySelector('.rc-sem1'), s1);
+      rcPut(row.querySelector('.rc-sem2'), s2);
+      const s1v = rcNum(q('rc-sem1'));
+      const s2v = rcNum(q('rc-sem2'));
+      const fin = rcAvg([s1v, s2v]);
+      rcPut(row.querySelector('.rc-fin'), fin);
+      const f = rcNum(q('rc-fin'));
+      if (f !== null) finals.push(f);
+    } else if (shape === 'semester') {
+      const s = rcAvg([q('rc-q1'), q('rc-q2')]);
+      rcPut(row.querySelector('.rc-sem1'), s);
+      const v = rcNum(q('rc-sem1'));
+      if (v !== null) finals.push(v);
     } else {
-      avg = rcNum(row.querySelector('.rc-grade').value);
+      const v = rcNum(q('rc-grade'));
+      if (v !== null) finals.push(v);
     }
-    out.value = (avg === null) ? '' : String(avg);
-    if (avg !== null) rowAvgs.push(avg);
   });
   const banner = document.getElementById('rc-term-avg');
   if (banner) {
-    const overall = rcAvg(rowAvgs);
+    const overall = rcAvg(finals);
     const label = shape === 'year' ? 'Final year average'
-      : shape === 'semester' ? 'Semester average'
-      : 'Term average';
+      : shape === 'semester' ? 'Semester average' : 'Term average';
     banner.textContent = (overall === null)
       ? label + ': \u2014 (enter numeric grades to compute)'
       : label + ' across all courses: ' + overall;
   }
 }
 
+function rcCell(cls, val, ph, computed) {
+  return '<input class="ec-in ' + cls + '" placeholder="' + ph + '" ' +
+    'oninput="this.dataset.touched=\'1\'; rcRecalc();" ' +
+    (computed ? 'style="background:#F4F5F7;font-weight:600" title="Computed - type to override" ' : '') +
+    'value="' + escapeHTML(val == null ? '' : String(val)) + '">';
+}
+
 function rcSubjectRowHtml(s, term) {
   s = s || {};
   const shape = rcTermShape(term);
-  const meta = [s.period ? 'Per. ' + s.period : '', s.teacher].filter(Boolean).join(' \u00b7 ');
   const head =
     '<div>' +
-      '<input class="ec-in rc-subject" placeholder="Course / subject" style="width:100%" value="' + escapeHTML(s.subject || '') + '">' +
-      (meta ? '<div class="ec-hint" style="margin-top:2px">' + escapeHTML(meta) + '</div>' : '') +
-      '<input type="hidden" class="rc-period" value="' + escapeHTML(s.period || '') + '">' +
-      '<input type="hidden" class="rc-teacher" value="' + escapeHTML(s.teacher || '') + '">' +
+      '<input class="ec-in rc-subject" placeholder="Course" style="width:100%" value="' + escapeHTML(s.subject || '') + '">' +
+      '<div style="display:grid;grid-template-columns:64px 1fr;gap:4px;margin-top:3px">' +
+        '<input class="ec-in rc-period" placeholder="Pd" value="' + escapeHTML(s.period || '') + '">' +
+        '<input class="ec-in rc-teacher" placeholder="Teacher" value="' + escapeHTML(s.teacher || '') + '">' +
+      '</div>' +
+      '<input type="hidden" class="rc-code" value="' + escapeHTML(s.course_code || '') + '">' +
     '</div>';
-  const tail = '<button type="button" class="rep-del" title="Remove" ' +
+  const del = '<button type="button" class="rep-del" title="Remove" ' +
     'onclick="this.closest(\'.rc-sub\').remove(); rcRecalc();">\u00d7</button>';
-  const avgBox = '<input class="ec-in rc-avg" readonly title="Computed" ' +
-    'style="background:#F4F5F7;font-weight:600" value="' + escapeHTML(s.average == null ? '' : String(s.average)) + '">';
 
-  if (shape === 'semester') {
-    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 78px 78px 78px 88px auto;gap:6px;align-items:center;margin-bottom:6px">' +
-      head +
-      '<input class="ec-in rc-mp1" placeholder="MP1" oninput="rcRecalc()" value="' + escapeHTML(s.mp1 || '') + '">' +
-      '<input class="ec-in rc-mp2" placeholder="MP2" oninput="rcRecalc()" value="' + escapeHTML(s.mp2 || '') + '">' +
-      '<input class="ec-in rc-exam" placeholder="Exam" oninput="rcRecalc()" value="' + escapeHTML(s.exam || '') + '">' +
-      avgBox + tail +
-      '</div>';
-  }
   if (shape === 'year') {
-    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 88px 88px 88px auto;gap:6px;align-items:center;margin-bottom:6px">' +
+    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 60px 60px 66px 60px 60px 66px 66px auto;gap:5px;align-items:start;margin-bottom:8px">' +
       head +
-      '<input class="ec-in rc-s1" placeholder="Sem 1" oninput="rcRecalc()" value="' + escapeHTML(s.sem1 || '') + '">' +
-      '<input class="ec-in rc-s2" placeholder="Sem 2" oninput="rcRecalc()" value="' + escapeHTML(s.sem2 || '') + '">' +
-      avgBox + tail +
+      rcCell('rc-q1', s.q1, 'Q1') + rcCell('rc-q2', s.q2, 'Q2') + rcCell('rc-sem1', s.sem1, 'SEM1', true) +
+      rcCell('rc-q3', s.q3, 'Q3') + rcCell('rc-q4', s.q4, 'Q4') + rcCell('rc-sem2', s.sem2, 'SEM2', true) +
+      rcCell('rc-fin', s.fin, 'FIN', true) + del +
       '</div>';
   }
-  return '<div class="rc-sub" style="display:grid;grid-template-columns:1.6fr 110px 88px auto;gap:6px;align-items:center;margin-bottom:6px">' +
-    head +
-    '<input class="ec-in rc-grade" placeholder="Grade" oninput="rcRecalc()" value="' + escapeHTML(s.grade || '') + '">' +
-    avgBox + tail +
+  if (shape === 'semester') {
+    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 70px 70px 80px auto;gap:6px;align-items:start;margin-bottom:8px">' +
+      head +
+      rcCell('rc-q1', s.q1, 'Q1') + rcCell('rc-q2', s.q2, 'Q2') + rcCell('rc-sem1', s.sem1, 'SEM', true) + del +
+      '</div>';
+  }
+  return '<div class="rc-sub" style="display:grid;grid-template-columns:1.6fr 110px auto;gap:6px;align-items:start;margin-bottom:8px">' +
+    head + rcCell('rc-grade', s.grade, 'Grade') + del +
     '</div>';
 }
 
 function rcHeaderRow(term) {
   const shape = rcTermShape(term);
-  const cell = function (t) { return '<div class="ec-lbl" style="margin:0">' + t + '</div>'; };
-  if (shape === 'semester') {
-    return '<div style="display:grid;grid-template-columns:1.5fr 78px 78px 78px 88px auto;gap:6px;margin-bottom:4px">' +
-      cell('Course') + cell('MP 1') + cell('MP 2') + cell('Exam') + cell('Sem avg') + '<span></span></div>';
-  }
+  const c = function (t) { return '<div class="ec-lbl" style="margin:0">' + t + '</div>'; };
   if (shape === 'year') {
-    return '<div style="display:grid;grid-template-columns:1.5fr 88px 88px 88px auto;gap:6px;margin-bottom:4px">' +
-      cell('Course') + cell('Sem 1') + cell('Sem 2') + cell('Final') + '<span></span></div>';
+    return '<div style="display:grid;grid-template-columns:1.5fr 60px 60px 66px 60px 60px 66px 66px auto;gap:5px;margin-bottom:4px">' +
+      c('Course / Pd / Teacher') + c('Q1') + c('Q2') + c('SEM1') + c('Q3') + c('Q4') + c('SEM2') + c('FIN') + '<span></span></div>';
   }
-  return '<div style="display:grid;grid-template-columns:1.6fr 110px 88px auto;gap:6px;margin-bottom:4px">' +
-    cell('Course') + cell('Grade') + cell('Avg') + '<span></span></div>';
+  if (shape === 'semester') {
+    return '<div style="display:grid;grid-template-columns:1.5fr 70px 70px 80px auto;gap:6px;margin-bottom:4px">' +
+      c('Course / Pd / Teacher') + c('Q1') + c('Q2') + c('SEM') + '<span></span></div>';
+  }
+  return '<div style="display:grid;grid-template-columns:1.6fr 110px auto;gap:6px;margin-bottom:4px">' +
+    c('Course / Pd / Teacher') + c('Grade') + '<span></span></div>';
 }
 
 /* Changing the term re-pulls the course list AND reshapes the grade columns. */
@@ -4676,14 +4688,19 @@ async function rcParsePaste() {
     const hit = known.find(function (c) {
       const a = (c.course_name || '').toLowerCase();
       const b = (s.subject || '').toLowerCase();
+      const ac = (c.course_code || '').toLowerCase();
+      const bc = (s.course_code || '').toLowerCase();
+      if (ac && bc && ac === bc) return true;          // district course # is the strongest match
       return a && b && (a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0);
     });
     return {
-      subject: hit ? hit.course_name : s.subject,
+      subject: s.subject || (hit ? hit.course_name : ''),
+      course_code: s.course_code || (hit ? hit.course_code : '') || '',
       period: s.period || (hit ? hit.period : '') || '',
       teacher: s.teacher || (hit ? hit.teacher_name : '') || '',
-      mp1: s.mp1 || '', mp2: s.mp2 || '', exam: s.exam || '',
-      sem1: '', sem2: '', grade: s.grade || ''
+      q1: s.q1 || '', q2: s.q2 || '', sem1: s.sem1 || '',
+      q3: s.q3 || '', q4: s.q4 || '', sem2: s.sem2 || '',
+      fin: s.fin || '', grade: s.grade || ''
     };
   });
   const term = document.getElementById('rc-term').value;
@@ -4787,17 +4804,32 @@ async function rcSave(id) {
       if (v) item[k] = (el.type === 'number' || k === 'grade_level' || k === 'class_rank' || k === 'class_size' || k === 'days_present' || k === 'days_absent' || k === 'days_tardy') ? parseFloat(v) : v;
     }
   });
+  // v200: persist the real report-card shape - quarters, semester averages, final.
+  const rcShape = rcTermShape(document.getElementById('rc-term') ? document.getElementById('rc-term').value : '');
   document.querySelectorAll('.rc-sub').forEach(row => {
-    const subject = row.querySelector('.rc-subject').value.trim();
-    const grade = row.querySelector('.rc-grade').value.trim();
-    const perEl = row.querySelector('.rc-period');
-    const tchEl = row.querySelector('.rc-teacher');
-    if (subject) item.subjects.push({
+    const gv = function (c) { const e = row.querySelector('.' + c); return e ? (e.value || '').trim() : ''; };
+    const subject = gv('rc-subject');
+    if (!subject) return;
+    const s = {
       subject: subject,
-      grade: grade || null,
-      period: perEl ? (perEl.value || null) : null,
-      teacher: tchEl ? (tchEl.value || null) : null
-    });
+      course_code: gv('rc-code') || null,
+      period: gv('rc-period') || null,
+      teacher: gv('rc-teacher') || null
+    };
+    if (rcShape === 'year') {
+      s.q1 = gv('rc-q1') || null; s.q2 = gv('rc-q2') || null;
+      s.q3 = gv('rc-q3') || null; s.q4 = gv('rc-q4') || null;
+      s.sem1 = gv('rc-sem1') || null; s.sem2 = gv('rc-sem2') || null;
+      s.fin = gv('rc-fin') || null;
+      s.grade = s.fin || s.sem2 || s.sem1 || null;      // headline value
+    } else if (rcShape === 'semester') {
+      s.q1 = gv('rc-q1') || null; s.q2 = gv('rc-q2') || null;
+      s.sem1 = gv('rc-sem1') || null;
+      s.grade = s.sem1 || s.q2 || s.q1 || null;
+    } else {
+      s.grade = gv('rc-grade') || null;
+    }
+    item.subjects.push(s);
   });
   if (item.grade_level == null || isNaN(item.grade_level)) { showToast('Grade level required', 'error'); return; }
   if (!item.school_year) { showToast('School year required', 'error'); return; }
