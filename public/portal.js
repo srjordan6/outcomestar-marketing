@@ -3368,6 +3368,8 @@ function schoolRow(sc) {
   return '<div class="ec-row"><div>' +
     '<div class="ec-title">' + escapeHTML(sc.school_name || '(unnamed)') + '</div>' +
     '<div class="ec-meta">' + escapeHTML(addr) + '</div>' +
+    (sc.student_school_id ? '<div class="ec-meta">Student ID: ' + escapeHTML(sc.student_school_id) +
+      (sc.district_name ? ' \u00b7 ' + escapeHTML(sc.district_name) : '') + '</div>' : '') +
     '<div class="ec-chips">' + cur + '</div>' +
     '</div><div class="ec-actions">' +
     '<button onclick="schoolEdit(\'' + sc.id + '\')">Edit</button>' +
@@ -3375,16 +3377,41 @@ function schoolRow(sc) {
     '</div></div>';
 }
 
+/* v198: the student's school district. Set the first time a school is added
+   from the NCES cascade; every later school defaults to the same district. */
+function knownDistrict() {
+  const hit = (SCHOOLS || []).find(function (s) { return s.district_leaid; });
+  if (!hit) return null;
+  return {
+    leaid: hit.district_leaid,
+    name: hit.district_name || '',
+    state: hit.state_province || ''
+  };
+}
+
 function schoolEdit(id) {
   const sc = id ? SCHOOLS.find(x => x.id === id) : {};
   if (!sc) return;
+  // v198: the student's district is set the first time a school is added, then
+  // reused - every later school defaults to the same district, and the cascade
+  // opens already narrowed to it.
+  const known = knownDistrict();
+  const preState = sc.state_province || (known ? known.state : null);
+  const preLeaid = sc.district_leaid || (known ? known.leaid : null);
   const schedOpts = '<option value="">-- pick --</option>' + SCHED_OPTS.map(v => '<option value="' + v + '"' + (sc.schedule_type === v ? ' selected' : '') + '>' + v + '</option>').join('');
   const gradeOpts = '<option value="">-- pick --</option>' + GRADING_OPTS.map(v => '<option value="' + v + '"' + (sc.grading_scale === v ? ' selected' : '') + '>' + v + '</option>').join('');
   const maxOpts = '<option value="">-- pick --</option>' + MAX_GRADE_OPTS.map(v => '<option value="' + v + '"' + (sc.max_grade_offered === v ? ' selected' : '') + '>' + v + '</option>').join('');
   const caf = sc.courses_available_flags || {};
   const flagCode = (k, label) => '<label class="ec-check"><input type="checkbox" class="ec-in" data-caf="' + k + '"' + (caf[k] ? ' checked' : '') + '> ' + label + '</label>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
-    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country, state: sc.state_province, leaid: sc.school_leaid }) +
+    (known && !sc.id
+      ? '<div class="ec-hint" style="margin-bottom:8px">District: <b>' + escapeHTML(known.name) +
+        '</b> \u2014 already set for this student, so the picker below opens on it. ' +
+        'Choose a different district only if the student changed districts.</div>'
+      : '') +
+    '<input type="hidden" class="ec-in" data-k="district_leaid" value="' + escapeHTML(sc.district_leaid || (known ? known.leaid : '')) + '">' +
+    '<input type="hidden" class="ec-in" data-k="district_name" value="' + escapeHTML(sc.district_name || (known ? known.name : '')) + '">' +
+    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country, state: preState, leaid: sc.school_leaid || preLeaid }) +
     // v185: CEEB is hidden from the parent form. It is a College Board code that
     // only matters for the HIGH SCHOOL at application time (Common App, SAT/ACT
     // score sends, transcript delivery) - K-8 schools generally do not have one,
@@ -3512,6 +3539,7 @@ async function schoolSave(id) {
     if (isNaN(n)) delete item[k]; else item[k] = n;
   });
   const SCHOOL_ALLOWED = ['id', 'school_name', 'school_leaid', 'school_ceeb_code', 'ceeb_code',
+    'district_leaid', 'district_name', 'student_school_id',
     'school_type', 'street_address', 'street_address_line_2', 'city_town', 'state_province',
     'country', 'zip_postal_code', 'is_current_school', 'enrollment_kind', 'start_date', 'end_date',
     'expected_graduation_date', 'counselor_name', 'counselor_position', 'counselor_phone',
@@ -3998,6 +4026,7 @@ function spCascadePick(id) {
   put('counselor_phone', s.phone);
   put('phone', s.phone);
   put('district_name', s.district_name);
+  put('district_leaid', s.leaid);
   put('ncessch', s.ncessch);
   const hint = document.getElementById(id + '-hint');
   if (hint) {
@@ -4456,22 +4485,130 @@ function rcSubjectsFromCourses(gradeLevel, term, existingGrades) {
   });
 }
 
-function rcSubjectRowHtml(s) {
+/* v197: term shape drives the grade columns on a report card.
+   Semester  -> two marking periods + optional exam -> semester average
+   Full year -> two semesters -> final year average
+   Quarter / Trimester / Summer -> a single grade
+   Averages compute automatically whenever the entries are numeric. */
+function rcTermShape(term) {
+  const t = (term || '').toLowerCase();
+  if (t.indexOf('semester') === 0) return 'semester';
+  if (t.indexOf('full year') === 0) return 'year';
+  return 'single';
+}
+
+function rcNum(v) {
+  const n = parseFloat(String(v == null ? '' : v).trim());
+  return isNaN(n) ? null : n;
+}
+
+/* Average of the supplied values; null unless every entry is numeric.
+   Letter grades are left alone - averaging them is not meaningful. */
+function rcAvg(vals) {
+  const nums = [];
+  for (let i = 0; i < vals.length; i++) {
+    const raw = String(vals[i] == null ? '' : vals[i]).trim();
+    if (!raw) continue;
+    const n = rcNum(raw);
+    if (n === null) return null;          // a letter grade is present: no average
+    nums.push(n);
+  }
+  if (!nums.length) return null;
+  const sum = nums.reduce(function (a, b) { return a + b; }, 0);
+  return Math.round((sum / nums.length) * 100) / 100;
+}
+
+/* Recompute every row's average, then the class-wide term average. */
+function rcRecalc() {
+  const shape = rcTermShape(document.getElementById('rc-term') ? document.getElementById('rc-term').value : '');
+  const rowAvgs = [];
+  document.querySelectorAll('#rc-subjects .rc-sub').forEach(function (row) {
+    const out = row.querySelector('.rc-avg');
+    if (!out) return;
+    let avg = null;
+    if (shape === 'semester') {
+      const mp1 = row.querySelector('.rc-mp1').value;
+      const mp2 = row.querySelector('.rc-mp2').value;
+      const ex = row.querySelector('.rc-exam').value;
+      // Exam, when present, counts as a third equal weight unless the school
+      // says otherwise - the parent can always overwrite the computed value.
+      avg = rcAvg(ex ? [mp1, mp2, ex] : [mp1, mp2]);
+    } else if (shape === 'year') {
+      avg = rcAvg([row.querySelector('.rc-s1').value, row.querySelector('.rc-s2').value]);
+    } else {
+      avg = rcNum(row.querySelector('.rc-grade').value);
+    }
+    out.value = (avg === null) ? '' : String(avg);
+    if (avg !== null) rowAvgs.push(avg);
+  });
+  const banner = document.getElementById('rc-term-avg');
+  if (banner) {
+    const overall = rcAvg(rowAvgs);
+    const label = shape === 'year' ? 'Final year average'
+      : shape === 'semester' ? 'Semester average'
+      : 'Term average';
+    banner.textContent = (overall === null)
+      ? label + ': \u2014 (enter numeric grades to compute)'
+      : label + ' across all courses: ' + overall;
+  }
+}
+
+function rcSubjectRowHtml(s, term) {
   s = s || {};
+  const shape = rcTermShape(term);
   const meta = [s.period ? 'Per. ' + s.period : '', s.teacher].filter(Boolean).join(' \u00b7 ');
-  return '<div class="rc-sub" style="display:grid;grid-template-columns:1.6fr 110px auto;gap:8px;align-items:center;margin-bottom:6px">' +
+  const head =
     '<div>' +
       '<input class="ec-in rc-subject" placeholder="Course / subject" style="width:100%" value="' + escapeHTML(s.subject || '') + '">' +
       (meta ? '<div class="ec-hint" style="margin-top:2px">' + escapeHTML(meta) + '</div>' : '') +
       '<input type="hidden" class="rc-period" value="' + escapeHTML(s.period || '') + '">' +
       '<input type="hidden" class="rc-teacher" value="' + escapeHTML(s.teacher || '') + '">' +
-    '</div>' +
-    '<input class="ec-in rc-grade" placeholder="Grade" value="' + escapeHTML(s.grade || '') + '">' +
-    '<button type="button" class="rep-del" title="Remove" onclick="this.closest(\'.rc-sub\').remove()">\u00d7</button>' +
+    '</div>';
+  const tail = '<button type="button" class="rep-del" title="Remove" ' +
+    'onclick="this.closest(\'.rc-sub\').remove(); rcRecalc();">\u00d7</button>';
+  const avgBox = '<input class="ec-in rc-avg" readonly title="Computed" ' +
+    'style="background:#F4F5F7;font-weight:600" value="' + escapeHTML(s.average == null ? '' : String(s.average)) + '">';
+
+  if (shape === 'semester') {
+    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 78px 78px 78px 88px auto;gap:6px;align-items:center;margin-bottom:6px">' +
+      head +
+      '<input class="ec-in rc-mp1" placeholder="MP1" oninput="rcRecalc()" value="' + escapeHTML(s.mp1 || '') + '">' +
+      '<input class="ec-in rc-mp2" placeholder="MP2" oninput="rcRecalc()" value="' + escapeHTML(s.mp2 || '') + '">' +
+      '<input class="ec-in rc-exam" placeholder="Exam" oninput="rcRecalc()" value="' + escapeHTML(s.exam || '') + '">' +
+      avgBox + tail +
+      '</div>';
+  }
+  if (shape === 'year') {
+    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 88px 88px 88px auto;gap:6px;align-items:center;margin-bottom:6px">' +
+      head +
+      '<input class="ec-in rc-s1" placeholder="Sem 1" oninput="rcRecalc()" value="' + escapeHTML(s.sem1 || '') + '">' +
+      '<input class="ec-in rc-s2" placeholder="Sem 2" oninput="rcRecalc()" value="' + escapeHTML(s.sem2 || '') + '">' +
+      avgBox + tail +
+      '</div>';
+  }
+  return '<div class="rc-sub" style="display:grid;grid-template-columns:1.6fr 110px 88px auto;gap:6px;align-items:center;margin-bottom:6px">' +
+    head +
+    '<input class="ec-in rc-grade" placeholder="Grade" oninput="rcRecalc()" value="' + escapeHTML(s.grade || '') + '">' +
+    avgBox + tail +
     '</div>';
 }
 
-/* Changing the term re-pulls the course list, keeping any grades already typed. */
+function rcHeaderRow(term) {
+  const shape = rcTermShape(term);
+  const cell = function (t) { return '<div class="ec-lbl" style="margin:0">' + t + '</div>'; };
+  if (shape === 'semester') {
+    return '<div style="display:grid;grid-template-columns:1.5fr 78px 78px 78px 88px auto;gap:6px;margin-bottom:4px">' +
+      cell('Course') + cell('MP 1') + cell('MP 2') + cell('Exam') + cell('Sem avg') + '<span></span></div>';
+  }
+  if (shape === 'year') {
+    return '<div style="display:grid;grid-template-columns:1.5fr 88px 88px 88px auto;gap:6px;margin-bottom:4px">' +
+      cell('Course') + cell('Sem 1') + cell('Sem 2') + cell('Final') + '<span></span></div>';
+  }
+  return '<div style="display:grid;grid-template-columns:1.6fr 110px 88px auto;gap:6px;margin-bottom:4px">' +
+    cell('Course') + cell('Grade') + cell('Avg') + '<span></span></div>';
+}
+
+/* Changing the term re-pulls the course list AND reshapes the grade columns. */
 function rcTermChange() {
   const term = document.getElementById('rc-term').value;
   const gEl = document.querySelector('.ec-in[data-k="grade_level"]');
@@ -4479,13 +4616,18 @@ function rcTermChange() {
   const kept = {};
   document.querySelectorAll('#rc-subjects .rc-sub').forEach(function (row) {
     const k = (row.querySelector('.rc-subject').value || '').trim();
-    const v = (row.querySelector('.rc-grade').value || '').trim();
-    if (k && v) kept[k] = v;
+    if (!k) return;
+    const gEl2 = row.querySelector('.rc-grade');
+    const v = gEl2 ? (gEl2.value || '').trim() : '';
+    if (v) kept[k] = v;
   });
   const subs = rcSubjectsFromCourses(g, term, kept);
-  const wrap = document.getElementById('rc-subjects');
-  wrap.innerHTML = subs.length ? subs.map(rcSubjectRowHtml).join('')
-    : rcSubjectRowHtml({});
+  const list = subs.length ? subs : [{}];
+  const hdr = document.getElementById('rc-head');
+  if (hdr) hdr.innerHTML = rcHeaderRow(term);
+  document.getElementById('rc-subjects').innerHTML =
+    list.map(function (s) { return rcSubjectRowHtml(s, term); }).join('');
+  rcRecalc();
   if (!subs.length) showToast('No courses logged for that term yet', 'error');
 }
 
@@ -4502,7 +4644,8 @@ function rcEdit(id) {
   // course, teacher, and period are prefilled and only the grade is typed.
   const rcTermSel = rc.period_label || '';
   if (!subs.length && !id) subs = rcSubjectsFromCourses(rc.grade_level, rcTermSel, {});
-  const subjRows = subs.map(rcSubjectRowHtml).join('');
+  const subjRows = subs.map(function (s) { return rcSubjectRowHtml(s, rcTermSel); }).join('');
+  setTimeout(rcRecalc, 0);
   const urls = (rc.evidence_urls || []).join(', ');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     ecRowTwo(
@@ -4533,8 +4676,10 @@ function rcEdit(id) {
     '</div>' +
     ecField('days_tardy', 'Days tardy', rc.days_tardy, false, 'number') +
     '<label class="ec-lbl">Subjects and grades</label>' +
-    '<div class="ec-hint" style="margin-bottom:6px">Prefilled from the courses logged for this grade and term \u2014 period, course, and teacher come across automatically. Just enter each grade.</div>' +
+    '<div class="ec-hint" style="margin-bottom:6px">Prefilled from the courses logged for this grade and term \u2014 period, course, and teacher come across automatically. A <b>Semester</b> term shows both marking periods and computes the semester average; <b>Full year</b> shows both semesters and computes the final. Averages compute only for numeric grades.</div>' +
+    '<div id="rc-head">' + rcHeaderRow(rcTermSel) + '</div>' +
     '<div id="rc-subjects">' + subjRows + '</div>' +
+    '<div id="rc-term-avg" class="ac-est" style="margin:8px 0"></div>' +
     '<div class="ec-bar" style="margin:0"><button type="button" class="save-btn save-btn-ghost" onclick="rcAddSubjectRow()">+ Add subject</button></div>' +
     ecArea('teacher_comments', 'Teacher comments', rc.teacher_comments) +
     ecField('evidence_urls', 'Report card file URLs (comma-separated)', urls) +
@@ -4548,8 +4693,9 @@ function rcEdit(id) {
 }
 
 function rcAddSubjectRow() {
-  const wrap = document.getElementById('rc-subjects');
-  wrap.insertAdjacentHTML('beforeend', rcSubjectRowHtml({}));
+  const term = document.getElementById('rc-term') ? document.getElementById('rc-term').value : '';
+  document.getElementById('rc-subjects').insertAdjacentHTML('beforeend', rcSubjectRowHtml({}, term));
+  rcRecalc();
 }
 
 async function rcSave(id) {
