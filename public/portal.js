@@ -3502,18 +3502,16 @@ function schoolPickerField(opts) {
   if (level !== 'k12') return schoolPickerFieldLegacy(opts);
   setTimeout(function () { spCascadeInit(id, cVal); }, 0);
   return '<label class="ec-lbl">' + escapeHTML(label) +
-    '<div class="sp-row">' +
     '<select class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" ' +
       'onchange="spCascadeCountry(\'' + id + '\')">' + countryOptions(cVal) + '</select>' +
-    '</div>' +
-    '<div class="sp-row" id="' + id + '-cascade">' +
-      '<select id="' + id + '-state" onchange="spCascadeState(\'' + id + '\')">' +
+    '<div class="sp-cascade" id="' + id + '-cascade">' +
+      '<select class="ec-in" id="' + id + '-state" onchange="spCascadeState(\'' + id + '\')">' +
         '<option value="">-- state --</option></select>' +
-      '<select id="' + id + '-district" onchange="spCascadeDistrict(\'' + id + '\')" disabled>' +
+      '<select class="ec-in" id="' + id + '-district" onchange="spCascadeDistrict(\'' + id + '\')" disabled>' +
         '<option value="">-- school district --</option></select>' +
-      '<select id="' + id + '-school" onchange="spCascadePick(\'' + id + '\')" disabled>' +
-        '<option value="">-- school --</option></select>' +
     '</div>' +
+    '<select class="ec-in" id="' + id + '-school" onchange="spCascadePick(\'' + id + '\')" disabled>' +
+      '<option value="">-- school --</option></select>' +
     '<input class="ec-in" data-k="' + opts.key + '" id="' + id + '-input" type="text" ' +
       'placeholder="School name (or type it if not listed)" autocomplete="off" ' +
       'value="' + escapeHTML(val) + '">' +
@@ -3611,14 +3609,36 @@ function spCascadePick(id) {
   const s = list[i];
   const input = document.getElementById(id + '-input');
   if (input) { input.removeAttribute('readonly'); input.value = s.name; }
-  SP_PICKED = { name: s.name, leaid: s.ncessch, street: s.street, city: s.city,
+  SP_PICKED = { name: s.name, ncessch: s.ncessch, leaid: s.leaid, street: s.street, city: s.city,
                 state: s.state, zip: s.zip, phone: s.phone, district: s.district_name };
   // Feed the same store the legacy picker uses, so spLastPicked() (courseSave,
   // schoolSave auto-fill) sees the pick.
   SP_STATE[id] = SP_PICKED;
   SP_STATE.last = SP_PICKED;
+  // v182: fill the visible form fields NOW, not just at save time.
+  const put = function (key, val) {
+    if (!val) return;
+    const el = document.querySelector('.ec-in[data-k="' + key + '"]');
+    if (!el || (el.value || '').trim()) return;   // never overwrite what the parent typed
+    el.removeAttribute('readonly');
+    el.value = val;
+  };
+  put('street_address', s.street);
+  put('city_town', s.city);
+  put('city', s.city);
+  put('state_province', s.state);
+  put('state', s.state);
+  put('zip_postal_code', s.zip);
+  put('zip', s.zip);
+  put('counselor_phone', s.phone);
+  put('phone', s.phone);
+  put('district_name', s.district_name);
+  put('ncessch', s.ncessch);
   const hint = document.getElementById(id + '-hint');
-  if (hint) hint.textContent = [s.district_name, s.city, s.state, s.zip].filter(Boolean).join(' \u00b7 ');
+  if (hint) {
+    hint.textContent = [s.district_name, s.city, s.state, s.zip].filter(Boolean).join(' \u00b7 ') +
+      ' \u2014 address filled in below. CEEB is a College Board code (not in the federal school file) \u2014 enter it if your school gave you one.';
+  }
 }
 
 let SP_PICKED = null;

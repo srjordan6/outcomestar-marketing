@@ -269,6 +269,12 @@
 
     .sp-row { display: grid; grid-template-columns: 150px 1fr; gap: 8px; }
   .sp-country { min-width: 0; }
+  /* v183: cascading school picker - state + district side by side, school full width. */
+  .sp-cascade { display: grid; grid-template-columns: 150px 1fr; gap: 8px; margin-top: 4px; }
+  .sp-cascade > select { min-width: 0; width: 100%; }
+  .ec-lbl > select.ec-in, .ec-lbl > input.ec-in { width: 100%; box-sizing: border-box; }
+  .ec-lbl > select.ec-in { margin-top: 4px; background: #fff; }
+  select.ec-in:disabled { background: #F4F5F7; color: var(--gray); }
   .ec-derived { display:grid; grid-template-columns: 1fr auto; gap:2px 12px; padding:10px 12px; border:1px solid #E3E7ED; border-radius:8px; margin-bottom:10px; background:#FAFBFC; }
   .ec-derived-label { font-size:12px; color:var(--gray); grid-column:1; }
   .ec-derived-value { font-size:14px; color:var(--navy); grid-column:1; font-weight:600; }
@@ -532,7 +538,7 @@
 </footer>
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
-<script src="/portal.js?v=182"></script>
+<script src="/portal.js?v=183"></script>
 </body>
 </html>
 
