@@ -2683,6 +2683,8 @@ async function openAcademicsBands() {
 }
 
 function renderAcadBands() {
+  // v0.12.116: keep the Private Tutoring count fresh on the card.
+  if (!TUTORING.length) { loadTutoring().then(function(t){ if (t.length) renderAcadBands(); }).catch(function(){}); }
   const cards = BANDS.map(b => {
     const s = (ACAD_SUMMARY && ACAD_SUMMARY[b.code]) || { courses: 0, assessments: 0 };
     const total = s.courses + s.assessments;
@@ -2703,6 +2705,10 @@ function renderAcadBands() {
     '<button class="ec-card" onclick="openTeachers()">' +
       '<div><div class="ec-name">Teachers</div><div class="ec-desc">Name, school, address, phone, and email — reused across courses and recommenders</div></div>' +
       '<div class="ec-count">' + (TEACHERS.length || '—') + ' <span>on file</span></div>' +
+    '</button>' +
+    '<button class="ec-card" onclick="openTutoring()">' +
+      '<div><div class="ec-name">Private Tutoring</div><div class="ec-desc">Subject, tutor, school year, description, skills gained, grade or certificate of completion</div></div>' +
+      '<div class="ec-count">' + (TUTORING.length || '—') + ' <span>on file</span></div>' +
     '</button>';
   const legacy = '<div class="ec-bar" style="margin-top:16px"><button class="save-btn save-btn-ghost" onclick="openAcademics()">Open full Academics data-entry form</button></div>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + extras + '</div>' + legacy;
@@ -2999,6 +3005,141 @@ async function courseDelete(id) {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { delete_ids: [id] });
     ACAD_COURSES = ACAD_COURSES.filter(c => c.id !== id);
     openAcadYear(ACAD_YEAR != null ? ACAD_YEAR : (BANDS.find(x=>x.code===ACAD_BAND).lo));
+    showToast('Deleted', 'success');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+/* ================= v0.12.116: Private Tutoring (Academics category) =================
+   Backed by courses_taken with course_type='private_tutoring'. Every field the
+   parent enters (subject, course, description, skills) feeds the skill inventory
+   and the meta-skill inference engine (rule R11). Meta-skills stay internal-only. */
+let TUTORING = [];
+
+async function loadTutoring() {
+  const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/courses');
+  TUTORING = (d.courses || []).filter(c => c.is_private_tutoring);
+  return TUTORING;
+}
+
+async function openTutoring() {
+  const c = document.getElementById('sections-container');
+  c.innerHTML = '<div class="ac-est">Loading\u2026</div>';
+  try {
+    await loadCurrentSchool();
+    await loadTutoring();
+    renderTutoringList();
+  } catch (e) { c.innerHTML = '<div class="save-status err">' + escapeHTML(e.message) + '</div>'; }
+}
+
+function renderTutoringList() {
+  let html = '<div class="ec-bar">' +
+    '<button class="save-btn" onclick="tutorEdit(null)">Add tutoring</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
+    '</div>' +
+    '<div class="ec-desc" style="margin-bottom:10px">Private tutoring, coaching, and one-to-one instruction \u2014 tracked alongside school coursework.</div>';
+  if (!TUTORING.length) html += '<div class="cr-waiting">No private tutoring logged yet.</div>';
+  else html += TUTORING.map(tutorRow).join('');
+  document.getElementById('sections-container').innerHTML = html;
+}
+
+function tutorRow(c) {
+  const yr = [c.school_year, c.term].filter(Boolean).join(' \u00b7 ');
+  const result = c.grade_received || c.completion_award || '';
+  const skills = (c.skills || []).length ? '<div class="ec-meta">Skills: ' + escapeHTML((c.skills || []).join(', ')) + '</div>' : '';
+  return '<div class="ec-row"><div>' +
+    '<div class="ec-title">' + escapeHTML(c.course_name || 'Tutoring') + ' <span class="pillar-badge">Tutoring</span></div>' +
+    '<div class="ec-meta">' +
+      (c.grade_level != null ? 'Grade ' + c.grade_level : '') +
+      (yr ? ' \u00b7 ' + escapeHTML(yr) : '') +
+      (c.teacher_name ? ' \u00b7 ' + escapeHTML(c.teacher_name) : '') +
+      (c.school_name ? ' \u00b7 ' + escapeHTML(c.school_name) : '') +
+      (result ? ' \u00b7 ' + escapeHTML(result) : '') +
+    '</div>' + skills +
+    (c.course_description ? '<div class="ec-notes">' + escapeHTML(c.course_description) + '</div>' : '') +
+    '</div><div class="ec-actions">' +
+    '<button onclick="tutorEdit(\'' + c.id + '\')">Edit</button>' +
+    '<button onclick="tutorDelete(\'' + c.id + '\')">Delete</button>' +
+    '</div></div>';
+}
+
+async function tutorEdit(id) {
+  if (!SUBJECT_CATALOG.length) {
+    try { const d = await apiGet('/focms/v1/catalogs/subjects'); SUBJECT_CATALOG = d.subjects || []; } catch (e) {}
+  }
+  if (!(typeof SKILLS_CATALOG !== 'undefined' && SKILLS_CATALOG && SKILLS_CATALOG.length)) {
+    try { const sk = await apiGet('/focms/v1/skills-catalog'); SKILLS_CATALOG = sk.skills || []; } catch (e) {}
+  }
+  const c = id ? TUTORING.find(x => x.id === id) : {};
+  if (!c) return;
+  const sch = CURRENT_SCHOOL || {};
+  const subjOpts = '<option value="">-- pick a subject --</option>' +
+    (SUBJECT_CATALOG || []).map(s => '<option value="' + s.code + '"' +
+      (c.subject === s.code ? ' selected' : '') + '>' + escapeHTML(s.title) + '</option>').join('') +
+    '<option value="other"' + (c.subject === 'other' ? ' selected' : '') + '>Other</option>';
+  const gradeOpts = '<option value="">-- grade level --</option>' +
+    [0,1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
+      '<option value="' + n + '"' + (c.grade_level == n ? ' selected' : '') + '>' +
+      (n === 0 ? 'Kindergarten' : 'Grade ' + n) + '</option>').join('');
+  document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    '<input type="hidden" class="ec-in" data-k="course_type" value="private_tutoring">' +
+    ecField('course_name', 'Course / tutoring focus', c.course_name, true) +
+    ecRowTwo(
+      '<label class="ec-lbl">Subject *<select class="ec-in" data-k="subject">' + subjOpts + '</select></label>',
+      '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts + '</select></label>') +
+    ecField('subject_other', 'If Other, name the subject', c.subject_other) +
+    schoolPickerField({ key: 'school_name', label: 'School / tutoring provider', value: c.school_name || (sch.school_name || ''), level: 'k12' }) +
+    ecRowTwo(
+      ecField('teacher_name', 'Teacher / tutor', c.teacher_name),
+      ecField('teacher_email', 'Teacher / tutor email', c.teacher_email, false, 'email')) +
+    ecRowTwo(
+      ecField('school_year', 'School year (e.g. 2025-2026)', c.school_year),
+      ecField('term', 'Term (optional)', c.term)) +
+    ecArea('course_description', 'Subject / course description', c.course_description) +
+    ecRowTwo(
+      ecField('grade_received', 'Grade received (if graded)', c.grade_received),
+      ecField('completion_award', 'Award / certificate of completion', c.completion_award)) +
+    ecArea('notes', 'Notes', c.notes) +
+    skillsGainedField(c.skills) +
+    showcaseField(c.show_on_showcase) +
+    '<div class="ec-bar">' +
+    '<button class="save-btn" onclick="tutorSave(\'' + (id || '') + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="openTutoring()">Cancel</button>' +
+    '</div></div>';
+}
+
+async function tutorSave(id) {
+  const item = {};
+  if (id) item.id = id;
+  document.querySelectorAll('.ec-in').forEach(el => {
+    const k = el.dataset.k;
+    if (!k) return;
+    if (el.type === 'checkbox') item[k] = el.checked;
+    else {
+      const v = (el.value || '').trim();
+      if (v) item[k] = (el.type === 'number' ? parseFloat(v) : v);
+    }
+  });
+  item.course_type = 'private_tutoring';
+  item.skills = readSkillsFromForm();
+  delete item.skills_gained;
+  delete item.school_name_country;
+  if (!item.course_name) { showToast('Course / tutoring focus is required', 'error'); return; }
+  if (item.grade_level == null || item.grade_level === '') { showToast('Grade level is required', 'error'); return; }
+  item.grade_level = Number(item.grade_level);
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: [item], mode: 'upsert' });
+    await loadTutoring();
+    renderTutoringList();
+    showToast('Saved', 'success');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function tutorDelete(id) {
+  if (!confirm('Delete this tutoring record?')) return;
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { delete_ids: [id] });
+    await loadTutoring();
+    renderTutoringList();
     showToast('Deleted', 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
