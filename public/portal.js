@@ -4504,17 +4504,26 @@ function rcNum(v) {
   return isNaN(n) ? null : n;
 }
 
-/* Average; null unless every supplied entry is numeric (letter grades are left
-   alone - averaging them is not meaningful). */
+/* Average of the supplied values. Returns null unless EVERY value is present and
+   numeric - a semester average computed from one quarter would be a lie. */
 function rcAvg(vals) {
   const nums = [];
   for (let i = 0; i < vals.length; i++) {
     const raw = String(vals[i] == null ? '' : vals[i]).trim();
-    if (!raw) continue;
+    if (!raw) return null;                 // a missing quarter means no average
     const n = rcNum(raw);
-    if (n === null) return null;
+    if (n === null) return null;           // a letter grade means no average
     nums.push(n);
   }
+  if (!nums.length) return null;
+  const sum = nums.reduce(function (a, b) { return a + b; }, 0);
+  return Math.round((sum / nums.length) * 100) / 100;
+}
+
+/* Average across courses: skip blanks rather than bail, since not every course
+   will have a final. */
+function rcAvgLoose(vals) {
+  const nums = vals.map(rcNum).filter(function (n) { return n !== null; });
   if (!nums.length) return null;
   const sum = nums.reduce(function (a, b) { return a + b; }, 0);
   return Math.round((sum / nums.length) * 100) / 100;
@@ -4555,7 +4564,7 @@ function rcRecalc() {
   });
   const banner = document.getElementById('rc-term-avg');
   if (banner) {
-    const overall = rcAvg(finals);
+    const overall = rcAvgLoose(finals);
     const label = shape === 'year' ? 'Final year average'
       : shape === 'semester' ? 'Semester average' : 'Term average';
     banner.textContent = (overall === null)
@@ -4564,10 +4573,21 @@ function rcRecalc() {
   }
 }
 
+/* Identical column template for the header and every row - they must line up. */
+const RC_GRID_YEAR = 'display:grid;grid-template-columns:minmax(180px,1.5fr) repeat(7, 64px) 28px;gap:6px;align-items:center;';
+const RC_GRID_SEM = 'display:grid;grid-template-columns:minmax(180px,1.5fr) repeat(3, 72px) 28px;gap:6px;align-items:center;';
+const RC_GRID_ONE = 'display:grid;grid-template-columns:minmax(180px,1.6fr) 110px 28px;gap:6px;align-items:center;';
+
+function rcGrid(shape) {
+  return shape === 'year' ? RC_GRID_YEAR : (shape === 'semester' ? RC_GRID_SEM : RC_GRID_ONE);
+}
+
 function rcCell(cls, val, ph, computed) {
   return '<input class="ec-in ' + cls + '" placeholder="' + ph + '" ' +
     'oninput="this.dataset.touched=\'1\'; rcRecalc();" ' +
-    (computed ? 'style="background:#F4F5F7;font-weight:600" title="Computed - type to override" ' : '') +
+    'style="width:100%;text-align:center;padding:8px 4px' +
+    (computed ? ';background:#F4F5F7;font-weight:600' : '') + '" ' +
+    (computed ? 'title="Computed - type to override" ' : '') +
     'value="' + escapeHTML(val == null ? '' : String(val)) + '">';
 }
 
@@ -4577,9 +4597,9 @@ function rcSubjectRowHtml(s, term) {
   const head =
     '<div>' +
       '<input class="ec-in rc-subject" placeholder="Course" style="width:100%" value="' + escapeHTML(s.subject || '') + '">' +
-      '<div style="display:grid;grid-template-columns:64px 1fr;gap:4px;margin-top:3px">' +
-        '<input class="ec-in rc-period" placeholder="Pd" value="' + escapeHTML(s.period || '') + '">' +
-        '<input class="ec-in rc-teacher" placeholder="Teacher" value="' + escapeHTML(s.teacher || '') + '">' +
+      '<div style="display:grid;grid-template-columns:56px 1fr;gap:4px;margin-top:3px">' +
+        '<input class="ec-in rc-period" placeholder="Pd" style="text-align:center;padding:6px 4px" value="' + escapeHTML(s.period || '') + '">' +
+        '<input class="ec-in rc-teacher" placeholder="Teacher" style="padding:6px 8px" value="' + escapeHTML(s.teacher || '') + '">' +
       '</div>' +
       '<input type="hidden" class="rc-code" value="' + escapeHTML(s.course_code || '') + '">' +
     '</div>';
@@ -4587,7 +4607,7 @@ function rcSubjectRowHtml(s, term) {
     'onclick="this.closest(\'.rc-sub\').remove(); rcRecalc();">\u00d7</button>';
 
   if (shape === 'year') {
-    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 60px 60px 66px 60px 60px 66px 66px auto;gap:5px;align-items:start;margin-bottom:8px">' +
+    return '<div class="rc-sub" style="' + RC_GRID_YEAR + 'align-items:start;margin-bottom:8px">' +
       head +
       rcCell('rc-q1', s.q1, 'Q1') + rcCell('rc-q2', s.q2, 'Q2') + rcCell('rc-sem1', s.sem1, 'SEM1', true) +
       rcCell('rc-q3', s.q3, 'Q3') + rcCell('rc-q4', s.q4, 'Q4') + rcCell('rc-sem2', s.sem2, 'SEM2', true) +
@@ -4595,29 +4615,31 @@ function rcSubjectRowHtml(s, term) {
       '</div>';
   }
   if (shape === 'semester') {
-    return '<div class="rc-sub" style="display:grid;grid-template-columns:1.5fr 70px 70px 80px auto;gap:6px;align-items:start;margin-bottom:8px">' +
+    return '<div class="rc-sub" style="' + RC_GRID_SEM + 'align-items:start;margin-bottom:8px">' +
       head +
       rcCell('rc-q1', s.q1, 'Q1') + rcCell('rc-q2', s.q2, 'Q2') + rcCell('rc-sem1', s.sem1, 'SEM', true) + del +
       '</div>';
   }
-  return '<div class="rc-sub" style="display:grid;grid-template-columns:1.6fr 110px auto;gap:6px;align-items:start;margin-bottom:8px">' +
+  return '<div class="rc-sub" style="' + RC_GRID_ONE + 'align-items:start;margin-bottom:8px">' +
     head + rcCell('rc-grade', s.grade, 'Grade') + del +
     '</div>';
 }
 
 function rcHeaderRow(term) {
   const shape = rcTermShape(term);
-  const c = function (t) { return '<div class="ec-lbl" style="margin:0">' + t + '</div>'; };
+  const c = function (t) {
+    return '<div class="ec-lbl" style="margin:0;text-align:center">' + t + '</div>';
+  };
+  const first = '<div class="ec-lbl" style="margin:0">Course / Pd / Teacher</div>';
   if (shape === 'year') {
-    return '<div style="display:grid;grid-template-columns:1.5fr 60px 60px 66px 60px 60px 66px 66px auto;gap:5px;margin-bottom:4px">' +
-      c('Course / Pd / Teacher') + c('Q1') + c('Q2') + c('SEM1') + c('Q3') + c('Q4') + c('SEM2') + c('FIN') + '<span></span></div>';
+    return '<div style="' + RC_GRID_YEAR + 'margin-bottom:4px">' + first +
+      c('Q1') + c('Q2') + c('SEM1') + c('Q3') + c('Q4') + c('SEM2') + c('FIN') + '<span></span></div>';
   }
   if (shape === 'semester') {
-    return '<div style="display:grid;grid-template-columns:1.5fr 70px 70px 80px auto;gap:6px;margin-bottom:4px">' +
-      c('Course / Pd / Teacher') + c('Q1') + c('Q2') + c('SEM') + '<span></span></div>';
+    return '<div style="' + RC_GRID_SEM + 'margin-bottom:4px">' + first +
+      c('Q1') + c('Q2') + c('SEM') + '<span></span></div>';
   }
-  return '<div style="display:grid;grid-template-columns:1.6fr 110px auto;gap:6px;margin-bottom:4px">' +
-    c('Course / Pd / Teacher') + c('Grade') + '<span></span></div>';
+  return '<div style="' + RC_GRID_ONE + 'margin-bottom:4px">' + first + c('Grade') + '<span></span></div>';
 }
 
 /* Changing the term re-pulls the course list AND reshapes the grade columns. */
@@ -4641,6 +4663,84 @@ function rcTermChange() {
     list.map(function (s) { return rcSubjectRowHtml(s, term); }).join('');
   rcRecalc();
   if (!subs.length) showToast('No courses logged for that term yet', 'error');
+}
+
+/* v202: create teacher records straight from the report card. Names are printed
+   "LAST, FIRST" on the card - store them as "First Last". The course each one
+   teaches comes across as subject_taught, so the picker reads properly. */
+function rcTidyTeacher(n) {
+  n = (n || '').trim();
+  if (!n || /^staff\b/i.test(n)) return '';           // "Staff, No Teacher"
+  if (n.indexOf(',') > -1) {
+    const p = n.split(',');
+    const last = p[0].trim();
+    const first = (p[1] || '').trim();
+    if (first) n = first + ' ' + last;
+  }
+  return n.replace(/\s+/g, ' ')
+    .toLowerCase()
+    .replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+}
+
+/* Compare names regardless of order or punctuation, so "Tran, Joy",
+   "Joy Tran", and "TRAN  JOY" are all recognised as the same teacher. */
+function rcNameKey(n) {
+  return (n || '')
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
+async function rcCreateTeachers() {
+  const st = document.getElementById('rc-paste-status');
+  const seen = {};
+  const items = [];
+  const skipped = [];
+  const schoolName = (function () {
+    const cur = SCHOOLS.find(function (s) { return s.is_current_school; }) || SCHOOLS[0];
+    return cur ? cur.school_name : null;
+  })();
+  document.querySelectorAll('#rc-subjects .rc-sub').forEach(function (row) {
+    const name = rcTidyTeacher(row.querySelector('.rc-teacher').value);
+    if (!name) return;
+    const course = (row.querySelector('.rc-subject').value || '').trim();
+    const key = rcNameKey(name);
+    if (seen[key]) return;                       // same teacher twice on one card
+    seen[key] = 1;
+    // Already on file? Leave the existing record completely alone - it may carry
+    // an email, phone, or address the card does not have.
+    const already = (TEACHERS || []).some(function (t) {
+      return rcNameKey(t.teacher_name) === key;
+    });
+    if (already) { skipped.push(name); return; }
+    items.push({ teacher_name: name, subject_taught: course || null,
+                 school_name: schoolName, role: 'teacher' });
+  });
+  if (!items.length) {
+    st.textContent = skipped.length
+      ? 'All ' + skipped.length + ' teacher' + (skipped.length === 1 ? '' : 's') +
+        ' on this card are already on file \u2014 nothing changed.'
+      : 'No teachers found on this card.';
+    st.className = 'save-status';
+    return;
+  }
+  st.textContent = 'Adding ' + items.length + ' teacher' + (items.length === 1 ? '' : 's') + '\u2026';
+  st.className = 'save-status';
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/teachers', { items: items });
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/teachers');
+    TEACHERS = d.teachers || [];
+    st.textContent = 'Added ' + items.map(function (i) { return i.teacher_name; }).join(', ') +
+      (skipped.length ? ' \u00b7 already on file: ' + skipped.join(', ') : '');
+    st.className = 'save-status ok';
+    showToast('Teachers added', 'success');
+  } catch (e) {
+    st.textContent = e.message;
+    st.className = 'save-status err';
+  }
 }
 
 /* v199: read a pasted report card and fill the form. Nothing is saved - the
@@ -4751,6 +4851,7 @@ function rcEdit(id) {
       '<textarea id="rc-paste" class="ec-in" rows="4" style="width:100%" placeholder="Paste the report card here\u2026"></textarea>' +
       '<div class="ec-bar" style="margin-top:8px">' +
         '<button type="button" class="save-btn" onclick="rcParsePaste()">Read it and fill the form</button>' +
+        '<button type="button" class="save-btn save-btn-ghost" onclick="rcCreateTeachers()">Add these teachers to Teachers</button>' +
         '<span id="rc-paste-status" class="save-status"></span>' +
       '</div>' +
     '</div>' +
