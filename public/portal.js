@@ -2872,9 +2872,9 @@ function bulkRowHtml(c) {
   const per = PERIOD_OPTS.map(p => '<option value="' + p + '"' +
     ((c.period || '') === p ? ' selected' : '') + '>' + (p || 'Per.') + '</option>').join('');
   const tch = '<option value="">-- teacher --</option>' +
-    (TEACHERS || []).filter(function (t) { return (t.role || 'teacher') !== 'counselor'; })
+    tchSort((TEACHERS || []).filter(function (t) { return (t.role || 'teacher') !== 'counselor'; }))
       .map(t => '<option value="' + t.id + '"' +
-        (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name || '') + '</option>').join('');
+        (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(tchDisplay(t)) + '</option>').join('');
   // v192: ONE course column. All 1,791 SCED courses, grouped by subject area.
   // The subject is derived from the course, so there is no separate subject column.
   const freeText = !!(c.course_name && !c.sced_code);
@@ -3768,11 +3768,11 @@ const SP_STATE = {};   // pickerId -> picked school payload
 function yrTeacherRowHtml(t) {
   t = t || {};
   const opts = '<option value="">-- pick a teacher --</option>' +
-    (TEACHERS || []).filter(function (x) { return (x.role || 'teacher') !== 'counselor'; })
+    tchSort((TEACHERS || []).filter(function (x) { return (x.role || 'teacher') !== 'counselor'; }))
       .map(function (x) {
         return '<option value="' + x.id + '"' +
           (t.teacher_id === x.id ? ' selected' : '') + '>' +
-          escapeHTML(x.teacher_name || '') + '</option>';
+          escapeHTML(tchDisplay(x)) + '</option>';
       }).join('');
   return '<div class="yr-t-row" style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center;margin-bottom:6px">' +
     '<select class="yr-t-id ec-in" style="width:100%">' + opts + '</select>' +
@@ -4743,7 +4743,11 @@ async function rcCreateTeachers() {
       return rcNameKey(t.teacher_name) === key;
     });
     if (already) { skipped.push(name); return; }
-    items.push({ teacher_name: name, subject_taught: course || null,
+    // v205: split into first + last for the registry.
+    const parts = name.split(/\s+/);
+    items.push({ first_name: parts[0] || null,
+                 last_name: parts.slice(1).join(' ') || null,
+                 teacher_name: name, subject_taught: course || null,
                  school_name: schoolName, role: 'teacher' });
   });
   if (!items.length) {
@@ -5173,10 +5177,10 @@ async function yrDelete(id) {
 /* ============ v42: Teacher registry ============ */
 function teacherPickerField(c) {
   // v0.12.121: course teacher picker lists TEACHERS only - counselors live in the
-  // same registry but never teach a course.
-  const pool = TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; });
+  // same registry but never teach a course. v205: sorted by last name.
+  const pool = tchSort(TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; }));
   const opts = ['<option value="">-- pick a teacher --</option>']
-    .concat(pool.map(t => '<option value="' + t.id + '"' + (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name + (t.subject_taught ? ' (' + t.subject_taught + ')' : '')) + '</option>'))
+    .concat(pool.map(t => '<option value="' + t.id + '"' + (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(tchDisplay(t) + (t.subject_taught ? ' (' + t.subject_taught + ')' : '')) + '</option>'))
     .join('');
   return '<label class="ec-lbl">Teacher' +
     '<select class="ec-in" data-k="teacher_id" onchange="onTeacherPick(this.value)">' + opts + '</select>' +
@@ -5190,13 +5194,34 @@ function onTeacherPick(id) {
   if (!t) return;
   const nameEl = document.querySelector('.ec-in[data-k="teacher_name"]');
   const emailEl = document.querySelector('.ec-in[data-k="teacher_email"]');
-  if (nameEl) nameEl.value = t.teacher_name || '';
+  if (nameEl) nameEl.value = tchDisplay(t);
   if (emailEl) emailEl.value = t.teacher_email || '';
+}
+
+/* v205: teachers are tracked as first + last name, and every list is sorted
+   alphabetically by last name. */
+function tchLast(t) {
+  if (t.last_name) return String(t.last_name).toLowerCase();
+  const n = (t.teacher_name || '').trim().split(/\s+/);
+  return (n.length > 1 ? n[n.length - 1] : (n[0] || '')).toLowerCase();
+}
+function tchFirst(t) {
+  if (t.first_name) return String(t.first_name).toLowerCase();
+  return ((t.teacher_name || '').trim().split(/\s+/)[0] || '').toLowerCase();
+}
+function tchSort(list) {
+  return list.slice().sort(function (a, b) {
+    return tchLast(a).localeCompare(tchLast(b)) || tchFirst(a).localeCompare(tchFirst(b));
+  });
+}
+function tchDisplay(t) {
+  const n = [t.first_name, t.last_name].filter(Boolean).join(' ').trim();
+  return n || t.teacher_name || '';
 }
 
 function openTeachers() {
   TCH_ROLE = 'teacher';
-  const rows = TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; });
+  const rows = tchSort(TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; }));
   let html = '<div class="ec-bar">' +
     '<button class="save-btn" onclick="teacherEdit(null)">Add teacher</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
@@ -5212,7 +5237,7 @@ let TCH_ROLE = 'teacher';
 
 function openCounselors() {
   TCH_ROLE = 'counselor';
-  const rows = TEACHERS.filter(function (t) { return (t.role || 'teacher') === 'counselor'; });
+  const rows = tchSort(TEACHERS.filter(function (t) { return (t.role || 'teacher') === 'counselor'; }));
   let html = '<div class="ec-bar">' +
     '<button class="save-btn" onclick="teacherEdit(null)">Add counselor</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
@@ -6569,14 +6594,15 @@ function teacherRow(t) {
   const loc = [t.city_town, t.state_province].filter(Boolean).join(', ');
   const isC = (t.role || 'teacher') === 'counselor';
   const tag = isC ? ' <span class="pillar-badge">Counselor</span>' : '';
+  const name = tchDisplay(t);
   return '<div class="ec-row"><div>' +
-    '<div class="ec-title">' + escapeHTML(t.teacher_name) + (t.subject_taught ? ' - ' + escapeHTML(t.subject_taught) : '') + tag + '</div>' +
+    '<div class="ec-title">' + escapeHTML(name) + (t.subject_taught ? ' - ' + escapeHTML(t.subject_taught) : '') + tag + '</div>' +
     '<div class="ec-meta">' + escapeHTML([t.school_name, loc].filter(Boolean).join(' - ')) +
     (t.school_phone ? ' - ' + escapeHTML(t.school_phone) : '') + '</div>' +
     (t.teacher_email ? '<div class="ec-meta">' + escapeHTML(t.teacher_email) + '</div>' : '') +
     '</div><div class="ec-actions">' +
-    askRecBtn(t.teacher_email, t.teacher_name, isC ? 'counselor' : 'teacher') +
-    addLetterBtn('', t.teacher_name) +
+    askRecBtn(t.teacher_email, name, isC ? 'counselor' : 'teacher') +
+    addLetterBtn('', name) +
     '<button onclick="teacherEdit(\'' + t.id + '\')">Edit</button>' +
     '<button onclick="teacherDelete(\'' + t.id + '\')">Delete</button>' +
     '</div></div>';
@@ -6587,7 +6613,10 @@ function teacherEdit(id) {
   if (!t) return;
   if (!t.school_name && CURRENT_SCHOOL && CURRENT_SCHOOL.school_name) t.school_name = CURRENT_SCHOOL.school_name;
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
-    ecField('teacher_name', 'Teacher name', t.teacher_name, true) +
+    ecRowTwo(
+      ecField('first_name', 'First name', t.first_name || ((t.teacher_name || '').split(' ')[0] || ''), true),
+      ecField('last_name', 'Last name', t.last_name || ((t.teacher_name || '').split(' ').slice(1).join(' ')), true)
+    ) +
     ecRowTwo(
       ecField('subject_taught', 'Subject taught', t.subject_taught),
       ecField('title_position', 'Title / position', t.title_position)
