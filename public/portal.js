@@ -2823,7 +2823,8 @@ function courseRow(c) {
    report card / schedule actually reads, so a full term is entered in one pass. */
 const PERIOD_OPTS = ['', '1', '2', '3', '4', '5', '6', '7', '8', 'A', 'B', 'Advisory', 'Homeroom'];
 const TERM_OPTS = ['', 'Full year', 'Semester 1', 'Semester 2', 'Quarter 1', 'Quarter 2',
-                  'Quarter 3', 'Quarter 4', 'Trimester 1', 'Trimester 2', 'Trimester 3'];
+                  'Quarter 3', 'Quarter 4', 'Trimester 1', 'Trimester 2', 'Trimester 3',
+                  'Summer', 'Summer I', 'Summer II'];
 
 async function bulkCourses() {
   const c0 = document.getElementById('sections-container');
@@ -4381,6 +4382,62 @@ function pickDoeSchool(payload) {
     (sc.city ? ' - ' + escapeHTML([sc.city, sc.state].filter(Boolean).join(', ')) : '') + '</div>';
 }
 
+/* v193: report-card rows are driven by the courses already logged. Period,
+   course, and teacher are carried across; the parent only types the grade. */
+function rcSubjectsFromCourses(gradeLevel, term, existingGrades) {
+  const rows = (ACAD_COURSES || []).filter(function (c) {
+    if (c.grade_level !== gradeLevel) return false;
+    if (c.is_private_tutoring) return false;
+    if (!term) return true;                       // no term picked yet: show them all
+    return !c.term || c.term === term || c.term === 'Full year';
+  });
+  rows.sort(function (a, b) {
+    return String(a.period || 'zz').localeCompare(String(b.period || 'zz'));
+  });
+  return rows.map(function (c) {
+    const key = c.course_name || c.subject;
+    return {
+      subject: key,
+      grade: (existingGrades && existingGrades[key]) || '',
+      period: c.period || '',
+      teacher: c.teacher_name || ''
+    };
+  });
+}
+
+function rcSubjectRowHtml(s) {
+  s = s || {};
+  const meta = [s.period ? 'Per. ' + s.period : '', s.teacher].filter(Boolean).join(' \u00b7 ');
+  return '<div class="rc-sub" style="display:grid;grid-template-columns:1.6fr 110px auto;gap:8px;align-items:center;margin-bottom:6px">' +
+    '<div>' +
+      '<input class="ec-in rc-subject" placeholder="Course / subject" style="width:100%" value="' + escapeHTML(s.subject || '') + '">' +
+      (meta ? '<div class="ec-hint" style="margin-top:2px">' + escapeHTML(meta) + '</div>' : '') +
+      '<input type="hidden" class="rc-period" value="' + escapeHTML(s.period || '') + '">' +
+      '<input type="hidden" class="rc-teacher" value="' + escapeHTML(s.teacher || '') + '">' +
+    '</div>' +
+    '<input class="ec-in rc-grade" placeholder="Grade" value="' + escapeHTML(s.grade || '') + '">' +
+    '<button type="button" class="rep-del" title="Remove" onclick="this.closest(\'.rc-sub\').remove()">\u00d7</button>' +
+    '</div>';
+}
+
+/* Changing the term re-pulls the course list, keeping any grades already typed. */
+function rcTermChange() {
+  const term = document.getElementById('rc-term').value;
+  const gEl = document.querySelector('.ec-in[data-k="grade_level"]');
+  const g = gEl ? parseInt(gEl.value, 10) : ACAD_YEAR;
+  const kept = {};
+  document.querySelectorAll('#rc-subjects .rc-sub').forEach(function (row) {
+    const k = (row.querySelector('.rc-subject').value || '').trim();
+    const v = (row.querySelector('.rc-grade').value || '').trim();
+    if (k && v) kept[k] = v;
+  });
+  const subs = rcSubjectsFromCourses(g, term, kept);
+  const wrap = document.getElementById('rc-subjects');
+  wrap.innerHTML = subs.length ? subs.map(rcSubjectRowHtml).join('')
+    : rcSubjectRowHtml({});
+  if (!subs.length) showToast('No courses logged for that term yet', 'error');
+}
+
 function rcEdit(id) {
   const rc = id ? REPORT_CARDS.find(x => x.id === id) : { school_year: nextSchoolYear() };
   if (!rc) return;
@@ -4390,21 +4447,11 @@ function rcEdit(id) {
   for (let g = 0; g <= 12; g++) gradeOpts.push('<option value="' + g + '"' + (rc.grade_level === g ? ' selected' : '') + '>' + GRADE_LABELS[g] + '</option>');
   const perOpts = RC_PERIODS.map(p => '<option value="' + p.code + '"' + (rc.period_kind === p.code ? ' selected' : '') + '>' + p.label + '</option>').join('');
   let subs = rc.subjects || [];
-  if ((!subs || !subs.length) && !id) {
-    const gradeCourses = (ACAD_COURSES || []).filter(c => c.grade_level === rc.grade_level && c.subject);
-    const seen = {};
-    subs = [];
-    gradeCourses.forEach(c => {
-      const key = (c.subject || c.course_name);
-      if (key && !seen[key]) { seen[key] = 1; subs.push({ subject: key, grade: c.grade_received || '' }); }
-    });
-  }
-  const subjRows = subs.map((s, i) =>
-    '<div class="ec-two rc-sub" data-i="' + i + '">' +
-    '<input class="ec-in rc-subject" placeholder="Subject" value="' + escapeHTML(s.subject || '') + '">' +
-    '<input class="ec-in rc-grade" placeholder="Grade (A / 92 / 3)" value="' + escapeHTML(s.grade || '') + '">' +
-    '</div>'
-  ).join('');
+  // v193: rows come from the courses already logged for this grade + term, so the
+  // course, teacher, and period are prefilled and only the grade is typed.
+  const rcTermSel = rc.period_label || '';
+  if (!subs.length && !id) subs = rcSubjectsFromCourses(rc.grade_level, rcTermSel, {});
+  const subjRows = subs.map(rcSubjectRowHtml).join('');
   const urls = (rc.evidence_urls || []).join(', ');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     ecRowTwo(
@@ -4413,7 +4460,11 @@ function rcEdit(id) {
     ) +
     ecRowTwo(
       ecField('school_year', 'School year', rc.school_year, true),
-      ecField('period_label', 'Period label (Q1, Sem 2, etc.)', rc.period_label)
+      '<label class="ec-lbl">Term<select class="ec-in" data-k="period_label" id="rc-term" onchange="rcTermChange()">' +
+        TERM_OPTS.map(function (t) {
+          return '<option value="' + t + '"' + (rcTermSel === t ? ' selected' : '') + '>' +
+            (t || '-- pick a term --') + '</option>';
+        }).join('') + '</select></label>'
     ) +
     schoolSelectField(rc.school_name) +
     ecField('period_end_date', 'Period end date', rc.period_end_date, false, 'date') +
@@ -4431,6 +4482,7 @@ function rcEdit(id) {
     '</div>' +
     ecField('days_tardy', 'Days tardy', rc.days_tardy, false, 'number') +
     '<label class="ec-lbl">Subjects and grades</label>' +
+    '<div class="ec-hint" style="margin-bottom:6px">Prefilled from the courses logged for this grade and term \u2014 period, course, and teacher come across automatically. Just enter each grade.</div>' +
     '<div id="rc-subjects">' + subjRows + '</div>' +
     '<div class="ec-bar" style="margin:0"><button type="button" class="save-btn save-btn-ghost" onclick="rcAddSubjectRow()">+ Add subject</button></div>' +
     ecArea('teacher_comments', 'Teacher comments', rc.teacher_comments) +
@@ -4446,13 +4498,7 @@ function rcEdit(id) {
 
 function rcAddSubjectRow() {
   const wrap = document.getElementById('rc-subjects');
-  const i = wrap.querySelectorAll('.rc-sub').length;
-  const div = document.createElement('div');
-  div.className = 'ec-two rc-sub';
-  div.dataset.i = i;
-  div.innerHTML = '<input class="ec-in rc-subject" placeholder="Subject" value="">' +
-    '<input class="ec-in rc-grade" placeholder="Grade (A / 92 / 3)" value="">';
-  wrap.appendChild(div);
+  wrap.insertAdjacentHTML('beforeend', rcSubjectRowHtml({}));
 }
 
 async function rcSave(id) {
@@ -4471,7 +4517,14 @@ async function rcSave(id) {
   document.querySelectorAll('.rc-sub').forEach(row => {
     const subject = row.querySelector('.rc-subject').value.trim();
     const grade = row.querySelector('.rc-grade').value.trim();
-    if (subject) item.subjects.push({ subject: subject, grade: grade || null });
+    const perEl = row.querySelector('.rc-period');
+    const tchEl = row.querySelector('.rc-teacher');
+    if (subject) item.subjects.push({
+      subject: subject,
+      grade: grade || null,
+      period: perEl ? (perEl.value || null) : null,
+      teacher: tchEl ? (tchEl.value || null) : null
+    });
   });
   if (item.grade_level == null || isNaN(item.grade_level)) { showToast('Grade level required', 'error'); return; }
   if (!item.school_year) { showToast('School year required', 'error'); return; }
