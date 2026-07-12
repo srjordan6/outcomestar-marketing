@@ -3530,6 +3530,15 @@ let PROFILE_COUNTRY = (localStorage.getItem('focms_profile_country') || 'US');
 let SP_SEQ = 0;
 const SP_STATE = {};   // pickerId -> picked school payload
 
+function yrTeacherPick(sel) {
+  // Keep the teacher's NAME alongside the id, so the year record still reads
+  // correctly even if the teacher is later removed from the registry.
+  const nameField = document.querySelector('.ec-in[data-k="homeroom_teacher_name"]');
+  if (!nameField) return;
+  const opt = sel.options[sel.selectedIndex];
+  nameField.value = sel.value ? (opt ? opt.textContent : '') : '';
+}
+
 function schoolPickerField(opts) {
   // v181: CASCADING picker - country -> state -> district -> school.
   // NCES stores abbreviated uppercase names ("ISBELL EL"), so free-text search
@@ -4306,6 +4315,20 @@ function yrEdit(id, gradeSeed) {
       '<label class="ec-lbl">School (from profiles)<select class="ec-in" data-k="school_id">' + schoolOpts + '</select></label>',
       ecField('school_name', 'Or type school name', yr.school_name)
     ) +
+    // v0.12.119: homeroom / main teacher for this grade year. Pulled from the
+    // Teachers registry so it is entered once and reused.
+    '<label class="ec-lbl">Teacher (homeroom / main teacher for this year)' +
+      '<select class="ec-in" data-k="homeroom_teacher_id" onchange="yrTeacherPick(this)">' +
+      '<option value="">-- pick a teacher --</option>' +
+      (TEACHERS || []).map(function (t) {
+        return '<option value="' + t.id + '"' +
+          (yr.homeroom_teacher_id === t.id ? ' selected' : '') + '>' +
+          escapeHTML(t.teacher_name || '') + '</option>';
+      }).join('') +
+    '</select></label>' +
+    '<input type="hidden" class="ec-in" data-k="homeroom_teacher_name" value="' +
+      escapeHTML(yr.homeroom_teacher_name || '') + '">' +
+    '<div class="ec-hint">Not listed? Add them under Academics \u2192 Teachers first, then pick them here.</div>' +
     '<label class="ec-check"><input type="checkbox" class="ec-in" data-k="is_full_year"' + (yr.is_full_year !== false ? ' checked' : '') + '> Full-year attendance</label>' +
     ecRowTwo(
       ecField('attendance_from', 'Attended from', yr.attendance_from, false, 'date'),
