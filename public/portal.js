@@ -2826,9 +2826,12 @@ const TERM_OPTS = ['', 'Full year', 'Semester 1', 'Semester 2', 'Quarter 1', 'Qu
                   'Quarter 3', 'Quarter 4', 'Trimester 1', 'Trimester 2', 'Trimester 3'];
 
 async function bulkCourses() {
+  const c0 = document.getElementById('sections-container');
+  c0.innerHTML = '<div class="ac-est">Loading course catalog\u2026</div>';
   if (!SUBJECT_CATALOG.length) {
     try { const d = await apiGet('/focms/v1/catalogs/subjects'); SUBJECT_CATALOG = d.subjects || []; } catch (e) {}
   }
+  await bkLoadAllCourses();          // v192: all 1,791 SCED courses, once
   const g = ACAD_YEAR;
   const existing = ACAD_COURSES.filter(c => c.grade_level === g);
   const seed = existing.length ? existing : [];
@@ -2852,7 +2855,7 @@ async function bulkCourses() {
     '<div class="ec-lbl" style="margin-top:12px">Courses this term (up to 10)</div>' +
     '<div id="bulk-rows">' + rowsHtml + '</div>' +
     '<button type="button" class="save-btn save-btn-ghost" onclick="bulkAddRow()">+ Add course row</button>' +
-    '<div class="ec-hint">Pick a subject, then the course from the federal SCED catalog (1,791 courses). Teachers come from Academics \u2192 Teachers. Grades are entered on the Report Card, not here. Blank rows are skipped.</div>' +
+    '<div class="ec-hint">One dropdown, every course \u2014 the full federal SCED catalog (1,791 courses), grouped by subject. The subject is set automatically from the course you pick. Teachers come from Academics \u2192 Teachers. Grades go on the Report Card. Blank rows are skipped.</div>' +
     '<div class="ec-bar">' +
     '<button class="save-btn" onclick="bulkSave()">Save all courses</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openAcadYear(' + g + ')">Cancel</button>' +
@@ -2864,28 +2867,23 @@ function bulkRowHtml(c) {
   const rid = 'bk' + (++BK_SEQ);
   const per = PERIOD_OPTS.map(p => '<option value="' + p + '"' +
     ((c.period || '') === p ? ' selected' : '') + '>' + (p || 'Per.') + '</option>').join('');
-  const subj = '<option value="">-- subject --</option>' +
-    (SUBJECT_CATALOG || []).map(s => '<option value="' + s.code + '"' +
-      (c.subject === s.code ? ' selected' : '') + '>' + escapeHTML(s.title) + '</option>').join('') +
-    '<option value="other"' + (c.subject === 'other' ? ' selected' : '') + '>Other</option>';
   const tch = '<option value="">-- teacher --</option>' +
     (TEACHERS || []).map(t => '<option value="' + t.id + '"' +
       (c.teacher_id === t.id ? ' selected' : '') + '>' + escapeHTML(t.teacher_name || '') + '</option>').join('');
-  // v192: the course column is the 1,791-course SCED catalog, loaded per subject.
-  // Picking a subject fills this list; "Other" (or no match) lets you type freely.
-  if (c.subject && c.subject !== 'other') {
-    setTimeout(function () { bkLoadCourses(rid, c.subject, c.sced_code || '', c.course_name || ''); }, 0);
-  }
+  // v192: ONE course column. All 1,791 SCED courses, grouped by subject area.
+  // The subject is derived from the course, so there is no separate subject column.
+  const freeText = !!(c.course_name && !c.sced_code);
   return '<div class="bulk-row" id="' + rid + '" data-id="' + escapeHTML(c.id || '') + '" ' +
-    'style="display:grid;grid-template-columns:74px 1fr 1.6fr 1.2fr auto;gap:6px;align-items:center;margin-bottom:6px">' +
+    'style="display:grid;grid-template-columns:80px 1fr 1.1fr auto;gap:6px;align-items:center;margin-bottom:6px">' +
     '<select class="ec-in bk-period">' + per + '</select>' +
-    '<select class="ec-in bk-subject" onchange="bkSubjectPick(\'' + rid + '\', this.value)">' + subj + '</select>' +
     '<span class="bk-course-wrap">' +
       '<select class="ec-in bk-course" style="width:100%" onchange="bkCoursePick(\'' + rid + '\', this.value)">' +
-        '<option value="">-- pick a subject first --</option></select>' +
-      '<input class="ec-in bk-name" type="text" placeholder="Course name" style="width:100%;display:none;margin-top:4px" ' +
+        bkCourseOptions(c.sced_code || '', freeText) + '</select>' +
+      '<input class="ec-in bk-name" type="text" placeholder="Type the course name" ' +
+        'style="width:100%;margin-top:4px;' + (freeText ? '' : 'display:none') + '" ' +
         'value="' + escapeHTML(c.course_name || '') + '">' +
       '<input type="hidden" class="bk-sced" value="' + escapeHTML(c.sced_code || '') + '">' +
+      '<input type="hidden" class="bk-subject" value="' + escapeHTML(c.subject || '') + '">' +
     '</span>' +
     '<select class="ec-in bk-teacher">' + tch + '</select>' +
     '<button type="button" class="rep-del" title="Remove" onclick="this.closest(\'.bulk-row\').remove()">\u00d7</button>' +
@@ -2893,49 +2891,37 @@ function bulkRowHtml(c) {
 }
 
 let BK_SEQ = 0;
-const BK_COURSE_CACHE = {};
+let ALL_COURSES = [];          // full SCED catalog, loaded once
 
-async function bkLoadCourses(rid, subject, scedSel, nameSel) {
-  const row = document.getElementById(rid);
-  if (!row) return;
-  const sel = row.querySelector('.bk-course');
-  const txt = row.querySelector('.bk-name');
-  if (!subject || subject === 'other') {
-    sel.style.display = 'none';
-    txt.style.display = '';
-    return;
-  }
-  sel.style.display = '';
-  sel.innerHTML = '<option value="">loading\u2026</option>';
-  let list = BK_COURSE_CACHE[subject];
-  if (!list) {
-    try {
-      const d = await apiGet('/focms/v1/catalogs/courses?subject=' + encodeURIComponent(subject));
-      list = d.courses || [];
-      BK_COURSE_CACHE[subject] = list;
-    } catch (e) { list = []; }
-  }
-  sel.innerHTML = '<option value="">-- pick a course (' + list.length + ') --</option>' +
-    list.map(function (x) {
-      const on = (scedSel && x.code === scedSel);
-      return '<option value="' + x.code + '"' + (on ? ' selected' : '') + '>' + escapeHTML(x.title) + '</option>';
-    }).join('') +
-    '<option value="__other__">My course is not listed \u2014 type it</option>';
-  // Existing free-text course with no SCED code: keep the text box visible.
-  if (nameSel && !scedSel) {
-    sel.value = '__other__';
-    txt.style.display = '';
-  } else {
-    txt.style.display = 'none';
-  }
+/* Every course, grouped under its subject area. One dropdown, no drill-down. */
+function bkCourseOptions(scedSel, freeText) {
+  if (!ALL_COURSES.length) return '<option value="">loading courses\u2026</option>';
+  const bySubj = {};
+  ALL_COURSES.forEach(function (x) {
+    (bySubj[x.subject_code] = bySubj[x.subject_code] || []).push(x);
+  });
+  const subjTitle = {};
+  (SUBJECT_CATALOG || []).forEach(function (s) { subjTitle[s.code] = s.title; });
+  let out = '<option value="">-- pick a course (' + ALL_COURSES.length + ') --</option>';
+  Object.keys(bySubj).sort().forEach(function (sc) {
+    out += '<optgroup label="' + escapeHTML(subjTitle[sc] || ('Subject ' + sc)) + '">' +
+      bySubj[sc].map(function (x) {
+        return '<option value="' + x.code + '"' + (x.code === scedSel ? ' selected' : '') + '>' +
+          escapeHTML(x.title) + '</option>';
+      }).join('') + '</optgroup>';
+  });
+  out += '<option value="__other__"' + (freeText ? ' selected' : '') +
+    '>My course is not listed \u2014 type it</option>';
+  return out;
 }
 
-function bkSubjectPick(rid, subject) {
-  const row = document.getElementById(rid);
-  if (!row) return;
-  row.querySelector('.bk-sced').value = '';
-  row.querySelector('.bk-name').value = '';
-  bkLoadCourses(rid, subject, '', '');
+async function bkLoadAllCourses() {
+  if (ALL_COURSES.length) return ALL_COURSES;
+  try {
+    const d = await apiGet('/focms/v1/catalogs/courses');
+    ALL_COURSES = d.courses || [];
+  } catch (e) { ALL_COURSES = []; }
+  return ALL_COURSES;
 }
 
 function bkCoursePick(rid, code) {
@@ -2943,18 +2929,20 @@ function bkCoursePick(rid, code) {
   if (!row) return;
   const txt = row.querySelector('.bk-name');
   const sced = row.querySelector('.bk-sced');
+  const subj = row.querySelector('.bk-subject');
   if (code === '__other__') {
     txt.style.display = '';
     txt.value = '';
     sced.value = '';
+    subj.value = 'other';
     txt.focus();
     return;
   }
   txt.style.display = 'none';
-  const subject = row.querySelector('.bk-subject').value;
-  const hit = (BK_COURSE_CACHE[subject] || []).find(function (x) { return x.code === code; });
+  const hit = ALL_COURSES.find(function (x) { return x.code === code; });
   txt.value = hit ? hit.title : '';
   sced.value = hit ? hit.code : '';
+  subj.value = hit ? hit.subject_code : '';   // subject comes FROM the course
 }
 
 function bulkAddRow() {
@@ -2983,9 +2971,9 @@ async function bulkSave() {
     const it = {
       course_name: name,
       sced_code: (row.querySelector('.bk-sced').value || '').trim() || null,
+      subject: (row.querySelector('.bk-subject').value || '').trim() || null,
       grade_level: g,
       period: row.querySelector('.bk-period').value || null,
-      subject: row.querySelector('.bk-subject').value || null,
       teacher_id: tId || null,
       teacher_name: tName || null,
       school_id: schoolId || null,
