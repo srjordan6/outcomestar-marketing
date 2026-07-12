@@ -3841,18 +3841,45 @@ function schoolChoiceField(opts) {
         escapeHTML(s.school_name) + '</option>';
     }).join('');
   const selName = (SCHOOLS.find(function (s) { return s.id === sel; }) || {}).school_name || curName;
+  const pid = 'sc' + (++SP_SEQ);
+  // v204: fill the address the moment the field renders with a school already
+  // chosen - not just on change.
+  setTimeout(function () {
+    const el = document.getElementById(pid);
+    if (el && el.value) schoolChoicePick(el);
+  }, 0);
   return '<label class="ec-lbl">' + escapeHTML(label) +
-    '<select class="ec-in" data-k="school_id" onchange="schoolChoicePick(this)">' + opt + '</select>' +
+    '<select class="ec-in" id="' + pid + '" data-k="school_id" onchange="schoolChoicePick(this)">' + opt + '</select>' +
     '<input type="hidden" class="ec-in" data-k="' + key + '" value="' + escapeHTML(selName) + '">' +
     '<div class="ec-hint">Schools come from <b>Academics \u2192 School Profile</b>.</div>' +
     '</label>';
 }
 
+/* Picking a saved school carries its details across - address, phone, district.
+   Only fills blanks, so anything typed by hand is never overwritten. */
 function schoolChoicePick(sel) {
-  const nameEl = document.querySelector('.ec-in[data-k="school_name"]');
-  if (!nameEl) return;
   const sc = SCHOOLS.find(function (s) { return s.id === sel.value; });
-  nameEl.value = sc ? (sc.school_name || '') : '';
+  const nameEl = document.querySelector('.ec-in[data-k="school_name"]');
+  if (nameEl) nameEl.value = sc ? (sc.school_name || '') : '';
+  if (!sc) return;
+  const fill = function (key, val, force) {
+    if (!val) return;
+    const el = document.querySelector('.ec-in[data-k="' + key + '"]');
+    if (!el) return;
+    if (!force && (el.value || '').trim()) return;   // never overwrite what was typed
+    el.removeAttribute('readonly');
+    el.value = val;
+  };
+  fill('street_address', sc.street_address);
+  fill('city_town', sc.city_town);
+  fill('city', sc.city_town);
+  fill('state_province', sc.state_province);
+  fill('state', sc.state_province);
+  fill('zip_postal_code', sc.zip_postal_code);
+  fill('zip', sc.zip_postal_code);
+  fill('country', sc.country);
+  fill('school_phone', sc.counselor_phone);
+  fill('school_leaid', sc.school_leaid);
 }
 
 function schoolPickerField(opts) {
