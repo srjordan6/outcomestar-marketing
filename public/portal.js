@@ -4835,9 +4835,15 @@ function rcEdit(id) {
   for (let g = 0; g <= 12; g++) gradeOpts.push('<option value="' + g + '"' + (rc.grade_level === g ? ' selected' : '') + '>' + GRADE_LABELS[g] + '</option>');
   const perOpts = RC_PERIODS.map(p => '<option value="' + p.code + '"' + (rc.period_kind === p.code ? ' selected' : '') + '>' + p.label + '</option>').join('');
   let subs = rc.subjects || [];
-  // v193: rows come from the courses already logged for this grade + term, so the
-  // course, teacher, and period are prefilled and only the grade is typed.
-  const rcTermSel = rc.period_label || '';
+  // v203: on edit, the term comes from period_label. If it is missing, infer it
+  // from the stored grades - otherwise the form renders in single-grade shape and
+  // the saved quarters have nowhere to show.
+  let rcTermSel = rc.period_label || '';
+  if (!rcTermSel && subs.length) {
+    const anyk = function (k) { return subs.some(function (s) { return s[k]; }); };
+    if (anyk('fin') || anyk('q3') || anyk('q4')) rcTermSel = 'Full year';
+    else if (anyk('q1') || anyk('q2') || anyk('sem1')) rcTermSel = 'Semester 1';
+  }
   if (!subs.length && !id) subs = rcSubjectsFromCourses(rc.grade_level, rcTermSel, {});
   const subjRows = subs.map(function (s) { return rcSubjectRowHtml(s, rcTermSel); }).join('');
   setTimeout(rcRecalc, 0);
