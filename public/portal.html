@@ -539,6 +539,93 @@
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
 <script src="/portal.js?v=205"></script>
+<!-- chatwoot-widget -->
+<style>
+  #chatwoot-hint {
+    position: fixed;
+    bottom: 34px;
+    right: 92px;
+    background: #201868;
+    color: #ffffff;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-family: Poppins, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(32, 24, 104, 0.25);
+    z-index: 999998;
+    opacity: 0;
+    transform: translateX(8px);
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #chatwoot-hint.show {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  #chatwoot-hint::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-left-color: #201868;
+    border-right: 0;
+  }
+</style>
+<script>
+  window.chatwootSettings = {
+    position: "right",
+    type: "standard",
+    launcherTitle: "Ask Stephen",
+    darkMode: "light"
+  };
+  (function (d, t) {
+    var g = d.createElement(t), s = d.getElementsByTagName(t)[0];
+    g.src = "https://app.chatwoot.com/packs/js/sdk.js";
+    g.async = true;
+    g.defer = true;
+    s.parentNode.insertBefore(g, s);
+    g.onload = function () {
+      window.chatwootSDK.run({
+        websiteToken: "xkTAi743X2bzGgFrwB2xVzAt",
+        baseUrl: "https://app.chatwoot.com"
+      });
+  };
+  })(document, "script");
+
+  // Bubble label hint — shows once per session
+  (function () {
+    var SESSION_KEY = "chatwoot_hint_shown";
+    if (sessionStorage.getItem(SESSION_KEY)) return;
+
+    function showHint() {
+      var hint = document.createElement("div");
+      hint.id = "chatwoot-hint";
+      hint.textContent = "Ask Stephen";
+      document.body.appendChild(hint);
+      setTimeout(function () { hint.classList.add("show"); }, 50);
+      setTimeout(function () {
+        hint.classList.remove("show");
+        setTimeout(function () { hint.remove(); }, 400);
+      }, 8000);
+      sessionStorage.setItem(SESSION_KEY, "1");
+    }
+
+    var attempts = 0;
+    var poll = setInterval(function () {
+      attempts++;
+      if (document.querySelector("#cw-bubble-holder .woot-widget-bubble")) {
+        clearInterval(poll);
+        setTimeout(showHint, 800);
+      } else if (attempts > 40) {
+        clearInterval(poll);
+      }
+    }, 500);
+  })();
+</script>
 </body>
 </html>
 
