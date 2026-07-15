@@ -148,7 +148,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
-  if (getToken() && (sessionStorage.getItem('focms_fresh_signup')==='1') && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) openWizard();
+  // v206 (2026-07-15): fire the wizard on any first login, not just #t= handoff.
+  // Previous gate required sessionStorage.focms_fresh_signup === '1', set only by the
+  // welcome-email #t= URL adoption path. Parents who log in via email+password (or
+  // arrive after a missed welcome email) now see the wizard. localStorage onboarded flag
+  // (set by closeWizard() on completion or skip) still gates against re-showing.
+  if (getToken() && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) openWizard();
 });
 
 /* ===== v140 onboarding wizard ===== */
