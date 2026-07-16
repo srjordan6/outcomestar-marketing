@@ -2240,6 +2240,32 @@ function swimMeetAddRow() {
    Row shape: EVENT  TIME  AGE  POINTS pts.  STD  MEET  TEAM  MM/DD/YYYY
    e.g. "50 BR LCM\t39.47\t11\t764 pts.\tAA\t2026 NT COR July Summer Invite\tIron Horse Aquatics\t07/11/2026" */
 const SWM_STROKE_FROM_CODE = { FR:'Free', FREE:'Free', BK:'Back', BACK:'Back', BR:'Breast', BREAST:'Breast', FL:'Fly', FLY:'Fly', IM:'IM' };
+
+/* v221: all 59 USA Swimming LSCs grouped by Zone (official USA Swimming map).
+   Option value format matches stored style: "North Texas Swimming (NT)". */
+const USA_LSC_BY_ZONE = {
+  'Eastern': [['Adirondack','AD'],['Allegheny Mountain','AM'],['Connecticut','CT'],['Maine','ME'],['Maryland','MD'],['Metropolitan','MR'],['Middle Atlantic','MA'],['New England','NE'],['New Jersey','NJ'],['Niagara','NI'],['Potomac Valley','PV'],['Virginia','VA']],
+  'Central': [['Arkansas','AR'],['Illinois','IL'],['Indiana','IN'],['Iowa','IA'],['Lake Erie','LE'],['Michigan','MI'],['Midwestern','MW'],['Minnesota','MN'],['Missouri Valley','MV'],['North Dakota','ND'],['Ohio','OH'],['Oklahoma','OK'],['Ozark','OZ'],['South Dakota','SD'],['Wisconsin','WI']],
+  'Southern': [['Border','BD'],['Florida','FL'],['Florida Gold Coast','FG'],['Georgia','GA'],['Gulf','GU'],['Kentucky','KY'],['Louisiana','LA'],['Mississippi','MS'],['North Carolina','NC'],['North Texas','NT'],['South Carolina','SC'],['South Texas','ST'],['Southeastern','SE'],['West Texas','WT'],['West Virginia','WV']],
+  'Western': [['Alaska','AK'],['Arizona','AZ'],['Central California','CC'],['Colorado','CO'],['Hawaiian','HI'],['Inland Empire','IE'],['Montana','MT'],['New Mexico','NM'],['Oregon','OR'],['Pacific','PC'],['Pacific Northwest','PN'],['San Diego-Imperial','SI'],['Sierra Nevada','SN'],['Snake River','SR'],['Southern California','CA'],['Utah','UT'],['Wyoming','WY']]
+};
+function usaLscSelect(current) {
+  let found = false;
+  let h = '<label class="ec-lbl">LSC \u2014 Local Swimming Committee' +
+    '<select class="ec-in" data-k="usa_lsc" onchange="var z=this.selectedOptions[0]&&this.selectedOptions[0].dataset.zone;var zs=document.querySelector(\'.ec-in[data-k=usa_zone]\');if(z&&zs)zs.value=z;">' +
+    '<option value=""></option>';
+  Object.keys(USA_LSC_BY_ZONE).forEach(function(zone) {
+    h += '<optgroup label="' + zone + ' Zone">';
+    USA_LSC_BY_ZONE[zone].forEach(function(p) {
+      var v = p[0] + ' Swimming (' + p[1] + ')';
+      var sel = current === v; if (sel) found = true;
+      h += '<option data-zone="' + zone + '"' + (sel ? ' selected' : '') + '>' + v + '</option>';
+    });
+    h += '</optgroup>';
+  });
+  if (current && !found) h += '<option selected>' + escapeHTML(current) + '</option>'; // preserve legacy free-text values
+  return h + '</select></label>';
+}
 let SWM_KNOWN_TEAMS = null; // distinct team names from the student's race history
 
 async function swmKnownTeams() {
@@ -3034,7 +3060,7 @@ function ecEdit(id, presetProgCode) {
     '<label class="ec-lbl">Zone<select class="ec-in" data-k="usa_zone"><option value=""></option>' +
     ['Eastern','Central','Southern','Western'].map(z => '<option' + (a.usa_zone === z ? ' selected' : '') + '>' + z + '</option>').join('') +
     '</select></label>' +
-    ecRowTwo(ecField('usa_lsc', 'LSC \u2014 Local Swimming Committee (e.g. North Texas Swimming (NT))', a.usa_lsc),
+    ecRowTwo(usaLscSelect(a.usa_lsc),
              ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code)) +
     '</div>'
     : '';
