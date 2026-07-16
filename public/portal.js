@@ -2290,7 +2290,7 @@ async function swmParsePasteAsync() {
     const rest = t.slice(em[0].length);
     const time = (rest.match(/(\d+:)?\d{1,2}\.\d{1,2}/) || [null])[0];
     const pts = (rest.match(/(\d{2,4})\s*pts/i) || [null, null])[1];
-    const std = (rest.match(/\b(AAAA|AAA|AA|A|BB|B)\b/) || [null, null])[1];
+    const std = (rest.match(/\b(AAAA|AAA|AA|A|BB|B|C)\b/) || [null, null])[1];
     const dateM = rest.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     const isoDate = dateM ? (dateM[3] + '-' + dateM[1].padStart(2, '0') + '-' + dateM[2].padStart(2, '0')) : null;
     // age = standalone 1-2 digit number that isn't the points and isn't inside the time
@@ -2307,7 +2307,7 @@ async function swmParsePasteAsync() {
       // meet may have wrapped across multiple pasted lines -> multiple cells
       // between the standard cell and the team cell; rejoin them.
       let sIdx = -1;
-      for (let i = 1; i < dIdx - 1; i++) if (/^(AAAA|AAA|AA|A|BB|B)$/.test(cells[i])) sIdx = i;
+      for (let i = 1; i < dIdx - 1; i++) if (/^(AAAA|AAA|AA|A|BB|B|C)$/.test(cells[i])) sIdx = i;
       const from = sIdx >= 0 ? sIdx + 1 : Math.max(1, dIdx - 2);
       meet = cells.slice(from, dIdx - 1).join(' ').trim() || null;
     }
@@ -2317,7 +2317,7 @@ async function swmParsePasteAsync() {
       // the date. The team is split off ONLY by exact match against the
       // student's known team names (from race history) - word-guessing a
       // spaced blob is unreliable. No match -> whole blob is the meet.
-      const seg = rest.match(/\b(?:AAAA|AAA|AA|A|BB|B)\b\s+(.+?)\s+\d{1,2}\/\d{1,2}\/\d{4}/);
+      const seg = rest.match(/\b(?:AAAA|AAA|AA|A|BB|B|C)\b\s+(.+?)\s+\d{1,2}\/\d{1,2}\/\d{4}/);
       if (seg) {
         const blob = seg[1].trim();
         const hit = knownTeams.find(k => blob.toLowerCase().endsWith(k.toLowerCase()));
