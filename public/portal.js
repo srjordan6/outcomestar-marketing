@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v241 (2026-07-16): Cadet training logger upgrades. (1) Training name on Sea Cadet entries is a dropdown fed by the shared cadet_training_catalog (GET /catalogs/cadet-trainings, cached in CADET_TRAINING_CATALOG) - every new training any cadet enters is auto-learned server-side and appears for the next cadet; 'Other (type below)' option reveals a free-text input that feeds the catalog on save. (2) Two separate date pickers: Start date * (event_date) + End date (event_end_date, new in backend v0.12.144). Training rows show 'start \u2192 end'. Requires backend v0.12.144 deployed FIRST (extra=forbid).
   // v240 (2026-07-16): SITE-WIDE STANDARD LOCATION BLOCK. New stdLocWire(pfx, defaultToHome) + stdLocString(pfx) helpers. The Personal-pillar address component now backs every location entry: EC entry organization location (block 'ecorg'; city/state to real columns, street/line2/county/zip/country to details.org_*), Sea Cadet drill block (home-default on new), session logger, rank/badge/award logger, performance logger (blocks sessloc/lmloc/pfloc composed into the single location string alongside the venue name). New forms default to the child's PHYSICAL home address, correctable in-form; existing records never auto-overwritten (default only applies when the block is empty AND the record is new). Swim meet form keeps its established ZIP-trio + home-default (paste-driven schema).
   // v239 (2026-07-16): Drill location in Unit Information upgraded to the FULL standard address block from the Personal pillar (addrFields prefix 'drill'): Postal/ZIP (auto-fill), Country (datalist), Address line 1, Address line 2, City/Town, County (US reveal), State/Province select via onCountryChange. Wired with onCountryChange+zipAttach on form render; saved via readAddr to details drill_* keys incl. line2/county/country.
   // v238 (2026-07-16): (1) Rank logger on Sea Cadet entries - when Type=Rank the name field becomes the NLCC/NSCC rate-ladder dropdown (badge/award keep free text; live-switches with Type); non-cadet entries unchanged. (2) Promotions card: Naval-coursework field removed everywhere (editor, save patch, detail row); PT-benchmarks checkbox on its own row.
@@ -2243,6 +2244,13 @@ function readSkillsFromForm() {
   return Array.from(new Set(out));
 }
 const LM_KINDS = { rank: 'Rank', merit_badge: 'Merit badge', award: 'Award' };
+var CADET_TRAINING_CATALOG = null;  // v241: shared cross-tenant training list
+async function loadCadetTrainings() {
+  if (CADET_TRAINING_CATALOG) return CADET_TRAINING_CATALOG;
+  try { const d = await apiGet('/focms/v1/catalogs/cadet-trainings'); CADET_TRAINING_CATALOG = d.trainings || []; }
+  catch (e) { CADET_TRAINING_CATALOG = (typeof CADET_TRAININGS !== 'undefined' ? CADET_TRAININGS.slice() : []); }
+  return CADET_TRAINING_CATALOG;
+}
 function latestMilestone(affilId) {
   const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && (s.milestone_kind || 'rank') !== 'training');
   ms.sort(function(a, b){ return (b.event_date || '').localeCompare(a.event_date || ''); });
@@ -3035,7 +3043,7 @@ function perfRow(p) {
 function lmRow(p) {
   const kind = LM_KINDS[p.milestone_kind || 'rank'] || (p.milestone_kind === 'training' ? 'Training' : 'Rank');
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || kind) +
-    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) : '') + '</div>' +
+    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) + (p.event_end_date ? ' \u2192 ' + escapeHTML(p.event_end_date) : '') : '') + '</div>' +
     '<div class="ec-meta">' + escapeHTML(p.milestone_kind === 'training' ? 'Training' : kind) + (p.location ? ' \u00b7 ' + escapeHTML(p.location) : '') + '</div>' +
     renderRowSkillsAndBadge(p) +
     (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
@@ -3070,6 +3078,30 @@ function perfEdit(id) {
   stdLocWire('pfloc', !id);
 }
 
+function lmTrainingField(catalog, val) {
+  var inList = val && catalog.indexOf(val) !== -1;
+  var other = val && !inList;
+  return '<label class="ec-lbl">Training *<select class="ec-in" id="lm-title-sel" onchange="lmTrainingSwitch()">' +
+    '<option value=""></option>' +
+    catalog.map(function(t){ return '<option' + (t === val ? ' selected' : '') + '>' + escapeHTML(t) + '</option>'; }).join('') +
+    '<option value="__other__"' + (other ? ' selected' : '') + '>Other (type below)</option>' +
+    '</select></label>' +
+    '<label class="ec-lbl" id="lm-title-other-wrap" style="' + (other ? '' : 'display:none') + '">New training name *' +
+    '<input class="ec-in" id="lm-title-other" type="text" value="' + escapeHTML(other ? val : '') + '" placeholder="Will be added to the list for the next cadet"></label>';
+}
+function lmTrainingSwitch() {
+  var sel = document.getElementById('lm-title-sel');
+  var w = document.getElementById('lm-title-other-wrap');
+  if (sel && w) w.style.display = sel.value === '__other__' ? '' : 'none';
+}
+function lmTitleValue() {
+  var sel = document.getElementById('lm-title-sel');
+  if (sel) {
+    if (sel.value === '__other__') { var o = document.getElementById('lm-title-other'); return o ? o.value.trim() : ''; }
+    return sel.value;
+  }
+  var t = document.getElementById('lm-title'); return t ? (t.value || '').trim() : '';
+}
 function lmTitleField(isTraining, rankDropdown, val) {
   if (rankDropdown) {
     return '<label class="ec-lbl">Rank / rate *<select class="ec-in" id="lm-title"><option value=""></option>' +
@@ -3088,7 +3120,7 @@ function lmKindSwitch() {
   const cur = (document.getElementById('lm-title') || {}).value || '';
   wrap.innerHTML = lmTitleField(false, k === 'rank' && isCadet, cur);
 }
-function lmEdit(id, presetKind) {
+async function lmEdit(id, presetKind) {
   if (!ENTRY_VIEW) return;
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10), milestone_kind: presetKind || 'rank' };
   if (!p) return;
@@ -3098,15 +3130,19 @@ function lmEdit(id, presetKind) {
   const _a = (EC_DATA || []).find(x => x.id === ENTRY_VIEW.id) || {};
   const _prog = (EC_PROGRAMS || []).find(pp => pp.code === ENTRY_VIEW.code) || {};
   const lmIsCadet = /sea cadet|usnscc|naval sea/i.test((_a.organization_name || '') + ' ' + (_prog.title || ''));
+  const _tCat = (isTraining && lmIsCadet) ? await loadCadetTrainings() : null;
   const kindSel = isTraining ? '' :
     '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind" onchange="lmKindSwitch()">' +
     Object.keys(LM_KINDS).map(function(k){ return '<option value="'+k+'"'+(kind===k?' selected':'')+'>'+LM_KINDS[k]+'</option>'; }).join('') +
     '</select></label>';
   document.getElementById('sections-container').innerHTML = ecTrailCrumb(isTraining ? (id ? 'Edit training' : 'Log training') : (id ? 'Edit rank / badge / award' : 'Log rank / badge / award')) + '<div class="ec-form">' +
     kindSel +
-    '<div id="lm-title-wrap">' + lmTitleField(isTraining, (!isTraining && kind === 'rank' && lmIsCadet), p.title) + '</div>' +
+    '<div id="lm-title-wrap">' + (_tCat ? lmTrainingField(_tCat, p.title) : lmTitleField(isTraining, (!isTraining && kind === 'rank' && lmIsCadet), p.title)) + '</div>' +
     '<span id="lm-cadet-flag" style="display:none">' + (lmIsCadet ? '1' : '') + '</span>' +
-    perfField('lm-date', (isTraining ? 'Training date *' : 'Date attained *'), p.event_date, 'date') +
+    (isTraining
+      ? '<div class="ec-two">' + perfField('lm-date', 'Start date *', p.event_date, 'date') +
+        perfField('lm-end', 'End date', p.event_end_date, 'date') + '</div>'
+      : perfField('lm-date', 'Date attained *', p.event_date, 'date')) +
     perfField('lm-location', 'Venue / place name', p.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('lmloc', {}) +
@@ -3123,7 +3159,8 @@ async function lmSave(id, fixedKind) {
   const v = function(k){ const el = document.getElementById(k); return el ? (el.value || '').trim() : ''; };
   const item = {
     event_type: 'leadership_milestone',
-    title: v('lm-title'), event_date: v('lm-date'),
+    title: lmTitleValue(), event_date: v('lm-date'),
+    event_end_date: v('lm-end') || null,
     milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
     location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
@@ -3136,6 +3173,7 @@ async function lmSave(id, fixedKind) {
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
     showToast('Saved', 'success');
+    CADET_TRAINING_CATALOG = null;  // v241: re-fetch so a just-learned training appears immediately
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
     renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
