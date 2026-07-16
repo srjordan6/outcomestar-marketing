@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v239 (2026-07-16): Drill location in Unit Information upgraded to the FULL standard address block from the Personal pillar (addrFields prefix 'drill'): Postal/ZIP (auto-fill), Country (datalist), Address line 1, Address line 2, City/Town, County (US reveal), State/Province select via onCountryChange. Wired with onCountryChange+zipAttach on form render; saved via readAddr to details drill_* keys incl. line2/county/country.
   // v238 (2026-07-16): (1) Rank logger on Sea Cadet entries - when Type=Rank the name field becomes the NLCC/NSCC rate-ladder dropdown (badge/award keep free text; live-switches with Type); non-cadet entries unchanged. (2) Promotions card: Naval-coursework field removed everywhere (editor, save patch, detail row); PT-benchmarks checkbox on its own row.
   // v237 (2026-07-16): Training and Promotions REMOVED from the entry edit form (the form now carries Unit Information only). Each detail card gains its own Edit button opening an inline editor inside the card, saving just that section's keys via the affiliations endpoint (details merge). Entry form _cKeys trimmed to unit + drill keys.
   // v236 (2026-07-16): Drill location is now a standard address block - Drill street address + ZIP (auto-fills city/state via attachZipTrio) + City + State, saved as drill_street/drill_zip/drill_city/drill_state in details. Detail card composes the full address; legacy drill_location string still displays as fallback.
@@ -2882,7 +2883,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
       ['Unit ID', dd0.usnscc_unit_id], ['Member type', dd0.usnscc_member_type],
       ['Commanding Officer', dd0.usnscc_co],
       ['Unit phone', dd0.usnscc_unit_phone], ['Unit email', dd0.usnscc_unit_email],
-      ['Drill location', [dd0.drill_street, dd0.drill_city, [dd0.drill_state, dd0.drill_zip].filter(Boolean).join(' ')].filter(Boolean).join(', ') || dd0.drill_location],
+      ['Drill location', [dd0.drill_street, dd0.drill_line2, dd0.drill_city, dd0.drill_county, [dd0.drill_state, dd0.drill_zip].filter(Boolean).join(' '), (dd0.drill_country && dd0.drill_country !== 'US') ? dd0.drill_country : ''].filter(Boolean).join(', ') || dd0.drill_location],
       ['Drill schedule', dd0.drill_schedule]]));
     html += _cShell('Training <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'training\')">Edit</button>',
       '<div id="cadet-sec-training">' + _cRows([
@@ -3462,10 +3463,10 @@ function ecEdit(id, presetProgCode) {
     ecField('usnscc_co', 'Commanding Officer', dd.usnscc_co) +
     ecRowTwo(ecField('usnscc_unit_phone', 'Unit phone', dd.usnscc_unit_phone),
              ecField('usnscc_unit_email', 'Unit email', dd.usnscc_unit_email)) +
-    ecField('drill_street', 'Drill street address', dd.drill_street || dd.drill_location) +
-    ecRowTwo('<label class="ec-lbl">Drill ZIP<input class="ec-in" data-k="drill_zip" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state" value="' + escapeAttr(dd.drill_zip || '') + '"></label>',
-             ecRowTwo(ecField('drill_city', 'Drill city', dd.drill_city),
-                      ecField('drill_state', 'Drill state', dd.drill_state))) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Drill location</div>' +
+    addrFields('drill', { street_address: dd.drill_street || dd.drill_location, street_address_line_2: dd.drill_line2,
+      city_town: dd.drill_city, county: dd.drill_county, state_province: dd.drill_state,
+      zip_postal_code: dd.drill_zip, country: dd.drill_country || 'US' }) +
     ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule)) +
 '</div>';
   const c = document.getElementById('sections-container');
@@ -3494,7 +3495,11 @@ function ecEdit(id, presetProgCode) {
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
   attachZipTrio(document.getElementById('ec-org-zip'), byKey('organization_city'), byKey('organization_state'), !id);
-  attachZipTrio(byKey('drill_zip'), byKey('drill_city'), byKey('drill_state'), false);  // v236
+  if (isCadetAffil || document.getElementById('drill-zip_postal_code')) {  // v239: standard drill address block
+    onCountryChange('drill'); zipAttach('drill');
+    if (typeof acAttach === 'function') acAttach('drill');
+    if (typeof countryAttach === 'function') countryAttach('drill');
+  }
   mediaWidgetRenderChips('ec-media'); // v226
 }
 
@@ -3528,13 +3533,24 @@ async function ecSave(id) {
   }
   // v228: USNSCC keys live in details JSONB; drop them when the block is hidden
   var _cWrap = document.getElementById('usnscc-wrap');
-  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_street', 'drill_zip', 'drill_city', 'drill_state', 'drill_schedule',
+  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_schedule',
                 'usnscc_unit_id', 'usnscc_member_type', 'usnscc_co', 'usnscc_unit_phone', 'usnscc_unit_email'];
   if (!_cWrap || _cWrap.style.display === 'none') {
     _cKeys.forEach(function(k){ delete item[k]; });
   } else {
     var _cd = {};
     _cKeys.forEach(function(k){ if (item[k]) _cd[k] = item[k]; delete item[k]; });
+    // v239: drill address via the standard block
+    if (document.getElementById('drill-zip_postal_code')) {
+      var _da = readAddr('drill');
+      _cd.drill_street = _da.street_address || '';
+      _cd.drill_line2 = _da.street_address_line_2 || '';
+      _cd.drill_city = _da.city_town || '';
+      _cd.drill_county = _da.county || '';
+      _cd.drill_state = _da.state_province || '';
+      _cd.drill_zip = _da.zip_postal_code || '';
+      _cd.drill_country = _da.country || 'US';
+    }
     item.details = Object.assign({}, item.details || {}, _cd);
   }
   item.skills_gained = readSkillsFromForm();
