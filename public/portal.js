@@ -2614,7 +2614,7 @@ function renderProgramEntries(catCode, progCode) {
   ]);
   const isSwimProg = /swim/i.test((prog && prog.title) || '');
   html += '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
-    (isSwimProg ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
+    (isSwimProg ? '<button class="save-btn" onclick="renderSwimMeetForm()">Enter swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (isSwimProg) html += '<div id="swim-metrics-strip"></div>';
   if (isSwimProg) html += '<div id="swim-race-log" style="margin:14px 0"></div>';
@@ -2687,7 +2687,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     { label: a.organization_name + (a.role ? ' \u2014 ' + a.role : '') }
   ]);
   html += '<div class="ec-bar">' +
-    (/swim/i.test((prog && prog.title) || (a.organization_name || '')) ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
+    (/swim/i.test((prog && prog.title) || (a.organization_name || '')) ? '<button class="save-btn" onclick="renderSwimMeetForm()">Enter swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
   html += ecRow(a);
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
