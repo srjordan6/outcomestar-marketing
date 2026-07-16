@@ -2682,7 +2682,7 @@ async function loadSwimRaceLog() {
       const meetTxt = r.meet || '';
       return '<tr>' +
         '<td style="white-space:nowrap">' + btCell(r.date) + '</td>' +
-        '<td style="white-space:nowrap"><strong>' + escapeHTML(ev) + '</strong>' + (r.is_relay_leg ? ' <span title="Relay leg" style="color:#7A8A9E">(relay)</span>' : '') + '</td>' +
+        '<td style="max-width:240px;white-space:normal;overflow-wrap:break-word"><strong>' + escapeHTML(ev) + '</strong>' + (r.is_relay_leg ? ' <span title="Relay leg" style="color:#7A8A9E">(relay)</span>' : '') + '</td>' +
         '<td style="white-space:nowrap">' + btCell(r.time) + '</td>' +
         '<td style="white-space:nowrap">' + btCell(r.points) + '</td>' +
         '<td style="white-space:nowrap">' + btCell(r.time_standard) + '</td>' +
@@ -3002,6 +3002,8 @@ function ecRow(a) {
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(a.organization_name) +
     (a.role ? ' \u2014 ' + escapeHTML(a.role) : '') + '</div>' +
     '<div class="ec-meta">' + escapeHTML(period) + (hrs ? ' \u00b7 ' + hrs : '') + coach + '</div>' +
+    ((a.usa_zone || a.usa_lsc || a.usa_club_code) ?
+      '<div class="ec-meta">USA Swimming: ' + [a.usa_zone ? escapeHTML(a.usa_zone) + ' Zone' : null, a.usa_lsc ? escapeHTML(a.usa_lsc) : null, a.usa_club_code ? escapeHTML(a.usa_club_code) : null].filter(Boolean).join(' \u203a ') + '</div>' : '') +
     renderRowSkillsAndBadge(a) +
     (a.notes ? '<div class="ec-notes">' + escapeHTML(a.notes) + '</div>' : '') + '</div>' +
     '<div class="ec-actions">' +
@@ -3015,10 +3017,22 @@ function ecEdit(id, presetProgCode) {
   const a = id ? EC_DATA.find(x => x.id === id) : { affiliation_type: EC_FILTER || 'program', program_code: presetProgCode || null };
   if (!a) return;
   const showPicker = EC_FILTER === 'program' || a.program_code || a.affiliation_type === 'program' || a.affiliation_type === 'activity';
+  // v217: USA Swimming structure (Zone > LSC > Club) on swim affiliations.
+  const _prog = (EC_PROGRAMS || []).find(p => p.code === a.program_code) || (PROG_VIEW && (EC_PROGRAMS || []).find(p => p.code === PROG_VIEW.code)) || null;
+  const isSwimAffil = /swim/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const usaBlock = isSwimAffil ?
+    '<div class="ec-lbl" style="font-weight:600;margin-top:8px">USA Swimming structure <span style="font-weight:400;color:#7A8A9E">Zone \u203a LSC \u203a Club</span></div>' +
+    '<label class="ec-lbl">Zone<select class="ec-in" data-k="usa_zone"><option value=""></option>' +
+    ['Eastern','Central','Southern','Western'].map(z => '<option' + (a.usa_zone === z ? ' selected' : '') + '>' + z + '</option>').join('') +
+    '</select></label>' +
+    ecRowTwo(ecField('usa_lsc', 'LSC \u2014 Local Swimming Committee (e.g. North Texas Swimming (NT))', a.usa_lsc),
+             ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code))
+    : '';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     ecField('role', 'Role or activity', a.role) +
+    usaBlock +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
     ecRowTwo(ecField('weekly_hours', 'Hours per week', a.weekly_hours, false, 'number'),
