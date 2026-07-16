@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v232 (2026-07-16): Sea Cadet EDIT form sections wrapped in card containers (matching the detail-view cards) - Unit Information / Training / Promotions each render as a bordered card with its fields inside, instead of flat header dividers.
   // v231 (2026-07-16): Sea Cadet detail - rank/badge/award log now lives INSIDE the Promotions card and the training log INSIDE the Training card; the three cards stack full-width. Generic Leadership log sections suppressed for sea-cadet entries (still render for BSA/CAP/etc).
   // v230 (2026-07-16): Sea Cadet entry detail renders three read-only cards - Unit Information, Training, Promotions - from details JSONB, above the rank/training logs. Cards deep-link to Edit.
   // v229 (2026-07-16): Sea Cadet block reorganized into three sections - Unit Information (area/region/unit/drills), Training (Recruit Training date + advanced-training checkboxes from USNSCC curricula + notes), Promotions (NLCC/NSCC rate ladder dropdown, promotion date, PT-benchmarks-current, coursework). Training checkboxes collected to details.usnscc_trainings array.
@@ -3353,10 +3354,14 @@ function ecEdit(id, presetProgCode) {
   ];
   const USNSCC_TRAININGS = ['SeaPerch Underwater Robotics', 'Aviation Ground School', 'Cybersecurity', 'Marine Engineering', 'Field Medical (First Aid / CPR)', 'Seamanship & Navigation', 'Firefighting', 'Wilderness Survival'];
   const _ct = Array.isArray(dd.usnscc_trainings) ? dd.usnscc_trainings : [];
-  function _cadetHdr(t) { return '<div class="ec-lbl" style="font-weight:600;margin-top:12px;padding:6px 10px;background:#EEEDF7;border-radius:6px;color:var(--navy)">' + t + '</div>'; }
+  function _cadetFormCard(t, sub, inner) {
+    return '<div style="margin:12px 0;padding:14px 16px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:15px">' + t +
+      (sub ? ' <span style="font-family:Poppins,sans-serif;font-weight:400;color:#7A8A9E;font-size:12px">' + sub + '</span>' : '') + '</div>' + inner + '</div>';
+  }
   const cadetBlock =
     '<div id="usnscc-wrap" style="' + (isCadetAffil ? '' : 'display:none') + '">' +
-    _cadetHdr('Unit Information <span style="font-weight:400;color:#7A8A9E">Field Area \u203a Region \u203a Unit</span>') +
+    _cadetFormCard('Unit Information', 'Field Area \u203a Region \u203a Unit',
     ecRowTwo(
       '<label class="ec-lbl">Field Area<select class="ec-in" data-k="usnscc_area"><option value=""></option>' +
       USNSCC_AREAS.map(function(z){ return '<option' + ((a.usnscc_area || dd.usnscc_area) === z ? ' selected' : '') + '>' + z + '</option>'; }).join('') +
@@ -3365,15 +3370,15 @@ function ecEdit(id, presetProgCode) {
     ecRowTwo(ecField('usnscc_unit', 'Unit name', a.usnscc_unit || dd.usnscc_unit),
              ecField('usnscc_unit_code', 'Unit code (e.g. BLACK CAT SQ)', a.usnscc_unit_code || dd.usnscc_unit_code)) +
     ecField('drill_location', 'Drill location', a.drill_location || dd.drill_location) +
-    ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule) +
-    _cadetHdr('Training <span style="font-weight:400;color:#7A8A9E">Recruit Training + advanced trainings</span>') +
+    ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule)) +
+    _cadetFormCard('Training', 'Recruit Training + advanced trainings',
     ecRowTwo(ecField('usnscc_rt_completed', 'Recruit Training / NLO completed', dd.usnscc_rt_completed, false, 'date'),
              ecField('usnscc_training_notes', 'Other trainings / notes', dd.usnscc_training_notes)) +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 12px;margin:6px 0 2px">' +
     USNSCC_TRAININGS.map(function(t){
       return '<label class="ec-check" style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" class="usnscc-tr" value="' + escapeAttr(t) + '"' + (_ct.indexOf(t) !== -1 ? ' checked' : '') + '> ' + escapeHTML(t) + '</label>';
-    }).join('') + '</div>' +
-    _cadetHdr('Promotions <span style="font-weight:400;color:#7A8A9E">rate, advancement requirements</span>') +
+    }).join('') + '</div>') +
+    _cadetFormCard('Promotions', 'rate, advancement requirements',
     ecRowTwo(
       '<label class="ec-lbl">Current rate / rank<select class="ec-in" data-k="usnscc_rank"><option value=""></option>' +
       NLCC_NSCC_RATES.map(function(g){
@@ -3384,7 +3389,7 @@ function ecEdit(id, presetProgCode) {
       ecField('usnscc_rank_date', 'Date of last promotion', dd.usnscc_rank_date, false, 'date')) +
     ecRowTwo(
       '<label class="ec-check" style="margin-top:8px;display:flex;align-items:center;gap:8px;white-space:nowrap"><input type="checkbox" class="ec-in" data-k="usnscc_pt_current"' + (dd.usnscc_pt_current ? ' checked' : '') + '> PT benchmarks current (biannual)</label>',
-      ecField('usnscc_coursework', 'Naval coursework completed', dd.usnscc_coursework)) +
+      ecField('usnscc_coursework', 'Naval coursework completed', dd.usnscc_coursework))) +
     '</div>';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
