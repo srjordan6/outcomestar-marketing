@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v234 (2026-07-16): Unit Information gains Unit ID (e.g. 084BCS), Commanding Officer, Unit phone, Unit email, Member type (NLCC/NSCC dropdown) - on the edit form, the save keys, and the detail card.
   // v233 (2026-07-16): USNSCC cards restyled to the portal-standard flat row look (matching every other card in the app): no gray boxes - flat sections with hairline #F6F6F3 dividers, Lora navy section titles, ec-meta gray field rows. Applied to both the detail-view cards and the edit-form section cards.
   // v232 (2026-07-16): Sea Cadet EDIT form sections wrapped in card containers (matching the detail-view cards) - Unit Information / Training / Promotions each render as a bordered card with its fields inside, instead of flat header dividers.
   // v231 (2026-07-16): Sea Cadet detail - rank/badge/award log now lives INSIDE the Promotions card and the training log INSIDE the Training card; the three cards stack full-width. Generic Leadership log sections suppressed for sea-cadet entries (still render for BSA/CAP/etc).
@@ -2874,6 +2875,9 @@ function renderEntryDetail(catCode, progCode, affilId) {
     html += _cShell('Unit Information', _cRows([
       ['Field Area', dd0.usnscc_area], ['Region', dd0.usnscc_region],
       ['Unit', dd0.usnscc_unit], ['Unit code', dd0.usnscc_unit_code],
+      ['Unit ID', dd0.usnscc_unit_id], ['Member type', dd0.usnscc_member_type],
+      ['Commanding Officer', dd0.usnscc_co],
+      ['Unit phone', dd0.usnscc_unit_phone], ['Unit email', dd0.usnscc_unit_email],
       ['Drill location', dd0.drill_location], ['Drill schedule', dd0.drill_schedule]]));
     html += _cShell('Training',
       _cRows([
@@ -3370,6 +3374,14 @@ function ecEdit(id, presetProgCode) {
       ecField('usnscc_region', 'Region (e.g. 8-3)', a.usnscc_region || dd.usnscc_region)) +
     ecRowTwo(ecField('usnscc_unit', 'Unit name', a.usnscc_unit || dd.usnscc_unit),
              ecField('usnscc_unit_code', 'Unit code (e.g. BLACK CAT SQ)', a.usnscc_unit_code || dd.usnscc_unit_code)) +
+    ecRowTwo(ecField('usnscc_unit_id', 'Unit ID (e.g. 084BCS)', dd.usnscc_unit_id),
+      '<label class="ec-lbl">Member type<select class="ec-in" data-k="usnscc_member_type"><option value=""></option>' +
+      ['NLCC (League Cadet, ages 10-13)', 'NSCC (Sea Cadet, ages 13-18)'].map(function(m){
+        return '<option' + (dd.usnscc_member_type === m ? ' selected' : '') + '>' + m + '</option>';
+      }).join('') + '</select></label>') +
+    ecField('usnscc_co', 'Commanding Officer', dd.usnscc_co) +
+    ecRowTwo(ecField('usnscc_unit_phone', 'Unit phone', dd.usnscc_unit_phone),
+             ecField('usnscc_unit_email', 'Unit email', dd.usnscc_unit_email)) +
     ecField('drill_location', 'Drill location', a.drill_location || dd.drill_location) +
     ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule)) +
     _cadetFormCard('Training', 'Recruit Training + advanced trainings',
@@ -3452,6 +3464,7 @@ async function ecSave(id) {
   // v228: USNSCC keys live in details JSONB; drop them when the block is hidden
   var _cWrap = document.getElementById('usnscc-wrap');
   var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_location', 'drill_schedule',
+                'usnscc_unit_id', 'usnscc_member_type', 'usnscc_co', 'usnscc_unit_phone', 'usnscc_unit_email',
                 'usnscc_rt_completed', 'usnscc_training_notes', 'usnscc_rank', 'usnscc_rank_date', 'usnscc_pt_current', 'usnscc_coursework'];
   if (!_cWrap || _cWrap.style.display === 'none') {
     _cKeys.forEach(function(k){ delete item[k]; });
