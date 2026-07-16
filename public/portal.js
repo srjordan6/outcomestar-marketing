@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v231 (2026-07-16): Sea Cadet detail - rank/badge/award log now lives INSIDE the Promotions card and the training log INSIDE the Training card; the three cards stack full-width. Generic Leadership log sections suppressed for sea-cadet entries (still render for BSA/CAP/etc).
   // v230 (2026-07-16): Sea Cadet entry detail renders three read-only cards - Unit Information, Training, Promotions - from details JSONB, above the rank/training logs. Cards deep-link to Edit.
   // v229 (2026-07-16): Sea Cadet block reorganized into three sections - Unit Information (area/region/unit/drills), Training (Recruit Training date + advanced-training checkboxes from USNSCC curricula + notes), Promotions (NLCC/NSCC rate ladder dropdown, promotion date, PT-benchmarks-current, coursework). Training checkboxes collected to details.usnscc_trainings array.
   // v228 (2026-07-16): USNSCC structure block on Sea Cadet affiliations - Field Area dropdown (six official areas per seacadets.org), Region free-text, Unit name/code, drill location + schedule. Detects sea-cadet programs live like the USA Swimming block; keys stored in details JSONB (usnscc_area/usnscc_region/usnscc_unit/usnscc_unit_code/drill_location/drill_schedule).
@@ -2851,31 +2852,45 @@ function renderEntryDetail(catCode, progCode, affilId) {
         return '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;cursor:pointer" onclick="mediaWidgetView(\'' + mid + '\')" title="Open media">\ud83d\udcce ' + mid.slice(0, 8) + '</span>';
       }).join('') + '</div></div>';
   }
-  // v230: three read-only USNSCC cards on the Sea Cadet entry detail
-  if (/sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((prog && prog.title) || ''))) {
+  // v231: three stacked USNSCC cards; Training and Promotions embed their logs
+  const isCadetEntry = /sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((prog && prog.title) || ''));
+  if (isCadetEntry) {
     const dd0 = (a.details && typeof a.details === 'object') ? a.details : {};
-    function _cCard(title, rows) {
-      const body = rows.filter(function(r){ return r[1]; }).map(function(r){
-        return '<div style="display:flex;gap:8px;font-size:13.5px;padding:2px 0"><span style="color:#7A8A9E;min-width:150px">' + r[0] + '</span><span style="color:var(--navy)">' + escapeHTML(String(r[1])) + '</span></div>';
-      }).join('');
-      return '<div style="flex:1;min-width:260px;padding:14px 16px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
-        '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:15px;margin-bottom:8px">' + title + '</div>' +
-        (body || '<div style="font-size:13px;color:#7A8A9E">Nothing recorded yet \u2014 use Edit to fill this in.</div>') + '</div>';
+    const _all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
+      .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
+    const _ranks = _all.filter(s => (s.milestone_kind || 'rank') !== 'training');
+    const _trainings = _all.filter(s => s.milestone_kind === 'training');
+    function _cRows(rows) {
+      return rows.filter(function(r){ return r[1]; }).map(function(r){
+        return '<div style="display:flex;gap:8px;font-size:13.5px;padding:2px 0"><span style="color:#7A8A9E;min-width:170px">' + r[0] + '</span><span style="color:var(--navy)">' + escapeHTML(String(r[1])) + '</span></div>';
+      }).join('') || '<div style="font-size:13px;color:#7A8A9E">Nothing recorded yet \u2014 use Edit above to fill this in.</div>';
     }
-    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:18px">' +
-      _cCard('Unit Information', [
-        ['Field Area', dd0.usnscc_area], ['Region', dd0.usnscc_region],
-        ['Unit', dd0.usnscc_unit], ['Unit code', dd0.usnscc_unit_code],
-        ['Drill location', dd0.drill_location], ['Drill schedule', dd0.drill_schedule]]) +
-      _cCard('Training', [
+    function _cShell(title, inner) {
+      return '<div style="margin-top:16px;padding:16px 18px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
+        '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:10px">' + title + '</div>' + inner + '</div>';
+    }
+    html += _cShell('Unit Information', _cRows([
+      ['Field Area', dd0.usnscc_area], ['Region', dd0.usnscc_region],
+      ['Unit', dd0.usnscc_unit], ['Unit code', dd0.usnscc_unit_code],
+      ['Drill location', dd0.drill_location], ['Drill schedule', dd0.drill_schedule]]));
+    html += _cShell('Training',
+      _cRows([
         ['Recruit Training / NLO', dd0.usnscc_rt_completed],
         ['Advanced trainings', Array.isArray(dd0.usnscc_trainings) && dd0.usnscc_trainings.length ? dd0.usnscc_trainings.join(', ') : ''],
         ['Notes', dd0.usnscc_training_notes]]) +
-      _cCard('Promotions', [
+      '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>' +
+      (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
+    html += _cShell('Promotions',
+      _cRows([
         ['Current rate', dd0.usnscc_rank], ['Last promotion', dd0.usnscc_rank_date],
         ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : ''],
         ['Coursework', dd0.usnscc_coursework]]) +
-      '</div>';
+      '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Rank, merit badges &amp; awards</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>' +
+      (_ranks.length ? _ranks.map(lmRow).join('') : '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>'));
   }
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
     const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
@@ -2886,7 +2901,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
     else html += perfs.map(perfRow).join('');
   }
-  if (prog && prog.category === 'Leadership, Civic & Career Prep') {
+  if (prog && prog.category === 'Leadership, Civic & Career Prep' && !isCadetEntry) {
     const all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
     const ranks = all.filter(s => (s.milestone_kind || 'rank') !== 'training');
