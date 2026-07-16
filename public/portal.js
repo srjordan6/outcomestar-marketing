@@ -2138,14 +2138,6 @@ function renderEcSections() {
     '<div><div class="ec-name">'+t.label+'</div><div class="ec-desc">'+t.desc+'</div></div>' +
     '<div class="ec-count">'+counts[t.code]+' <span>on record</span></div>' +
     '</button>').join('');
-  cards = '<button class="ec-card" onclick="renderBestTimes()">' +
-    '<div><div class="ec-name">Best Times</div><div class="ec-desc">Every event\u2019s best: time, points, standard, next cut, drop, age, meet \u2014 editable</div></div>' +
-    '<div class="ec-count">table <span>view</span></div>' +
-    '</button>' +
-    '<button class="ec-card" onclick="renderSwimMeetForm()">' +
-    '<div><div class="ec-name">Swim Meet Results</div><div class="ec-desc">Enter a meet: title, dates, location, and each event\u2019s time, points, and place</div></div>' +
-    '<div class="ec-count">' + (typeof SWIM_RACE_COUNT === 'number' ? SWIM_RACE_COUNT : '\u2014') + ' <span>races on record</span></div>' +
-    '</button>' + cards;
   if (unassigned > 0) cards +=
     '<button class="ec-card" onclick="renderUnassignedList()">' +
     '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
@@ -2218,7 +2210,9 @@ function swmRowHtml(i) {
     '<td><select class="rec-i swm-ev">' + opts + '</select></td>' +
     '<td><input class="rec-i swm-time" placeholder="1:25.42" style="width:90px"></td>' +
     '<td><input class="rec-i swm-pts" type="number" min="0" max="1200" placeholder="796" style="width:70px"></td>' +
+    '<td><input class="rec-i swm-std" placeholder="AA" maxlength="4" style="width:52px;text-transform:uppercase"></td>' +
     '<td><input class="rec-i swm-place" type="number" min="1" placeholder="3" style="width:60px"></td>' +
+    '<td><input class="rec-i swm-date" type="date" style="width:135px" title="Date of this swim (blank = meet start date)"></td>' +
     '<td style="text-align:center"><button class="ec-btn-sm" onclick="this.closest(\'tr\').remove()" title="Remove row">\u2715</button></td></tr>';
 }
 
@@ -2227,10 +2221,86 @@ function swimMeetAddRow() {
   if (tb) tb.insertAdjacentHTML('beforeend', swmRowHtml(tb.children.length));
 }
 
+/* v208: parse rows copied from USA Swimming Data Hub (tab- or multi-space-separated).
+   Row shape: EVENT  TIME  AGE  POINTS pts.  STD  MEET  TEAM  MM/DD/YYYY
+   e.g. "50 BR LCM\t39.47\t11\t764 pts.\tAA\t2026 NT COR July Summer Invite\tIron Horse Aquatics\t07/11/2026" */
+const SWM_STROKE_FROM_CODE = { FR:'Free', FREE:'Free', BK:'Back', BACK:'Back', BR:'Breast', BREAST:'Breast', FL:'Fly', FLY:'Fly', IM:'IM' };
+
+function swmParsePaste() {
+  const ta = document.getElementById('swm-paste');
+  const msg = document.getElementById('swm-paste-msg');
+  const raw = (ta.value || '').trim();
+  if (!raw) { msg.textContent = 'Nothing to parse.'; return; }
+  const parsed = [];
+  const skipped = [];
+  raw.split(/\r?\n/).forEach(line => {
+    const t = line.trim();
+    if (!t) return;
+    // event: "<dist> <STROKE> <COURSE>" at line start
+    const em = t.match(/^(\d{2,4})\s+(FR|FREE|BK|BACK|BR|BREAST|FL|FLY|IM)\s+(SCY|LCM|SCM)\b/i);
+    if (!em) { skipped.push(t.slice(0, 40)); return; }
+    const dist = em[1], stroke = SWM_STROKE_FROM_CODE[em[2].toUpperCase()], course = em[3].toUpperCase();
+    const rest = t.slice(em[0].length);
+    const time = (rest.match(/(\d+:)?\d{1,2}\.\d{1,2}/) || [null])[0];
+    const pts = (rest.match(/(\d{2,4})\s*pts/i) || [null, null])[1];
+    const std = (rest.match(/\b(AAAA|AAA|AA|A|BB|B)\b/) || [null, null])[1];
+    const dateM = rest.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const isoDate = dateM ? (dateM[3] + '-' + dateM[1] + '-' + dateM[2]) : null;
+    // age = standalone 1-2 digit number that isn't the points and isn't inside the time
+    let age = null;
+    const restNoTime = rest.replace(/(\d+:)?\d{1,2}\.\d{1,2}/, ' ').replace(/(\d{2,4})\s*pts\.?/i, ' ');
+    const am = restNoTime.match(/(?:^|[\s\t])(\d{1,2})(?:[\s\t]|$)/);
+    if (am) age = parseInt(am[1], 10);
+    // meet + team: text between std and date, split on tab or 2+ spaces
+    let meet = null, team = null;
+    const cells = t.split(/\t| {2,}/).map(s => s.trim()).filter(Boolean);
+    if (cells.length >= 6) {
+      const dIdx = cells.findIndex(c => /^\d{2}\/\d{2}\/\d{4}$/.test(c));
+      if (dIdx >= 2) { team = cells[dIdx - 1]; meet = cells[dIdx - 2]; }
+    }
+    if (!time) { skipped.push(t.slice(0, 40)); return; }
+    parsed.push({ ev: dist + ' ' + stroke, course: course, time: time, pts: pts ? parseInt(pts, 10) : null,
+                  std: std, age: age, meet: meet, team: team, date: isoDate });
+  });
+  if (!parsed.length) { msg.textContent = 'No rows recognized' + (skipped.length ? ' (' + skipped.length + ' lines skipped).' : '.'); return; }
+  // fill header from the first parsed row (only where the field is empty)
+  const setIf = (id, v) => { const el = document.getElementById(id); if (el && v && !el.value.trim()) el.value = v; };
+  const first = parsed[0];
+  setIf('swm-meet', first.meet);
+  setIf('swm-team', first.team);
+  setIf('swm-age', first.age != null ? String(first.age) : null);
+  if (first.course) document.getElementById('swm-course').value = first.course;
+  const dates = parsed.map(p => p.date).filter(Boolean).sort();
+  if (dates.length) {
+    document.getElementById('swm-d1').value = dates[0];
+    if (dates[dates.length - 1] !== dates[0]) setIf('swm-d2', dates[dates.length - 1]);
+  }
+  // clear empty starter rows, then add one row per parsed swim
+  document.querySelectorAll('#swm-rows tr').forEach(tr => {
+    if (!tr.querySelector('.swm-ev').value && !tr.querySelector('.swm-time').value.trim()) tr.remove();
+  });
+  let mixed = 0;
+  parsed.forEach(p => {
+    swimMeetAddRow();
+    const tr = document.getElementById('swm-rows').lastElementChild;
+    tr.querySelector('.swm-ev').value = p.ev;
+    tr.querySelector('.swm-time').value = p.time;
+    if (p.pts != null) tr.querySelector('.swm-pts').value = p.pts;
+    if (p.std) tr.querySelector('.swm-std').value = p.std;
+    if (p.date) tr.querySelector('.swm-date').value = p.date;
+    if (p.course && p.course !== document.getElementById('swm-course').value) mixed++;
+  });
+  msg.textContent = 'Added ' + parsed.length + ' swim' + (parsed.length === 1 ? '' : 's') +
+    (skipped.length ? ' \u00b7 ' + skipped.length + ' line(s) skipped' : '') +
+    (mixed ? ' \u00b7 WARNING: ' + mixed + ' row(s) are a different course than the meet Course field \u2014 save those separately' : '');
+  ta.value = '';
+}
+
 function renderSwimMeetForm() {
   ecSetHeader('Swim Meet Results', 'Enter the meet once, then one table row per event swum \u2014 time, points, and place. Each row saves as its own race record and feeds best times, IMX/IMR, and Power Index.');
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('sections-container').innerHTML =
+    ecTrailCrumb('Swim meet results') +
     '<div class="ec-form">' +
     '<div class="ec-form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">' +
     '<label class="ec-lbl">Meet title *<input class="rec-i" id="swm-meet" placeholder="Long Course Age Group Championship"></label>' +
@@ -2244,8 +2314,15 @@ function renderSwimMeetForm() {
     '<label class="ec-lbl">Age group<input class="rec-i" id="swm-agegrp" placeholder="Boys 11-12"></label>' +
     '<label class="ec-lbl">Team<input class="rec-i" id="swm-team" placeholder="Iron Horse Aquatics"></label>' +
     '</div>' +
+    '<div style="margin-top:14px;background:#F4F6FA;border:1px dashed #B9C1D9;border-radius:8px;padding:10px 12px">' +
+    '<div style="font-size:13px;font-weight:600;margin-bottom:6px">Paste from USA Swimming Data Hub</div>' +
+    '<div style="font-size:12px;color:#7A8A9E;margin-bottom:6px">Select the result rows on the Data Hub page, copy, and paste below \u2014 event, time, age, points, standard, meet, team, and date are read automatically. The meet fields above fill from the first row; each swim becomes a table row.</div>' +
+    '<textarea id="swm-paste" class="rec-i" rows="4" style="width:100%;font-family:monospace;font-size:12px" placeholder="50 BR LCM\t39.47\t11\t764 pts.\tAA\t2026 NT COR July Summer Invite\tIron Horse Aquatics\t07/11/2026"></textarea>' +
+    '<button class="ec-btn" style="margin-top:6px" onclick="swmParsePaste()">Parse pasted rows</button>' +
+    '<span id="swm-paste-msg" style="font-size:12px;color:#7A8A9E;margin-left:10px"></span>' +
+    '</div>' +
     '<table class="swm-table" style="width:100%;margin-top:14px;border-collapse:collapse">' +
-    '<thead><tr><th style="text-align:left">Event</th><th style="text-align:left">Final time</th><th style="text-align:left">Power points</th><th style="text-align:left">Place</th><th></th></tr></thead>' +
+    '<thead><tr><th style="text-align:left">Event</th><th style="text-align:left">Final time</th><th style="text-align:left">Power points</th><th style="text-align:left">Std</th><th style="text-align:left">Place</th><th style="text-align:left">Date</th><th></th></tr></thead>' +
     '<tbody id="swm-rows"></tbody></table>' +
     '<div style="margin-top:10px;display:flex;gap:10px;align-items:center">' +
     '<button class="ec-btn" onclick="swimMeetAddRow()">+ Add event row</button>' +
@@ -2277,9 +2354,12 @@ async function saveSwimMeet() {
     const secs = swmParseSeconds(tRaw);
     if (!ev || secs == null) { bad = 'Each filled row needs an event and a valid time like 39.58 or 1:25.42.'; return; }
     const pts = tr.querySelector('.swm-pts').value, place = tr.querySelector('.swm-place').value;
+    const std = (tr.querySelector('.swm-std').value || '').trim().toUpperCase() || null;
+    const rowDate = tr.querySelector('.swm-date').value || null;
     rows.push({ ev: ev, time: tRaw, secs: secs,
                 pts: pts ? parseInt(pts, 10) : null,
-                place: place ? parseInt(place, 10) : null });
+                place: place ? parseInt(place, 10) : null,
+                std: std, date: rowDate });
   });
   if (bad) { status.className = 'save-status err'; status.textContent = bad; return; }
   if (!rows.length) { status.className = 'save-status err'; status.textContent = 'Add at least one event row.'; return; }
@@ -2290,16 +2370,17 @@ async function saveSwimMeet() {
     const parts = r.ev.split(' ');
     const dist = parseInt(parts[0], 10), strokeName = parts.slice(1).join(' ');
     const scode = SWM_STROKE_CODE[strokeName] || strokeName.toUpperCase();
-    const sid = d1.replace(/-/g, '') + '_' + dist + scode + '_' + course + '_' + r.time + '_pp';
+    const evDate = r.date || d1;
+    const sid = evDate.replace(/-/g, '') + '_' + dist + scode + '_' + course + '_' + r.time + '_pp';
     const details = { meet: meet, course: course, stroke: scode, discipline: 'individual', is_relay: false,
                       distance: dist, finals_time: r.time, finals_time_seconds: r.secs,
-                      power_points: r.pts, place: r.place, age: age,
+                      power_points: r.pts, place: r.place, time_standard: r.std, age: age,
                       age_group: ageGrp || null, team: team || null, entered_via: 'parent_portal_v208' };
     try {
       await apiPost('/focms/v1/events?upsert=true', {
         student_id: STUDENT_ID, event_type: 'swim_race',
-        title: r.ev + ' ' + course + ' ' + r.time + ' (' + d1 + ')',
-        event_date: d1, event_end_date: d2 || null,
+        title: r.ev + ' ' + course + ' ' + r.time + ' (' + evDate + ')',
+        event_date: evDate, event_end_date: null,
         location_name: loc || null, location_city: city || null, location_state: state || null,
         details: details, visibility: isPub ? 'public' : 'private',
         source_system: 'parent_portal', source_id: sid,
@@ -2309,6 +2390,7 @@ async function saveSwimMeet() {
       status.textContent = 'Saving ' + ok + '/' + rows.length + '\u2026';
     } catch (e) { failed.push(r.ev + ' (' + (e.message || '').slice(0, 80) + ')'); }
   }
+  void d2;
   btn.disabled = false;
   if (failed.length) {
     status.className = 'save-status err';
@@ -2325,6 +2407,7 @@ function ordSuffix(n) { const s = ['th','st','nd','rd'], v = n % 100; return s[(
 
 /* ---------- v208: Best Times table (editable) ---------- */
 let BT_DATA = null;
+let BT_CRUMB = '';
 const BT_STROKE_ORDER = ['Free','Back','Breast','Fly','IM'];
 
 function btSortKeys(bests) {
@@ -2341,6 +2424,7 @@ function btSortKeys(bests) {
 
 async function renderBestTimes() {
   ecSetHeader('Best Times', 'Best time on record for every event \u2014 points, standard achieved, next cut and the drop needed to get there, total lifetime drop, age at the swim, and the meet. Edit any row; standards recompute on save.');
+  BT_CRUMB = ecTrailCrumb('Best times');
   const c = document.getElementById('sections-container');
   c.innerHTML = '<div class="ac-est">Loading\u2026</div>';
   try {
@@ -2372,6 +2456,7 @@ function btRenderTable() {
       '</tr>';
   }).join('');
   document.getElementById('sections-container').innerHTML =
+    BT_CRUMB +
     '<div style="overflow-x:auto"><table class="swm-table bt-table" style="width:100%;border-collapse:collapse;min-width:860px">' +
     '<thead><tr><th style="text-align:left">Event</th><th style="text-align:left">Best</th><th style="text-align:left">Pts</th>' +
     '<th style="text-align:left">Std</th><th style="text-align:left">Next</th><th style="text-align:left">Time Needed</th>' +
@@ -2492,6 +2577,7 @@ function renderProgramEntries(catCode, progCode) {
     { label: prog ? prog.title : 'Program' }
   ]);
   html += '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
+    (/swim/i.test((prog && prog.title) || '') ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else {
@@ -2526,7 +2612,9 @@ function renderEntryDetail(catCode, progCode, affilId) {
     { label: prog ? prog.title : 'Program', go: "renderProgramEntries('" + catCode + "','" + progCode + "')" },
     { label: a.organization_name + (a.role ? ' \u2014 ' + a.role : '') }
   ]);
-  html += '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
+  html += '<div class="ec-bar">' +
+    (/swim/i.test((prog && prog.title) || (a.organization_name || '')) ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
+    '<button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
   html += ecRow(a);
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
     const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
