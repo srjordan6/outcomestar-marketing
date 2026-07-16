@@ -1979,6 +1979,23 @@ const SWIM_SKILLS = [
   'Precision Breath Management (Hypoxic Training)',
   'Fine Motor Coordination'
 ];
+let EC_POOL_OPTS = ''; // last-rendered full skill pool (for live swim/non-swim swap)
+function swimSkillOpts() { return SWIM_SKILLS.map(t => '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>').join(''); }
+/* v223: the Add form starts blank, so swim context must react to the Program
+   picker / org name live: show or hide the USA Swimming block and swap the
+   skill list between the 4 swim skills and the category pool. */
+function ecSwimContext() {
+  var progSel = document.querySelector('.ec-in[data-k="program_code"]');
+  var orgIn = document.querySelector('.ec-in[data-k="organization_name"]');
+  var title = '';
+  if (progSel && progSel.value) { var p = (EC_PROGRAMS || []).find(function(x){ return x.code === progSel.value; }); title = (p && p.title) || ''; }
+  var isSwim = /swim/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var wrap = document.getElementById('usa-sw-wrap');
+  if (wrap) wrap.style.display = isSwim ? '' : 'none';
+  var sel = document.getElementById('sk-add');
+  if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : EC_POOL_OPTS);
+  return isSwim;
+}
 function renderFormSkillChips() {
   const c = document.getElementById('sk-chips');
   if (!c) return;
@@ -1997,17 +2014,13 @@ function removeFormSkill(code) {
 }
 function skillsGainedField(current, catName, swimOnly) {
   FORM_SKILLS = (current || []).filter(Boolean).slice();
-  let opts;
-  if (swimOnly) {
-    opts = SWIM_SKILLS.map(t => '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>').join('');
-  } else {
-    const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
-    const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
-    opts = pool.map(sk =>
-      '<option value="' + (sk.code || '') + '">' +
-      escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
-      '</option>').join('');
-  }
+  const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
+  const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
+  EC_POOL_OPTS = pool.map(sk =>
+    '<option value="' + (sk.code || '') + '">' +
+    escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
+    '</option>').join('');
+  const opts = swimOnly ? swimSkillOpts() : EC_POOL_OPTS;
   const chips = FORM_SKILLS.length
     ? FORM_SKILLS.map(function(code){ return '<span class="ec-chip">' + escapeHTML(skillTitle(code)) + ' <span class="art-x" onclick="removeFormSkill(\'' + code.replace(/'/g, "\\'") + '\')">\u00d7</span></span>'; }).join(' ')
     : '<span class="cr-waiting" style="padding:0">No skills on this record yet.</span>';
@@ -3066,7 +3079,8 @@ function ecEdit(id, presetProgCode) {
   const _prog = (EC_PROGRAMS || []).find(p => p.code === a.program_code) || (PROG_VIEW && (EC_PROGRAMS || []).find(p => p.code === PROG_VIEW.code)) || null;
   const isSwimAffil = /swim/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
   const usaOn = !!(a.usa_member || a.usa_zone || a.usa_lsc || a.usa_club_code);
-  const usaBlock = isSwimAffil ?
+  const usaBlock =
+    '<div id="usa-sw-wrap" style="' + (isSwimAffil ? '' : 'display:none') + '">' +
     '<label class="ec-lbl" style="flex-direction:row;align-items:center;gap:8px;margin-top:8px">' +
     '<input type="checkbox" class="ec-in" data-k="usa_member"' + (usaOn ? ' checked' : '') +
     ' onchange="var f=document.getElementById(\'usa-sw-fields\');if(f)f.style.display=this.checked?\'\':\'none\'">' +
@@ -3078,8 +3092,7 @@ function ecEdit(id, presetProgCode) {
     '</select></label>' +
     ecRowTwo(usaLscSelect(a.usa_lsc),
              ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code)) +
-    '</div>'
-    : '';
+    '</div></div>';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
@@ -3108,10 +3121,10 @@ function ecProgramPicker(a) {
   const filtered = CAT_FILTER ? (EC_PROGRAMS || []).filter(p => p.category === CAT_FILTER) : (EC_PROGRAMS || []);
   const opts = filtered.map(p => '<option value="'+p.code+'"'+(a.program_code===p.code?' selected':'')+'>'+escapeHTML(p.title)+(CAT_FILTER?'':' ('+escapeHTML(p.category)+')')+'</option>').join('');
   return '<label class="ec-lbl">Program *' +
-    '<select class="ec-in" data-k="program_code">' +
+    '<select class="ec-in" data-k="program_code" onchange="if(typeof ecSwimContext===\'function\')ecSwimContext()">' +
     '<option value="">-- pick a program --</option>' + opts + '</select></label>' +
     '<label class="ec-lbl">Organization / provider name' +
-    '<input class="ec-in" data-k="organization_name" type="text" placeholder="e.g. Frisco School of Music (defaults to the program name)" value="'+escapeHTML(a.organization_name||'')+'"></label>';
+    '<input class="ec-in" data-k="organization_name" type="text" placeholder="e.g. Frisco School of Music (defaults to the program name)" value="'+escapeHTML(a.organization_name||'')+'" oninput="if(typeof ecSwimContext===\'function\')ecSwimContext()"></label>';
 }
 
 function ecField(key, label, val, req, type) {
@@ -3128,6 +3141,10 @@ async function ecSave(id) {
   const item = { affiliation_type: EC_FILTER || 'program' };
   if (id) item.id = id;
   collectEcForm(item);
+  var _usaWrap = document.getElementById('usa-sw-wrap');
+  if (!_usaWrap || _usaWrap.style.display === 'none') {
+    delete item.usa_member; delete item.usa_zone; delete item.usa_lsc; delete item.usa_club_code;
+  }
   item.skills_gained = readSkillsFromForm();
   const other = document.querySelector('.ec-in[data-k="organization_name_other"]');
   if (other && other.value.trim()) item.organization_name = other.value.trim();
