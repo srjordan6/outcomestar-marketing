@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v208 (2026-07-16): Swim Meet Results tabular entry form (meet + per-event time/points/place rows) in the Extracurricular hub.
   // v207 (2026-07-16): Swim Metrics strip (IMX/IMR/Power Index, computed on read) on the Extracurricular hub for any competitive swimmer.
   // v206 (2026-07-15): fire the wizard on any first login, not just #t= handoff.
   // Previous gate required sessionStorage.focms_fresh_signup === '1', set only by the
@@ -2137,6 +2138,14 @@ function renderEcSections() {
     '<div><div class="ec-name">'+t.label+'</div><div class="ec-desc">'+t.desc+'</div></div>' +
     '<div class="ec-count">'+counts[t.code]+' <span>on record</span></div>' +
     '</button>').join('');
+  cards = '<button class="ec-card" onclick="renderBestTimes()">' +
+    '<div><div class="ec-name">Best Times</div><div class="ec-desc">Every event\u2019s best: time, points, standard, next cut, drop, age, meet \u2014 editable</div></div>' +
+    '<div class="ec-count">table <span>view</span></div>' +
+    '</button>' +
+    '<button class="ec-card" onclick="renderSwimMeetForm()">' +
+    '<div><div class="ec-name">Swim Meet Results</div><div class="ec-desc">Enter a meet: title, dates, location, and each event\u2019s time, points, and place</div></div>' +
+    '<div class="ec-count">' + (typeof SWIM_RACE_COUNT === 'number' ? SWIM_RACE_COUNT : '\u2014') + ' <span>races on record</span></div>' +
+    '</button>' + cards;
   if (unassigned > 0) cards +=
     '<button class="ec-card" onclick="renderUnassignedList()">' +
     '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
@@ -2185,6 +2194,241 @@ async function loadSwimMetricsStrip() {
       piChip +
       '</div></div>';
   } catch (e) { host.innerHTML = ''; }
+}
+
+/* ---------- v208: Swim Meet entry (tabular) ---------- */
+let SWIM_RACE_COUNT = null;
+const SWM_EVENTS = ['25 Free','50 Free','100 Free','200 Free','500 Free','400 Free','800 Free','1000 Free','1500 Free','1650 Free',
+  '25 Back','50 Back','100 Back','200 Back','25 Breast','50 Breast','100 Breast','200 Breast',
+  '25 Fly','50 Fly','100 Fly','200 Fly','100 IM','200 IM','400 IM'];
+const SWM_STROKE_CODE = { 'Free':'FR','Back':'BK','Breast':'BR','Fly':'FL','IM':'IM' };
+
+function swmParseSeconds(t) {
+  t = String(t || '').trim();
+  if (!t) return null;
+  const m = t.match(/^(?:(\d+):)?(\d{1,2})(?:\.(\d{1,2}))?$/);
+  if (!m) return null;
+  const min = parseInt(m[1] || '0', 10), sec = parseInt(m[2], 10), hh = (m[3] || '0').padEnd(2, '0');
+  return min * 60 + sec + parseInt(hh, 10) / 100;
+}
+
+function swmRowHtml(i) {
+  const opts = '<option value=""></option>' + SWM_EVENTS.map(e => '<option>' + e + '</option>').join('');
+  return '<tr class="swm-tr" data-i="' + i + '">' +
+    '<td><select class="rec-i swm-ev">' + opts + '</select></td>' +
+    '<td><input class="rec-i swm-time" placeholder="1:25.42" style="width:90px"></td>' +
+    '<td><input class="rec-i swm-pts" type="number" min="0" max="1200" placeholder="796" style="width:70px"></td>' +
+    '<td><input class="rec-i swm-place" type="number" min="1" placeholder="3" style="width:60px"></td>' +
+    '<td style="text-align:center"><button class="ec-btn-sm" onclick="this.closest(\'tr\').remove()" title="Remove row">\u2715</button></td></tr>';
+}
+
+function swimMeetAddRow() {
+  const tb = document.getElementById('swm-rows');
+  if (tb) tb.insertAdjacentHTML('beforeend', swmRowHtml(tb.children.length));
+}
+
+function renderSwimMeetForm() {
+  ecSetHeader('Swim Meet Results', 'Enter the meet once, then one table row per event swum \u2014 time, points, and place. Each row saves as its own race record and feeds best times, IMX/IMR, and Power Index.');
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('sections-container').innerHTML =
+    '<div class="ec-form">' +
+    '<div class="ec-form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">' +
+    '<label class="ec-lbl">Meet title *<input class="rec-i" id="swm-meet" placeholder="Long Course Age Group Championship"></label>' +
+    '<label class="ec-lbl">Start date *<input class="rec-i" id="swm-d1" type="date" value="' + today + '"></label>' +
+    '<label class="ec-lbl">End date<input class="rec-i" id="swm-d2" type="date"></label>' +
+    '<label class="ec-lbl">Course *<select class="rec-i" id="swm-course"><option>SCY</option><option>LCM</option><option>SCM</option></select></label>' +
+    '<label class="ec-lbl">Location \u2014 pool / venue<input class="rec-i" id="swm-loc" placeholder="Westside Aquatic Center"></label>' +
+    '<label class="ec-lbl">City<input class="rec-i" id="swm-city" placeholder="Lewisville"></label>' +
+    '<label class="ec-lbl">State<input class="rec-i" id="swm-state" placeholder="TX" maxlength="2" style="text-transform:uppercase"></label>' +
+    '<label class="ec-lbl">Swimmer age at meet *<input class="rec-i" id="swm-age" type="number" min="4" max="25" placeholder="11"></label>' +
+    '<label class="ec-lbl">Age group<input class="rec-i" id="swm-agegrp" placeholder="Boys 11-12"></label>' +
+    '<label class="ec-lbl">Team<input class="rec-i" id="swm-team" placeholder="Iron Horse Aquatics"></label>' +
+    '</div>' +
+    '<table class="swm-table" style="width:100%;margin-top:14px;border-collapse:collapse">' +
+    '<thead><tr><th style="text-align:left">Event</th><th style="text-align:left">Final time</th><th style="text-align:left">Power points</th><th style="text-align:left">Place</th><th></th></tr></thead>' +
+    '<tbody id="swm-rows"></tbody></table>' +
+    '<div style="margin-top:10px;display:flex;gap:10px;align-items:center">' +
+    '<button class="ec-btn" onclick="swimMeetAddRow()">+ Add event row</button>' +
+    '<label class="ec-lbl" style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="swm-pub"> Show these races on the public site</label>' +
+    '<span style="flex:1"></span>' +
+    '<button class="ec-btn ec-btn-primary" id="swm-save" onclick="saveSwimMeet()">Save meet</button>' +
+    '</div>' +
+    '<div id="swm-status" class="save-status" style="margin-top:8px"></div>' +
+    '</div>';
+  swimMeetAddRow(); swimMeetAddRow(); swimMeetAddRow();
+}
+
+async function saveSwimMeet() {
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const meet = g('swm-meet').trim(), d1 = g('swm-d1'), d2 = g('swm-d2'),
+        course = g('swm-course'), loc = g('swm-loc').trim(), city = g('swm-city').trim(),
+        state = g('swm-state').trim().toUpperCase(), team = g('swm-team').trim(),
+        ageGrp = g('swm-agegrp').trim();
+  const age = parseInt(g('swm-age'), 10);
+  const isPub = !!(document.getElementById('swm-pub') || {}).checked;
+  const status = document.getElementById('swm-status');
+  if (!meet || !d1 || !course || !age) { status.className = 'save-status err'; status.textContent = 'Meet title, start date, course, and swimmer age are required.'; return; }
+  const rows = [];
+  let bad = null;
+  document.querySelectorAll('#swm-rows tr').forEach(tr => {
+    const ev = tr.querySelector('.swm-ev').value;
+    const tRaw = tr.querySelector('.swm-time').value.trim();
+    if (!ev && !tRaw) return; // blank row - skip
+    const secs = swmParseSeconds(tRaw);
+    if (!ev || secs == null) { bad = 'Each filled row needs an event and a valid time like 39.58 or 1:25.42.'; return; }
+    const pts = tr.querySelector('.swm-pts').value, place = tr.querySelector('.swm-place').value;
+    rows.push({ ev: ev, time: tRaw, secs: secs,
+                pts: pts ? parseInt(pts, 10) : null,
+                place: place ? parseInt(place, 10) : null });
+  });
+  if (bad) { status.className = 'save-status err'; status.textContent = bad; return; }
+  if (!rows.length) { status.className = 'save-status err'; status.textContent = 'Add at least one event row.'; return; }
+  const btn = document.getElementById('swm-save'); btn.disabled = true;
+  status.className = 'save-status'; status.textContent = 'Saving 0/' + rows.length + '\u2026';
+  let ok = 0, failed = [];
+  for (const r of rows) {
+    const parts = r.ev.split(' ');
+    const dist = parseInt(parts[0], 10), strokeName = parts.slice(1).join(' ');
+    const scode = SWM_STROKE_CODE[strokeName] || strokeName.toUpperCase();
+    const sid = d1.replace(/-/g, '') + '_' + dist + scode + '_' + course + '_' + r.time + '_pp';
+    const details = { meet: meet, course: course, stroke: scode, discipline: 'individual', is_relay: false,
+                      distance: dist, finals_time: r.time, finals_time_seconds: r.secs,
+                      power_points: r.pts, place: r.place, age: age,
+                      age_group: ageGrp || null, team: team || null, entered_via: 'parent_portal_v208' };
+    try {
+      await apiPost('/focms/v1/events?upsert=true', {
+        student_id: STUDENT_ID, event_type: 'swim_race',
+        title: r.ev + ' ' + course + ' ' + r.time + ' (' + d1 + ')',
+        event_date: d1, event_end_date: d2 || null,
+        location_name: loc || null, location_city: city || null, location_state: state || null,
+        details: details, visibility: isPub ? 'public' : 'private',
+        source_system: 'parent_portal', source_id: sid,
+        public_description: isPub ? (r.ev + ' \u00b7 ' + r.time + (r.place ? (' \u00b7 ' + r.place + ordSuffix(r.place) + ' place') : '') + ' \u00b7 ' + meet) : null
+      });
+      ok++;
+      status.textContent = 'Saving ' + ok + '/' + rows.length + '\u2026';
+    } catch (e) { failed.push(r.ev + ' (' + (e.message || '').slice(0, 80) + ')'); }
+  }
+  btn.disabled = false;
+  if (failed.length) {
+    status.className = 'save-status err';
+    status.textContent = ok + ' saved, ' + failed.length + ' failed: ' + failed.join('; ');
+  } else {
+    status.className = 'save-status ok';
+    status.textContent = 'Saved ' + ok + ' race' + (ok === 1 ? '' : 's') + ' for ' + meet + '.';
+    showToast('Saved ' + ok + ' races', 'success');
+    SWIM_RACE_COUNT = (SWIM_RACE_COUNT || 0) + ok;
+  }
+}
+
+function ordSuffix(n) { const s = ['th','st','nd','rd'], v = n % 100; return s[(v - 20) % 10] || s[v] || s[0]; }
+
+/* ---------- v208: Best Times table (editable) ---------- */
+let BT_DATA = null;
+const BT_STROKE_ORDER = ['Free','Back','Breast','Fly','IM'];
+
+function btSortKeys(bests) {
+  return Object.keys(bests).sort((a, b) => {
+    const pa = a.split(' '), pb = b.split(' ');
+    const sa = pa.slice(1, -1).join(' '), sb = pb.slice(1, -1).join(' ');
+    const so = BT_STROKE_ORDER.indexOf(sa) - BT_STROKE_ORDER.indexOf(sb);
+    if (so) return so;
+    const dd = parseInt(pa[0], 10) - parseInt(pb[0], 10);
+    if (dd) return dd;
+    return a.slice(-3) === 'LCM' ? -1 : 1;
+  });
+}
+
+async function renderBestTimes() {
+  ecSetHeader('Best Times', 'Best time on record for every event \u2014 points, standard achieved, next cut and the drop needed to get there, total lifetime drop, age at the swim, and the meet. Edit any row; standards recompute on save.');
+  const c = document.getElementById('sections-container');
+  c.innerHTML = '<div class="ac-est">Loading\u2026</div>';
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/computed/swim-bests');
+    BT_DATA = d.bests || {};
+    btRenderTable();
+  } catch (e) { c.innerHTML = '<div class="save-status err">' + escapeHTML(e.message) + '</div>'; }
+}
+
+function btCell(v, suffix) { return (v == null || v === '') ? '\u2014' : (escapeHTML(String(v)) + (suffix || '')); }
+
+function btRenderTable() {
+  const keys = btSortKeys(BT_DATA);
+  const rows = keys.map(k => {
+    const b = BT_DATA[k];
+    const editable = !!(b.source_system && b.source_id);
+    return '<tr data-k="' + escapeAttr(k) + '">' +
+      '<td style="white-space:nowrap"><strong>' + escapeHTML(k) + '</strong></td>' +
+      '<td class="bt-best">' + btCell(b.time) + '</td>' +
+      '<td class="bt-pts">' + btCell(b.power_points) + '</td>' +
+      '<td>' + btCell(b.usa_standard) + '</td>' +
+      '<td>' + btCell(b.next_std) + '</td>' +
+      '<td>' + btCell(b.time_needed) + '</td>' +
+      '<td>' + btCell(b.drop) + '</td>' +
+      '<td>' + btCell(b.drop_pct, '%') + '</td>' +
+      '<td class="bt-age">' + btCell(b.age_at_swim) + '</td>' +
+      '<td class="bt-meet">' + btCell(b.meet) + '</td>' +
+      '<td>' + (editable ? '<button class="ec-btn-sm" onclick="btEditRow(this)">Edit</button>' : '<span title="No source key \u2014 not editable">\u2014</span>') + '</td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('sections-container').innerHTML =
+    '<div style="overflow-x:auto"><table class="swm-table bt-table" style="width:100%;border-collapse:collapse;min-width:860px">' +
+    '<thead><tr><th style="text-align:left">Event</th><th style="text-align:left">Best</th><th style="text-align:left">Pts</th>' +
+    '<th style="text-align:left">Std</th><th style="text-align:left">Next</th><th style="text-align:left">Time Needed</th>' +
+    '<th style="text-align:left">Drop</th><th style="text-align:left">%</th><th style="text-align:left">Age</th>' +
+    '<th style="text-align:left">Meet</th><th></th></tr></thead>' +
+    '<tbody id="bt-rows">' + rows + '</tbody></table></div>' +
+    '<div id="bt-status" class="save-status" style="margin-top:8px"></div>';
+}
+
+function btEditRow(btn) {
+  const tr = btn.closest('tr');
+  const k = tr.dataset.k, b = BT_DATA[k];
+  tr.querySelector('.bt-best').innerHTML = '<input class="rec-i bt-in-time" value="' + escapeAttr(b.time || '') + '" style="width:86px">' +
+    '<input class="rec-i bt-in-date" type="date" value="' + escapeAttr(b.date || '') + '" style="width:130px;margin-top:4px" title="Date swum (drives Age)">';
+  tr.querySelector('.bt-pts').innerHTML = '<input class="rec-i bt-in-pts" type="number" min="0" max="1200" value="' + (b.power_points != null ? b.power_points : '') + '" style="width:70px">';
+  tr.querySelector('.bt-meet').innerHTML = '<input class="rec-i bt-in-meet" value="' + escapeAttr(b.meet || '') + '" style="min-width:150px">';
+  btn.textContent = 'Save';
+  btn.onclick = function () { btSaveRow(this); };
+  const cancel = document.createElement('button');
+  cancel.className = 'ec-btn-sm'; cancel.textContent = '\u2715'; cancel.title = 'Cancel';
+  cancel.style.marginLeft = '4px';
+  cancel.onclick = function () { btRenderTable(); };
+  btn.after(cancel);
+}
+
+async function btSaveRow(btn) {
+  const tr = btn.closest('tr');
+  const k = tr.dataset.k, b = BT_DATA[k];
+  const status = document.getElementById('bt-status');
+  const tRaw = tr.querySelector('.bt-in-time').value.trim();
+  const secs = swmParseSeconds(tRaw);
+  if (secs == null) { status.className = 'save-status err'; status.textContent = 'Enter a valid time like 39.58 or 1:25.42.'; return; }
+  const dateV = tr.querySelector('.bt-in-date').value || b.date;
+  const ptsV = tr.querySelector('.bt-in-pts').value;
+  const meetV = tr.querySelector('.bt-in-meet').value.trim();
+  const details = Object.assign({}, b.details || {});
+  if (ptsV) details.power_points = parseInt(ptsV, 10); else delete details.power_points;
+  if (meetV) details.meet = meetV; else delete details.meet;
+  btn.disabled = true;
+  try {
+    await apiPost('/focms/v1/personal_records?upsert=true', {
+      student_id: STUDENT_ID, record_kind: 'swim_best', title: k,
+      achieved_date: dateV || null,
+      value_numeric: secs, value_text: tRaw,
+      details: details,
+      prior_value_numeric: b.prior_seconds != null ? b.prior_seconds : null,
+      total_drop_numeric: b.drop != null ? b.drop : null,
+      visibility: b.visibility || 'private',
+      source_system: b.source_system, source_id: b.source_id
+    });
+    status.className = 'save-status ok'; status.textContent = 'Saved ' + k + ' \u2014 refreshing\u2026';
+    showToast('Saved ' + k, 'success');
+    await renderBestTimes();
+  } catch (e) {
+    btn.disabled = false;
+    status.className = 'save-status err'; status.textContent = 'Save failed: ' + (e.message || '').slice(0, 160);
+  }
 }
 
 let CAT_FILTER = null;
