@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v236 (2026-07-16): Drill location is now a standard address block - Drill street address + ZIP (auto-fills city/state via attachZipTrio) + City + State, saved as drill_street/drill_zip/drill_city/drill_state in details. Detail card composes the full address; legacy drill_location string still displays as fallback.
   // v235 (2026-07-16): USNSCC sections now render as the portal-standard white .section cards (white bg, #E5E7EB border, 14px radius) on BOTH the edit form and the detail view, so Training and Promotions content is unmistakably contained in its own card. Removed the Date-of-last-promotion field (form, save keys, detail row).
   // v234 (2026-07-16): Unit Information gains Unit ID (e.g. 084BCS), Commanding Officer, Unit phone, Unit email, Member type (NLCC/NSCC dropdown) - on the edit form, the save keys, and the detail card.
   // v233 (2026-07-16): USNSCC cards restyled to the portal-standard flat row look (matching every other card in the app): no gray boxes - flat sections with hairline #F6F6F3 dividers, Lora navy section titles, ec-meta gray field rows. Applied to both the detail-view cards and the edit-form section cards.
@@ -2879,7 +2880,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
       ['Unit ID', dd0.usnscc_unit_id], ['Member type', dd0.usnscc_member_type],
       ['Commanding Officer', dd0.usnscc_co],
       ['Unit phone', dd0.usnscc_unit_phone], ['Unit email', dd0.usnscc_unit_email],
-      ['Drill location', dd0.drill_location], ['Drill schedule', dd0.drill_schedule]]));
+      ['Drill location', [dd0.drill_street, dd0.drill_city, [dd0.drill_state, dd0.drill_zip].filter(Boolean).join(' ')].filter(Boolean).join(', ') || dd0.drill_location],
+      ['Drill schedule', dd0.drill_schedule]]));
     html += _cShell('Training',
       _cRows([
         ['Recruit Training / NLO', dd0.usnscc_rt_completed],
@@ -3383,7 +3385,10 @@ function ecEdit(id, presetProgCode) {
     ecField('usnscc_co', 'Commanding Officer', dd.usnscc_co) +
     ecRowTwo(ecField('usnscc_unit_phone', 'Unit phone', dd.usnscc_unit_phone),
              ecField('usnscc_unit_email', 'Unit email', dd.usnscc_unit_email)) +
-    ecField('drill_location', 'Drill location', a.drill_location || dd.drill_location) +
+    ecField('drill_street', 'Drill street address', dd.drill_street || dd.drill_location) +
+    ecRowTwo('<label class="ec-lbl">Drill ZIP<input class="ec-in" data-k="drill_zip" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state" value="' + escapeAttr(dd.drill_zip || '') + '"></label>',
+             ecRowTwo(ecField('drill_city', 'Drill city', dd.drill_city),
+                      ecField('drill_state', 'Drill state', dd.drill_state))) +
     ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule)) +
     _cadetFormCard('Training', 'Recruit Training + advanced trainings',
     ecRowTwo(ecField('usnscc_rt_completed', 'Recruit Training / NLO completed', dd.usnscc_rt_completed, false, 'date'),
@@ -3429,6 +3434,7 @@ function ecEdit(id, presetProgCode) {
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
   attachZipTrio(document.getElementById('ec-org-zip'), byKey('organization_city'), byKey('organization_state'), !id);
+  attachZipTrio(byKey('drill_zip'), byKey('drill_city'), byKey('drill_state'), false);  // v236
   mediaWidgetRenderChips('ec-media'); // v226
 }
 
@@ -3462,7 +3468,7 @@ async function ecSave(id) {
   }
   // v228: USNSCC keys live in details JSONB; drop them when the block is hidden
   var _cWrap = document.getElementById('usnscc-wrap');
-  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_location', 'drill_schedule',
+  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_street', 'drill_zip', 'drill_city', 'drill_state', 'drill_schedule',
                 'usnscc_unit_id', 'usnscc_member_type', 'usnscc_co', 'usnscc_unit_phone', 'usnscc_unit_email',
                 'usnscc_rt_completed', 'usnscc_training_notes', 'usnscc_rank', 'usnscc_pt_current', 'usnscc_coursework'];
   if (!_cWrap || _cWrap.style.display === 'none') {
