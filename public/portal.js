@@ -148,6 +148,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v227 (2026-07-16): Best Times grouped by stroke (Freestyle, Backstroke, Breaststroke, Butterfly, IM) with LCM then SCY sub-bands under each stroke; navy stroke header rows, lavender course subheader rows.
+  // v226 (2026-07-16): universal media widget on every Extracurricular entry (Swim and Dive Club and every other program). Parents can attach photos, videos, and documents on any EC form. Widget renders in ecEdit, chip count on ecRow, chip grid on renderEntryDetail. IDs stored on affiliation.media_ids (JSONB passthrough) and re-hydrated on read.
   // v213 (2026-07-16): race log restyled to the Best Times look (compact single-line rows, meet ellipsized w/ tooltip); Best Times Meet column now populated server-side (v0.12.137 race-match).
   // v211 (2026-07-16): breadcrumbs moved to the standard top slot (under "All pillars") on every Extracurricular page.
   // v210 (2026-07-16): full race log (every swim race, newest first) on the swim program page below the metrics strip.
@@ -2571,15 +2573,16 @@ let BT_DATA = null;
 let BT_CRUMB = '';
 const BT_STROKE_ORDER = ['Free','Back','Breast','Fly','IM'];
 
+function btStrokeOf(k) { const p = k.split(' '); return p.slice(1, -1).join(' '); }
+function btCourseOf(k) { return k.slice(-3); }
 function btSortKeys(bests) {
+  // v227: stroke > course (LCM then SCY) > distance
   return Object.keys(bests).sort((a, b) => {
-    const pa = a.split(' '), pb = b.split(' ');
-    const sa = pa.slice(1, -1).join(' '), sb = pb.slice(1, -1).join(' ');
-    const so = BT_STROKE_ORDER.indexOf(sa) - BT_STROKE_ORDER.indexOf(sb);
+    const so = BT_STROKE_ORDER.indexOf(btStrokeOf(a)) - BT_STROKE_ORDER.indexOf(btStrokeOf(b));
     if (so) return so;
-    const dd = parseInt(pa[0], 10) - parseInt(pb[0], 10);
-    if (dd) return dd;
-    return a.slice(-3) === 'LCM' ? -1 : 1;
+    const ca = btCourseOf(a), cb = btCourseOf(b);
+    if (ca !== cb) return ca === 'LCM' ? -1 : 1;
+    return parseInt(a, 10) - parseInt(b, 10);
   });
 }
 
@@ -2599,11 +2602,26 @@ function btCell(v, suffix) { return (v == null || v === '') ? '\u2014' : (escape
 
 function btRenderTable() {
   const keys = btSortKeys(BT_DATA);
-  const rows = keys.map(k => {
+  // v227: group rows by stroke; within each stroke a header row, then an LCM
+  // sub-band followed by an SCY sub-band. Sort already delivers this order.
+  const STROKE_LABELS = { Free: 'Freestyle', Back: 'Backstroke', Breast: 'Breaststroke', Fly: 'Butterfly', IM: 'Individual Medley' };
+  let rows = '', lastStroke = null, lastCourse = null;
+  keys.forEach(k => {
+    const stroke = btStrokeOf(k), course = btCourseOf(k);
+    if (stroke !== lastStroke) {
+      rows += '<tr class="bt-stroke-hdr"><td colspan="11" style="background:var(--navy);color:#fff;font-family:Lora,serif;font-weight:600;font-size:14.5px;padding:8px 10px">' +
+        escapeHTML(STROKE_LABELS[stroke] || stroke) + '</td></tr>';
+      lastStroke = stroke; lastCourse = null;
+    }
+    if (course !== lastCourse) {
+      rows += '<tr class="bt-course-hdr"><td colspan="11" style="background:#EEEDF7;color:var(--navy);font-weight:600;font-size:12px;letter-spacing:.06em;padding:5px 10px">' +
+        (course === 'LCM' ? 'LONG COURSE METERS (LCM)' : 'SHORT COURSE YARDS (SCY)') + '</td></tr>';
+      lastCourse = course;
+    }
     const b = BT_DATA[k];
     const editable = !!(b.source_system && b.source_id);
-    return '<tr data-k="' + escapeAttr(k) + '">' +
-      '<td style="white-space:nowrap"><strong>' + escapeHTML(k) + '</strong></td>' +
+    rows += '<tr data-k="' + escapeAttr(k) + '">' +
+      '<td style="white-space:nowrap;padding-left:18px"><strong>' + escapeHTML(k) + '</strong></td>' +
       '<td class="bt-best">' + btCell(b.time) + '</td>' +
       '<td class="bt-pts">' + btCell(b.power_points) + '</td>' +
       '<td>' + btCell(b.usa_standard) + '</td>' +
@@ -2615,7 +2633,7 @@ function btRenderTable() {
       '<td class="bt-meet">' + btCell(b.meet) + '</td>' +
       '<td>' + (editable ? '<button class="ec-btn-sm" onclick="btEditRow(this)">Edit</button>' : '<span title="No source key \u2014 not editable">\u2014</span>') + '</td>' +
       '</tr>';
-  }).join('');
+  });
   document.getElementById('sections-container').innerHTML =
     BT_CRUMB +
     '<div style="overflow-x:auto"><table class="swm-table bt-table" style="width:100%;border-collapse:collapse;min-width:860px">' +
@@ -2816,6 +2834,16 @@ function renderEntryDetail(catCode, progCode, affilId) {
     (/swim/i.test((prog && prog.title) || (a.organization_name || '')) ? '<button class="save-btn" onclick="renderSwimMeetForm()">Enter swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
   html += ecRow(a);
+  // v226: read-only media chip grid on entry detail (widget rendered inside ecEdit is the editable one)
+  const _dmids = normalizeMediaIds(a);
+  if (_dmids.length) {
+    html += '<div style="margin-top:18px;padding:12px 14px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px;margin-bottom:8px">Attached media <span style="font-weight:400;color:#7A8A9E;font-size:12px">(' + _dmids.length + ')</span></div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+      _dmids.map(function(mid){
+        return '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;cursor:pointer" onclick="mediaWidgetView(\'' + mid + '\')" title="Open media">\ud83d\udcce ' + mid.slice(0, 8) + '</span>';
+      }).join('') + '</div></div>';
+  }
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
     const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
       .sort((x, y) => (y.event_date || '').localeCompare(x.event_date || ''));
@@ -3094,9 +3122,11 @@ function ecRow(a) {
   const period = (a.role_start_date || '') + (a.role_end_date ? ' \u2192 ' + a.role_end_date : (a.role_start_date ? ' \u2192 present' : ''));
   const hrs = a.weekly_hours ? a.weekly_hours + ' hrs/wk' : (a.total_hours ? a.total_hours + ' total hrs' : '');
   const coach = a.coach_name ? ' \u00b7 ' + escapeHTML(a.coach_name) + (a.coach_role ? ' (' + escapeHTML(a.coach_role) + ')' : '') : '';
+  const mCount = normalizeMediaIds(a).length; // v226
+  const mBadge = mCount ? ' \u00b7 \ud83d\udcce ' + mCount + (mCount === 1 ? ' file' : ' files') : '';
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(a.organization_name) +
     (a.role ? ' \u2014 ' + escapeHTML(a.role) : '') + '</div>' +
-    '<div class="ec-meta">' + escapeHTML(period) + (hrs ? ' \u00b7 ' + hrs : '') + coach + '</div>' +
+    '<div class="ec-meta">' + escapeHTML(period) + (hrs ? ' \u00b7 ' + hrs : '') + coach + mBadge + '</div>' +
     ((a.usa_zone || a.usa_lsc || a.usa_club_code) ?
       '<div class="ec-meta">USA Swimming: ' + [a.usa_zone ? escapeHTML(a.usa_zone) + ' Zone' : null, a.usa_lsc ? escapeHTML(a.usa_lsc) : null, a.usa_club_code ? escapeHTML(a.usa_club_code) : null].filter(Boolean).join(' \u203a ') + '</div>' : '') +
     renderRowSkillsAndBadge(a) +
@@ -3106,6 +3136,138 @@ function ecRow(a) {
       askRecBtn(a.coach_email, a.coach_name || a.organization_name, 'teacher') + addLetterBtn('', a.coach_name || a.organization_name) : '') +
     '<button onclick="ecEdit(\'' + a.id + '\')">Edit</button>' +
     '<button onclick="ecDelete(\'' + a.id + '\')">Delete</button></div></div>';
+}
+
+/* ============ v226: universal media widget ============
+   Reusable across every data-entry form. Accepts images, video, PDFs, docs.
+   Attach via file input; multi-file, multi-attach. IDs are stored as JSON on
+   the container's data-mids attribute and collected on save.
+   Public API:
+     mediaWidgetHtml(id, label, initialIds)      -> HTML string (self-contained)
+     mediaWidgetCollect(id)                      -> [uuid, ...]
+     mediaWidgetOnPick(inputEl)                  -> upload handler (used inline)
+     mediaWidgetRenderChips(id)                  -> re-renders chips from data-mids
+     mediaWidgetRemove(el, uuid)                 -> chip X handler
+     mediaWidgetView(uuid)                       -> open media in a new tab
+   Kind detection is by MIME family so callers do not have to know.
+*/
+function mediaKindFromMime(m) {
+  m = String(m || '').toLowerCase();
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (m === 'application/pdf' || m.startsWith('text/') ||
+      m.indexOf('word') >= 0 || m.indexOf('excel') >= 0 || m.indexOf('sheet') >= 0 ||
+      m.indexOf('powerpoint') >= 0 || m.indexOf('presentation') >= 0 ||
+      m.indexOf('opendocument') >= 0) return 'document';
+  return 'other';
+}
+function mediaKindIcon(k) {
+  return k === 'image' ? '\ud83d\uddbc\ufe0f'
+       : k === 'video' ? '\ud83c\udfa5'
+       : k === 'document' ? '\ud83d\udcc4'
+       : '\ud83d\udcce';
+}
+function mediaWidgetHtml(id, label, initialIds) {
+  const arr = Array.isArray(initialIds) ? initialIds.filter(Boolean) : [];
+  const attr = escapeAttr(JSON.stringify(arr));
+  return '<div class="ec-media-widget" id="' + id + '" data-mids="' + attr + '" style="margin:10px 0 14px;padding:12px 14px;border:1px dashed #C7CBD6;border-radius:10px;background:#FAFBFD">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">' + escapeHTML(label || 'Photos, videos & documents') +
+    ' <span style="font-weight:400;color:#7A8A9E;font-size:12px">(optional, multi-attach)</span></div>' +
+    '<label class="annot-file" style="cursor:pointer;background:var(--orange);color:#fff;padding:6px 12px;border-radius:6px;font-size:12.5px;font-weight:600">+ Add media' +
+    '<input type="file" multiple accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.odt,.ods,.odp,.heic,.webp" style="display:none" onchange="mediaWidgetOnPick(this)"></label>' +
+    '</div>' +
+    '<div class="ec-media-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>' +
+    '<div style="font-size:11.5px;color:#7A8A9E;margin-top:6px">Photos and PDFs on any plan. Video needs a paid storage plan. Files are private to your family unless the entry is set to publish.</div>' +
+    '</div>';
+}
+function mediaWidgetContainer(inputEl) {
+  return inputEl.closest ? inputEl.closest('.ec-media-widget') : null;
+}
+function mediaWidgetIds(container) {
+  if (!container) return [];
+  try { return JSON.parse(container.dataset.mids || '[]'); } catch (e) { return []; }
+}
+function mediaWidgetSetIds(container, ids) {
+  if (container) container.dataset.mids = JSON.stringify(ids || []);
+}
+function mediaWidgetCollect(id) {
+  const c = document.getElementById(id);
+  return mediaWidgetIds(c);
+}
+function mediaWidgetRenderChips(id) {
+  const c = document.getElementById(id); if (!c) return;
+  const wrap = c.querySelector('.ec-media-chips'); if (!wrap) return;
+  const ids = mediaWidgetIds(c);
+  if (!ids.length) { wrap.innerHTML = '<span style="font-size:12px;color:#7A8A9E">No media attached yet.</span>'; return; }
+  wrap.innerHTML = ids.map(function(mid){
+    return '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;display:inline-flex;align-items:center;gap:6px" title="Click to open">' +
+      '<span onclick="mediaWidgetView(\'' + mid + '\')" style="cursor:pointer">\ud83d\udcce ' + mid.slice(0, 8) + '</span>' +
+      '<span class="art-x" style="cursor:pointer;color:#B93A2F;font-weight:700" onclick="mediaWidgetRemove(this,\'' + mid + '\')">\u00d7</span></span>';
+  }).join('');
+}
+async function mediaWidgetOnPick(inputEl) {
+  const container = mediaWidgetContainer(inputEl);
+  const files = Array.from(inputEl.files || []);
+  if (!container || !files.length) return;
+  for (const f of files) {
+    if (f.size > 200 * 1024 * 1024) { showToast(f.name + ' exceeds 200 MB - skipped', 'error'); continue; }
+    const kind = mediaKindFromMime(f.type);
+    showToast('Uploading ' + f.name + '\u2026', 'success');
+    try {
+      const b64 = await new Promise(function(res, rej){
+        const r = new FileReader();
+        r.onload = function(){ res(String(r.result).split(',')[1]); };
+        r.onerror = rej; r.readAsDataURL(f);
+      });
+      const res = await apiUpload({
+        filename: f.name,
+        mime_type: f.type || 'application/octet-stream',
+        content_base64: b64,
+        kind: kind,
+        visibility: 'unlisted',
+        student_id: STUDENT_ID
+      });
+      const mid = res.id || res.media_id || res.artifact_id;
+      if (mid) {
+        const ids = mediaWidgetIds(container);
+        ids.push(mid);
+        mediaWidgetSetIds(container, ids);
+        mediaWidgetRenderChips(container.id);
+        showToast('Attached ' + f.name, 'success');
+      }
+    } catch (e) {
+      showToast('Upload failed (' + f.name + '): ' + e.message, 'error');
+    }
+  }
+  inputEl.value = '';
+}
+function mediaWidgetRemove(el, mid) {
+  const container = el.closest('.ec-media-widget'); if (!container) return;
+  const ids = mediaWidgetIds(container).filter(function(x){ return x !== mid; });
+  mediaWidgetSetIds(container, ids);
+  mediaWidgetRenderChips(container.id);
+}
+async function mediaWidgetView(mid) {
+  try {
+    const r = await fetch(API_BASE + '/focms/v1/media/' + mid, {
+      headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Tenant-Id': TENANT_ID }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 30000);
+  } catch (e) {
+    showToast('Could not open media: ' + e.message, 'error');
+  }
+}
+function normalizeMediaIds(a) {
+  // v226: accept ids on top-level media_ids OR nested in details.media_ids
+  const top = Array.isArray(a && a.media_ids) ? a.media_ids : [];
+  const det = a && a.details && Array.isArray(a.details.media_ids) ? a.details.media_ids : [];
+  const merged = top.concat(det).filter(Boolean);
+  return Array.from(new Set(merged));
 }
 
 function ecEdit(id, presetProgCode) {
@@ -3119,7 +3281,7 @@ function ecEdit(id, presetProgCode) {
   const usaOn = !!(a.usa_member || a.usa_zone || a.usa_lsc || a.usa_club_code);
   const usaBlock =
     '<div id="usa-sw-wrap" style="' + (isSwimAffil ? '' : 'display:none') + '">' +
-    '<label class="ec-lbl" style="flex-direction:row;align-items:center;gap:8px;margin-top:8px">' +
+    '<label class="ec-check" style="margin-top:8px;display:flex;align-items:center;gap:8px;white-space:nowrap">' +
     '<input type="checkbox" class="ec-in" data-k="usa_member"' + (usaOn ? ' checked' : '') +
     ' onchange="var f=document.getElementById(\'usa-sw-fields\');if(f)f.style.display=this.checked?\'\':\'none\'">' +
     ' This team is a USA Swimming member club</label>' +
@@ -3150,11 +3312,13 @@ function ecEdit(id, presetProgCode) {
       ecField('coach_email', 'Coach email', a.coach_email) : '') +
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
+    mediaWidgetHtml('ec-media', 'Photos, videos & documents', normalizeMediaIds(a)) +
     skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
   attachZipTrio(document.getElementById('ec-org-zip'), byKey('organization_city'), byKey('organization_state'), !id);
+  mediaWidgetRenderChips('ec-media'); // v226
 }
 
 function ecProgramPicker(a) {
@@ -3186,6 +3350,10 @@ async function ecSave(id) {
     delete item.usa_member; delete item.usa_zone; delete item.usa_lsc; delete item.usa_club_code;
   }
   item.skills_gained = readSkillsFromForm();
+  // v226: media widget - top-level + JSONB details fallback so older APIs still store it
+  const _mids = mediaWidgetCollect('ec-media');
+  item.media_ids = _mids;
+  item.details = Object.assign({}, item.details || {}, { media_ids: _mids });
   const other = document.querySelector('.ec-in[data-k="organization_name_other"]');
   if (other && other.value.trim()) item.organization_name = other.value.trim();
   delete item.organization_name_other;
