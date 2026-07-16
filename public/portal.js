@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v213 (2026-07-16): race log restyled to the Best Times look (compact single-line rows, meet ellipsized w/ tooltip); Best Times Meet column now populated server-side (v0.12.137 race-match).
   // v211 (2026-07-16): breadcrumbs moved to the standard top slot (under "All pillars") on every Extracurricular page.
   // v210 (2026-07-16): full race log (every swim race, newest first) on the swim program page below the metrics strip.
   // v209 (2026-07-16): Swim Metrics strip moved from the EC hub to the swim program page (Extracurricular > Mainstream Sports & Athletics > Youth Swim Team); age-group label prettified.
@@ -2617,7 +2618,6 @@ function renderProgramEntries(catCode, progCode) {
     (isSwimProg ? '<button class="save-btn" onclick="renderSwimMeetForm()">Enter swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (isSwimProg) html += '<div id="swim-metrics-strip"></div>';
-  if (isSwimProg) html += '<div id="swim-race-log" style="margin:14px 0"></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else {
     const cards = rows.map(a => {
@@ -2633,6 +2633,7 @@ function renderProgramEntries(catCode, progCode) {
     }).join('');
     html += '<div class="ec-grid">' + cards + '</div>';
   }
+  if (isSwimProg) html += '<div id="swim-race-log" style="margin:14px 0"></div>';
   ecSetHeader(prog ? prog.title : 'Program', t ? t.label : '');
   document.getElementById('sections-container').innerHTML = html;
   if (isSwimProg) { loadSwimMetricsStrip(); loadSwimRaceLog(); }
@@ -2649,15 +2650,16 @@ async function loadSwimRaceLog() {
     if (!races.length) { host.innerHTML = ''; return; }
     const rows = races.map(r => {
       const ev = (r.distance_m != null && r.stroke && r.course) ? (r.distance_m + ' ' + r.stroke + ' ' + r.course) : (r.title || '');
+      const meetTxt = r.meet || '';
       return '<tr>' +
         '<td style="white-space:nowrap">' + btCell(r.date) + '</td>' +
         '<td style="white-space:nowrap"><strong>' + escapeHTML(ev) + '</strong>' + (r.is_relay_leg ? ' <span title="Relay leg" style="color:#7A8A9E">(relay)</span>' : '') + '</td>' +
-        '<td>' + btCell(r.time) + '</td>' +
-        '<td>' + btCell(r.points) + '</td>' +
-        '<td>' + btCell(r.time_standard) + '</td>' +
-        '<td>' + btCell(r.place) + '</td>' +
-        '<td>' + btCell(r.age) + '</td>' +
-        '<td>' + btCell(r.meet) + '</td>' +
+        '<td style="white-space:nowrap">' + btCell(r.time) + '</td>' +
+        '<td style="white-space:nowrap">' + btCell(r.points) + '</td>' +
+        '<td style="white-space:nowrap">' + btCell(r.time_standard) + '</td>' +
+        '<td style="white-space:nowrap">' + btCell(r.place) + '</td>' +
+        '<td style="white-space:nowrap">' + btCell(r.age) + '</td>' +
+        '<td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escapeAttr(meetTxt) + '">' + btCell(meetTxt) + '</td>' +
         '</tr>';
     }).join('');
     host.innerHTML =
