@@ -1182,6 +1182,41 @@ function occAttach(inputId) {
   });
   document.addEventListener('click', function(ev){ if (!box.contains(ev.target) && ev.target !== el) box.innerHTML = ''; });
 }
+/* v224: SITE-WIDE RULE - any form asking for city/state/(zip) leads with ZIP,
+   ZIP entry auto-fills city + state (via /catalogs/zip), and empty forms
+   default to the child's physical home address. */
+let STUDENT_HOME_ADDR = null;
+async function studentHomeAddr() {
+  if (STUDENT_HOME_ADDR !== null) return STUDENT_HOME_ADDR;
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/addresses');
+    STUDENT_HOME_ADDR = (d && d.physical) || {};
+  } catch (e) { STUDENT_HOME_ADDR = {}; }
+  return STUDENT_HOME_ADDR;
+}
+async function zipTrioFill(zEl, cEl, sEl) {
+  const z = ((zEl && zEl.value) || '').trim().slice(0, 5);
+  if (!/^\d{5}$/.test(z)) return;
+  try {
+    const d = await apiGet('/focms/v1/catalogs/zip/' + z);
+    if (cEl && d.city) cEl.value = d.city;
+    if (sEl && d.state_iso) sEl.value = d.state_iso;
+  } catch (e) {}
+}
+/* Wire a zip/city/state trio: zip input auto-fills the other two; when the
+   whole trio is empty (new record) it defaults to the child's home address. */
+async function attachZipTrio(zEl, cEl, sEl, defaultToHome) {
+  if (!zEl) return;
+  if (!zEl.__ziptrio) { zEl.__ziptrio = true; zEl.addEventListener('input', function(){ zipTrioFill(zEl, cEl, sEl); }); }
+  if (defaultToHome && !zEl.value.trim() && (!cEl || !cEl.value.trim()) && (!sEl || !sEl.value.trim())) {
+    const h = await studentHomeAddr();
+    if (h.zip_postal_code) zEl.value = h.zip_postal_code;
+    if (cEl && h.city_town) cEl.value = h.city_town;
+    if (sEl && h.state_province) sEl.value = h.state_province;
+  }
+}
+function byKey(k) { return document.querySelector('.ec-in[data-k="' + k + '"]'); }
+
 function zipAttach(pfx) {
   var el = document.getElementById(pfx + '-zip_postal_code');
   if (!el || el.__zip) return;
@@ -2431,6 +2466,7 @@ function renderSwimMeetForm() {
     '<label class="ec-lbl">End date<input class="rec-i" id="swm-d2" type="date"></label>' +
     '<label class="ec-lbl">Course *<select class="rec-i" id="swm-course"><option>SCY</option><option>LCM</option><option>SCM</option></select></label>' +
     '<label class="ec-lbl">Location \u2014 pool / venue<input class="rec-i" id="swm-loc" placeholder="Westside Aquatic Center"></label>' +
+    '<label class="ec-lbl">ZIP code<input class="rec-i" id="swm-zip" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state"></label>' +
     '<label class="ec-lbl">City<input class="rec-i" id="swm-city" placeholder="Lewisville"></label>' +
     '<label class="ec-lbl">State<input class="rec-i" id="swm-state" placeholder="TX" maxlength="2" style="text-transform:uppercase"></label>' +
     '<label class="ec-lbl">Swimmer age at meet *<input class="rec-i" id="swm-age" type="number" min="4" max="25" placeholder="11"></label>' +
@@ -2456,6 +2492,7 @@ function renderSwimMeetForm() {
     '<div id="swm-status" class="save-status" style="margin-top:8px"></div>' +
     '</div>';
   swimMeetAddRow(); swimMeetAddRow(); swimMeetAddRow();
+  attachZipTrio(document.getElementById('swm-zip'), document.getElementById('swm-city'), document.getElementById('swm-state'), true);
 }
 
 async function saveSwimMeet() {
@@ -2498,7 +2535,8 @@ async function saveSwimMeet() {
     const details = { meet: meet, course: course, stroke: scode, discipline: 'individual', is_relay: false,
                       distance: dist, finals_time: r.time, finals_time_seconds: r.secs,
                       power_points: r.pts, place: r.place, time_standard: r.std, age: age,
-                      age_group: ageGrp || null, team: team || null, entered_via: 'parent_portal_v208' };
+                      age_group: ageGrp || null, team: team || null, location_zip: g('swm-zip').trim() || null,
+                      entered_via: 'parent_portal_v208' };
     try {
       await apiPost('/focms/v1/events?upsert=true', {
         student_id: STUDENT_ID, event_type: 'swim_race',
@@ -3102,8 +3140,9 @@ function ecEdit(id, presetProgCode) {
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
     ecRowTwo(ecField('weekly_hours', 'Hours per week', a.weekly_hours, false, 'number'),
              ecField('total_hours', 'Total hours', a.total_hours, false, 'number')) +
-    ecRowTwo(ecField('organization_city', 'City', a.organization_city),
-             ecField('organization_state', 'State', a.organization_state)) +
+    ecRowTwo('<label class="ec-lbl">ZIP code<input id="ec-org-zip" class="rec-i" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state"></label>',
+             ecRowTwo(ecField('organization_city', 'City', a.organization_city),
+                      ecField('organization_state', 'State', a.organization_state))) +
     ecField('organization_url', 'Website', a.organization_url) +
     (EC_FILTER === 'coach_relationship' || a.coach_name ?
       ecRowTwo(ecField('coach_name', 'Coach/mentor name', a.coach_name),
@@ -3115,6 +3154,7 @@ function ecEdit(id, presetProgCode) {
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
+  attachZipTrio(document.getElementById('ec-org-zip'), byKey('organization_city'), byKey('organization_state'), !id);
 }
 
 function ecProgramPicker(a) {
@@ -4000,10 +4040,10 @@ function schoolEdit(id) {
       }).join('') + '</select></label>' +
     ecField('street_address', 'Street address', sc.street_address) +
     ecRowTwo(
-      ecField('city_town', 'City', sc.city_town),
+      ecField('zip_postal_code', 'ZIP code (fills city + state)', sc.zip_postal_code),
       ecRowTwo(
-        ecField('state_province', 'State', sc.state_province),
-        ecField('zip_postal_code', 'Zip', sc.zip_postal_code)
+        ecField('city_town', 'City', sc.city_town),
+        ecField('state_province', 'State', sc.state_province)
       )
     ) +
     countryField('country', sc.country) +
@@ -4047,6 +4087,7 @@ function schoolEdit(id) {
     '<button class="save-btn" onclick="schoolSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openSchoolProfiles()">Cancel</button>' +
     '</div></div>';
+  attachZipTrio(byKey('zip_postal_code'), byKey('city_town'), byKey('state_province'), !id);
 }
 
 async function schoolSave(id) {
