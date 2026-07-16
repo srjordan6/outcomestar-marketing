@@ -1968,6 +1968,17 @@ const EC_CAT_SKILL_DOMAINS = {
   'Community, Inclusivity & Lifestyle': ['Leadership, Civics & Community Engagement','Social Dynamics, Leadership & Peer Skills','Social, Emotional & Autonomy','Identity, Boundaries & Emotional Maturity']
 };
 let FORM_SKILLS = [];
+/* v222: swim records offer ONLY the four technical/physical swim skills.
+   The five swim META-skills (micro-feedback loop, delayed gratification,
+   stress regulation, autonomous accountability, lactic resilience) are NEVER
+   listed on any parent-facing surface - they are internal signals inferred
+   from the activity by the engine. */
+const SWIM_SKILLS = [
+  'Aerobic and Anaerobic Conditioning',
+  'Biomechanical Fluidity & Kinesthetic Awareness',
+  'Precision Breath Management (Hypoxic Training)',
+  'Fine Motor Coordination'
+];
 function renderFormSkillChips() {
   const c = document.getElementById('sk-chips');
   if (!c) return;
@@ -1984,14 +1995,19 @@ function removeFormSkill(code) {
   FORM_SKILLS = FORM_SKILLS.filter(function(x){ return x !== code; });
   renderFormSkillChips();
 }
-function skillsGainedField(current, catName) {
+function skillsGainedField(current, catName, swimOnly) {
   FORM_SKILLS = (current || []).filter(Boolean).slice();
-  const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
-  const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
-  const opts = pool.map(sk =>
-    '<option value="' + (sk.code || '') + '">' +
-    escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
-    '</option>').join('');
+  let opts;
+  if (swimOnly) {
+    opts = SWIM_SKILLS.map(t => '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>').join('');
+  } else {
+    const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
+    const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
+    opts = pool.map(sk =>
+      '<option value="' + (sk.code || '') + '">' +
+      escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
+      '</option>').join('');
+  }
   const chips = FORM_SKILLS.length
     ? FORM_SKILLS.map(function(code){ return '<span class="ec-chip">' + escapeHTML(skillTitle(code)) + ' <span class="art-x" onclick="removeFormSkill(\'' + code.replace(/'/g, "\\'") + '\')">\u00d7</span></span>'; }).join(' ')
     : '<span class="cr-waiting" style="padding:0">No skills on this record yet.</span>';
@@ -3082,7 +3098,7 @@ function ecEdit(id, presetProgCode) {
       ecField('coach_email', 'Coach email', a.coach_email) : '') +
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
-    skillsGainedField(a.skills_gained, CAT_FILTER) +
+    skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
