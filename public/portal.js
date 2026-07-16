@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v211 (2026-07-16): breadcrumbs moved to the standard top slot (under "All pillars") on every Extracurricular page.
   // v210 (2026-07-16): full race log (every swim race, newest first) on the swim program page below the metrics strip.
   // v209 (2026-07-16): Swim Metrics strip moved from the EC hub to the swim program page (Extracurricular > Mainstream Sports & Athletics > Youth Swim Team); age-group label prettified.
   // v208 (2026-07-16): Swim Meet Results tabular entry form (meet + per-event time/points/place rows) in the Extracurricular hub.
@@ -278,6 +279,7 @@ function renderPillars() {
 
 async function openPillar(pillarCode) {
   if (!getToken()) { showToast("Set your API token first", "error"); return; }
+  if (typeof ecClearCrumb === 'function') ecClearCrumb();
   if (pillarCode === 'milestones') return openMilestones();
   if (pillarCode === 'skills') return openSkills();
   if (pillarCode === 'major_fit') return openMajorFit();
@@ -2084,12 +2086,19 @@ function ecSetHeader(title, desc) {
   const d = document.getElementById('pillar-view-desc'); if (d) d.textContent = desc || '';
 }
 function ecCrumbHtml(parts) {
-  return '<div class="pillar-breadcrumb" style="margin:0 0 14px">' + parts.map(function(p, i) {
+  // v211: breadcrumbs render in the standard top slot (#pillar-crumbtrail,
+  // directly under "\u2190 All pillars") on every page instead of inline below
+  // the title. Returns '' so all existing inline call sites relocate for free.
+  var h = '<div class="pillar-breadcrumb" style="margin:0 0 14px">' + parts.map(function(p, i) {
     return i < parts.length - 1
       ? '<button class="crumb-back" onclick="' + p.go + '">' + escapeHTML(p.label) + '</button> \u203a '
       : '<span class="crumb-here">' + escapeHTML(p.label) + '</span>';
   }).join('') + '</div>';
+  var slot = document.getElementById('pillar-crumbtrail');
+  if (slot) { slot.innerHTML = h; return ''; }
+  return h; // fallback if the slot is missing (stale portal.html)
 }
+function ecClearCrumb() { var el = document.getElementById('pillar-crumbtrail'); if (el) el.innerHTML = ''; }
 function ecTrailCrumb(leaf) {
   const parts = [{ label: 'Extracurricular', go: 'renderEcSections()' }];
   const view = ENTRY_VIEW || PROG_VIEW;
@@ -2145,6 +2154,7 @@ function renderEcSections() {
     '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
     '<div class="ec-count">'+unassigned+' <span>on record</span></div></button>';
   ecSetHeader('Extracurricular', 'Programs, activities, service, and coach relationships. Each one is a signal the engine reads for engagement, breadth, and sustained involvement.');
+  ecCrumbHtml([{ label: 'Extracurricular' }]);
   document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + '</div>';
 }
 

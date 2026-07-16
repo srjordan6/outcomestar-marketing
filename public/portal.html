@@ -523,6 +523,7 @@
 
   <div id="view-pillar" class="hidden">
     <button onclick="backToPillars()" class="back-link">← All pillars</button>
+    <div id="pillar-crumbtrail"></div>
     <div class="pillar-view-header">
       <h1 id="pillar-view-title" class="pillar-view-title"></h1>
       <p id="pillar-view-desc" class="pillar-view-sub"></p>
@@ -538,7 +539,7 @@
 </footer>
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
-<script src="/portal.js?v=210"></script>
+<script src="/portal.js?v=211"></script>
 <!-- chatwoot-widget -->
 <style>
   #chatwoot-hint {
