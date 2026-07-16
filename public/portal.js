@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v228 (2026-07-16): USNSCC structure block on Sea Cadet affiliations - Field Area dropdown (six official areas per seacadets.org), Region free-text, Unit name/code, drill location + schedule. Detects sea-cadet programs live like the USA Swimming block; keys stored in details JSONB (usnscc_area/usnscc_region/usnscc_unit/usnscc_unit_code/drill_location/drill_schedule).
   // v227 (2026-07-16): Best Times grouped by stroke (Freestyle, Backstroke, Breaststroke, Butterfly, IM) with LCM then SCY sub-bands under each stroke; navy stroke header rows, lavender course subheader rows.
   // v226 (2026-07-16): universal media widget on every Extracurricular entry (Swim and Dive Club and every other program). Parents can attach photos, videos, and documents on any EC form. Widget renders in ecEdit, chip count on ecRow, chip grid on renderEntryDetail. IDs stored on affiliation.media_ids (JSONB passthrough) and re-hydrated on read.
   // v213 (2026-07-16): race log restyled to the Best Times look (compact single-line rows, meet ellipsized w/ tooltip); Best Times Meet column now populated server-side (v0.12.137 race-match).
@@ -2029,6 +2030,10 @@ function ecSwimContext() {
   var isSwim = /swim/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var wrap = document.getElementById('usa-sw-wrap');
   if (wrap) wrap.style.display = isSwim ? '' : 'none';
+  // v228: same live-detect for Sea Cadets
+  var isCadet = /sea cadet|usnscc|naval sea/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var cwrap = document.getElementById('usnscc-wrap');
+  if (cwrap) cwrap.style.display = isCadet ? '' : 'none';
   var sel = document.getElementById('sk-add');
   if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : EC_POOL_OPTS);
   return isSwim;
@@ -3293,10 +3298,30 @@ function ecEdit(id, presetProgCode) {
     ecRowTwo(usaLscSelect(a.usa_lsc),
              ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code)) +
     '</div></div>';
+  // v228: USNSCC structure (Field Area > Region > Unit) on Sea Cadet affiliations.
+  // Six official Field Areas per seacadets.org (2026): the regional level the
+  // user sees; Region numbers are unit-specific so they stay free-text.
+  const USNSCC_AREAS = ['Northeast', 'Southeast', 'North Central', 'South Central', 'Northwest', 'Pacific Southwest'];
+  const isCadetAffil = /sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const dd = (a.details && typeof a.details === 'object') ? a.details : {};
+  const cadetBlock =
+    '<div id="usnscc-wrap" style="' + (isCadetAffil ? '' : 'display:none') + '">' +
+    '<div class="ec-lbl" style="font-weight:600">USNSCC structure <span style="font-weight:400;color:#7A8A9E">Field Area \u203a Region \u203a Unit</span></div>' +
+    ecRowTwo(
+      '<label class="ec-lbl">Field Area<select class="ec-in" data-k="usnscc_area"><option value=""></option>' +
+      USNSCC_AREAS.map(function(z){ return '<option' + ((a.usnscc_area || dd.usnscc_area) === z ? ' selected' : '') + '>' + z + '</option>'; }).join('') +
+      '</select></label>',
+      ecField('usnscc_region', 'Region (e.g. 8-3)', a.usnscc_region || dd.usnscc_region)) +
+    ecRowTwo(ecField('usnscc_unit', 'Unit name', a.usnscc_unit || dd.usnscc_unit),
+             ecField('usnscc_unit_code', 'Unit code (e.g. BLACK CAT SQ)', a.usnscc_unit_code || dd.usnscc_unit_code)) +
+    ecField('drill_location', 'Drill location', a.drill_location || dd.drill_location) +
+    ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule) +
+    '</div>';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
+    cadetBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -3348,6 +3373,16 @@ async function ecSave(id) {
   var _usaWrap = document.getElementById('usa-sw-wrap');
   if (!_usaWrap || _usaWrap.style.display === 'none') {
     delete item.usa_member; delete item.usa_zone; delete item.usa_lsc; delete item.usa_club_code;
+  }
+  // v228: USNSCC keys live in details JSONB; drop them when the block is hidden
+  var _cWrap = document.getElementById('usnscc-wrap');
+  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_location', 'drill_schedule'];
+  if (!_cWrap || _cWrap.style.display === 'none') {
+    _cKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _cd = {};
+    _cKeys.forEach(function(k){ if (item[k]) _cd[k] = item[k]; delete item[k]; });
+    item.details = Object.assign({}, item.details || {}, _cd);
   }
   item.skills_gained = readSkillsFromForm();
   // v226: media widget - top-level + JSONB details fallback so older APIs still store it
