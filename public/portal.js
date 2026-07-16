@@ -2238,12 +2238,26 @@ function swimMeetAddRow() {
    Row shape: EVENT  TIME  AGE  POINTS pts.  STD  MEET  TEAM  MM/DD/YYYY
    e.g. "50 BR LCM\t39.47\t11\t764 pts.\tAA\t2026 NT COR July Summer Invite\tIron Horse Aquatics\t07/11/2026" */
 const SWM_STROKE_FROM_CODE = { FR:'Free', FREE:'Free', BK:'Back', BACK:'Back', BR:'Breast', BREAST:'Breast', FL:'Fly', FLY:'Fly', IM:'IM' };
+let SWM_KNOWN_TEAMS = null; // distinct team names from the student's race history
 
-function swmParsePaste() {
+async function swmKnownTeams() {
+  if (SWM_KNOWN_TEAMS !== null) return SWM_KNOWN_TEAMS;
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/computed/swim-race-log?limit=500');
+    SWM_KNOWN_TEAMS = Array.from(new Set((d.races || []).map(r => r.team).filter(Boolean)))
+      .sort((a, b) => b.length - a.length); // longest first so the most specific name wins
+  } catch (e) { SWM_KNOWN_TEAMS = []; }
+  return SWM_KNOWN_TEAMS;
+}
+
+function swmParsePaste() { swmParsePasteAsync(); }
+async function swmParsePasteAsync() {
   const ta = document.getElementById('swm-paste');
   const msg = document.getElementById('swm-paste-msg');
   const raw = (ta.value || '').trim();
   if (!raw) { msg.textContent = 'Nothing to parse.'; return; }
+  const knownTeams = await swmKnownTeams();
+  let teamMisses = 0;
   const EVENT_START = /^(\d{2,4})\s+(FR|FREE|BK|BACK|BR|BREAST|FL|FLY|IM)\s+(SCY|LCM|SCM)\b/i;
   // The Data Hub can copy as one-line-per-ROW (tab separated) or one-line-per-CELL
   // (each column on its own line, meet names possibly wrapped across two lines).
@@ -2295,6 +2309,20 @@ function swmParsePaste() {
       const from = sIdx >= 0 ? sIdx + 1 : Math.max(1, dIdx - 2);
       meet = cells.slice(from, dIdx - 1).join(' ').trim() || null;
     }
+    if (!meet) {
+      // v215 fallback: some copy paths collapse tabs to SINGLE spaces, so no
+      // cell boundaries survive. Take the blob between the standard token and
+      // the date. The team is split off ONLY by exact match against the
+      // student's known team names (from race history) - word-guessing a
+      // spaced blob is unreliable. No match -> whole blob is the meet.
+      const seg = rest.match(/\b(?:AAAA|AAA|AA|A|BB|B)\b\s+(.+?)\s+\d{1,2}\/\d{1,2}\/\d{4}/);
+      if (seg) {
+        const blob = seg[1].trim();
+        const hit = knownTeams.find(k => blob.toLowerCase().endsWith(k.toLowerCase()));
+        if (hit) { team = blob.slice(blob.length - hit.length); meet = blob.slice(0, blob.length - hit.length).trim() || null; }
+        else { meet = blob; teamMisses++; }
+      }
+    }
     if (!time) { skipped.push(t.slice(0, 40)); return; }
     parsed.push({ ev: dist + ' ' + stroke, course: course, time: time, pts: pts ? parseInt(pts, 10) : null,
                   std: std, age: age, meet: meet, team: team, date: isoDate });
@@ -2329,6 +2357,7 @@ function swmParsePaste() {
   });
   msg.textContent = 'Added ' + parsed.length + ' swim' + (parsed.length === 1 ? '' : 's') +
     (skipped.length ? ' \u00b7 ' + skipped.length + ' line(s) skipped' : '') +
+    (teamMisses ? ' \u00b7 team not detected on ' + teamMisses + ' row(s) \u2014 check the Meet and Team fields' : '') +
     (mixed ? ' \u00b7 WARNING: ' + mixed + ' row(s) are a different course than the meet Course field \u2014 save those separately' : '');
   ta.value = '';
 }
