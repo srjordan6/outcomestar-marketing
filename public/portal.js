@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v210 (2026-07-16): full race log (every swim race, newest first) on the swim program page below the metrics strip.
   // v209 (2026-07-16): Swim Metrics strip moved from the EC hub to the swim program page (Extracurricular > Mainstream Sports & Athletics > Youth Swim Team); age-group label prettified.
   // v208 (2026-07-16): Swim Meet Results tabular entry form (meet + per-event time/points/place rows) in the Extracurricular hub.
   // v207 (2026-07-16): Swim Metrics strip (IMX/IMR/Power Index, computed on read) on the Extracurricular hub for any competitive swimmer.
@@ -2606,6 +2607,7 @@ function renderProgramEntries(catCode, progCode) {
     (isSwimProg ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
   if (isSwimProg) html += '<div id="swim-metrics-strip"></div>';
+  if (isSwimProg) html += '<div id="swim-race-log" style="margin:14px 0"></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else {
     const cards = rows.map(a => {
@@ -2623,7 +2625,41 @@ function renderProgramEntries(catCode, progCode) {
   }
   ecSetHeader(prog ? prog.title : 'Program', t ? t.label : '');
   document.getElementById('sections-container').innerHTML = html;
-  if (isSwimProg) loadSwimMetricsStrip();
+  if (isSwimProg) { loadSwimMetricsStrip(); loadSwimRaceLog(); }
+}
+
+/* v210: every race the swimmer has been in, newest first, on the swim program page. */
+async function loadSwimRaceLog() {
+  const host = document.getElementById('swim-race-log');
+  if (!host) return;
+  host.innerHTML = '<div class="ac-est">Loading race log\u2026</div>';
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/computed/swim-race-log?limit=1000');
+    const races = d.races || [];
+    if (!races.length) { host.innerHTML = ''; return; }
+    const rows = races.map(r => {
+      const ev = (r.distance_m != null && r.stroke && r.course) ? (r.distance_m + ' ' + r.stroke + ' ' + r.course) : (r.title || '');
+      return '<tr>' +
+        '<td style="white-space:nowrap">' + btCell(r.date) + '</td>' +
+        '<td style="white-space:nowrap"><strong>' + escapeHTML(ev) + '</strong>' + (r.is_relay_leg ? ' <span title="Relay leg" style="color:#7A8A9E">(relay)</span>' : '') + '</td>' +
+        '<td>' + btCell(r.time) + '</td>' +
+        '<td>' + btCell(r.points) + '</td>' +
+        '<td>' + btCell(r.time_standard) + '</td>' +
+        '<td>' + btCell(r.place) + '</td>' +
+        '<td>' + btCell(r.age) + '</td>' +
+        '<td>' + btCell(r.meet) + '</td>' +
+        '</tr>';
+    }).join('');
+    host.innerHTML =
+      '<div style="font-weight:600;font-size:15px;margin-bottom:8px">All races <span style="color:#7A8A9E;font-weight:400">(' + races.length + ' on record, newest first)</span></div>' +
+      '<div style="overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid #E3E7ED;border-radius:8px">' +
+      '<table class="swm-table" style="width:100%;border-collapse:collapse;min-width:760px">' +
+      '<thead style="position:sticky;top:0;background:#fff"><tr>' +
+      '<th style="text-align:left">Date</th><th style="text-align:left">Event</th><th style="text-align:left">Time</th>' +
+      '<th style="text-align:left">Pts</th><th style="text-align:left">Std</th><th style="text-align:left">Place</th>' +
+      '<th style="text-align:left">Age</th><th style="text-align:left">Meet</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch (e) { host.innerHTML = '<div class="save-status err">Race log: ' + escapeHTML((e.message || '').slice(0, 120)) + '</div>'; }
 }
 
 function renderEntryDetail(catCode, progCode, affilId) {
