@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v238 (2026-07-16): (1) Rank logger on Sea Cadet entries - when Type=Rank the name field becomes the NLCC/NSCC rate-ladder dropdown (badge/award keep free text; live-switches with Type); non-cadet entries unchanged. (2) Promotions card: Naval-coursework field removed everywhere (editor, save patch, detail row); PT-benchmarks checkbox on its own row.
   // v237 (2026-07-16): Training and Promotions REMOVED from the entry edit form (the form now carries Unit Information only). Each detail card gains its own Edit button opening an inline editor inside the card, saving just that section's keys via the affiliations endpoint (details merge). Entry form _cKeys trimmed to unit + drill keys.
   // v236 (2026-07-16): Drill location is now a standard address block - Drill street address + ZIP (auto-fills city/state via attachZipTrio) + City + State, saved as drill_street/drill_zip/drill_city/drill_state in details. Detail card composes the full address; legacy drill_location string still displays as fallback.
   // v235 (2026-07-16): USNSCC sections now render as the portal-standard white .section cards (white bg, #E5E7EB border, 14px radius) on BOTH the edit form and the detail view, so Training and Promotions content is unmistakably contained in its own card. Removed the Date-of-last-promotion field (form, save keys, detail row).
@@ -2895,8 +2896,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     html += _cShell('Promotions <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'promo\')">Edit</button>',
       '<div id="cadet-sec-promo">' + _cRows([
         ['Current rate', dd0.usnscc_rank],
-        ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : ''],
-        ['Coursework', dd0.usnscc_coursework]]) + '</div>' +
+        ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : '']]) + '</div>' +
       '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Rank, merit badges &amp; awards</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>' +
@@ -2954,15 +2954,13 @@ function cadetSecEdit(kind) {
         return '<label class="ec-check" style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" class="cs-tr" value="' + escapeAttr(t) + '"' + (ct.indexOf(t) !== -1 ? ' checked' : '') + '> ' + escapeHTML(t) + '</label>';
       }).join('') + '</div>';
   } else {
-    f = '<div class="ec-two">' +
-      '<label class="ec-lbl">Current rate / rank<select class="ec-in" id="cs-rank"><option value=""></option>' +
+    f = '<label class="ec-lbl">Current rate / rank<select class="ec-in" id="cs-rank"><option value=""></option>' +
       CADET_RATES.map(function(g){
         return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
           return '<option' + (dd.usnscc_rank === r ? ' selected' : '') + '>' + r + '</option>';
         }).join('') + '</optgroup>';
       }).join('') + '</select></label>' +
-      '<label class="ec-lbl">Naval coursework completed<input class="ec-in" id="cs-course" value="' + escapeAttr(dd.usnscc_coursework || '') + '"></label></div>' +
-      '<label class="ec-check" style="margin-top:8px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cs-pt"' + (dd.usnscc_pt_current ? ' checked' : '') + '> PT benchmarks current (biannual)</label>';
+      '<label class="ec-check" style="margin-top:10px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cs-pt"' + (dd.usnscc_pt_current ? ' checked' : '') + '> PT benchmarks current (biannual)</label>';
   }
   box.innerHTML = f + '<div class="ec-bar" style="margin-top:10px">' +
     '<button class="save-btn" onclick="cadetSecSave(\'' + kind + '\')">Save</button>' +
@@ -2977,7 +2975,6 @@ async function cadetSecSave(kind) {
     patch.usnscc_trainings = Array.from(document.querySelectorAll('.cs-tr:checked')).map(function(cb){ return cb.value; });
   } else {
     patch.usnscc_rank = (document.getElementById('cs-rank') || {}).value || '';
-    patch.usnscc_coursework = (document.getElementById('cs-course') || {}).value || '';
     patch.usnscc_pt_current = !!(document.getElementById('cs-pt') || {}).checked;
   }
   try {
@@ -3036,6 +3033,24 @@ function perfEdit(id) {
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
 }
 
+function lmTitleField(isTraining, rankDropdown, val) {
+  if (rankDropdown) {
+    return '<label class="ec-lbl">Rank / rate *<select class="ec-in" id="lm-title"><option value=""></option>' +
+      CADET_RATES.map(function(g){
+        return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
+          return '<option' + (val === r ? ' selected' : '') + '>' + r + '</option>';
+        }).join('') + '</optgroup>';
+      }).join('') + '</select></label>';
+  }
+  return perfField('lm-title', (isTraining ? 'Training name *' : 'Rank / badge / award name *'), val);
+}
+function lmKindSwitch() {
+  const wrap = document.getElementById('lm-title-wrap'); if (!wrap) return;
+  const isCadet = !!(document.getElementById('lm-cadet-flag') || {}).textContent;
+  const k = (document.getElementById('lm-kind') || {}).value || 'rank';
+  const cur = (document.getElementById('lm-title') || {}).value || '';
+  wrap.innerHTML = lmTitleField(false, k === 'rank' && isCadet, cur);
+}
 function lmEdit(id, presetKind) {
   if (!ENTRY_VIEW) return;
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10), milestone_kind: presetKind || 'rank' };
@@ -3043,13 +3058,17 @@ function lmEdit(id, presetKind) {
   const kind = p.milestone_kind || 'rank';
   const isTraining = kind === 'training';
   const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
+  const _a = (EC_DATA || []).find(x => x.id === ENTRY_VIEW.id) || {};
+  const _prog = (EC_PROGRAMS || []).find(pp => pp.code === ENTRY_VIEW.code) || {};
+  const lmIsCadet = /sea cadet|usnscc|naval sea/i.test((_a.organization_name || '') + ' ' + (_prog.title || ''));
   const kindSel = isTraining ? '' :
-    '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind">' +
+    '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind" onchange="lmKindSwitch()">' +
     Object.keys(LM_KINDS).map(function(k){ return '<option value="'+k+'"'+(kind===k?' selected':'')+'>'+LM_KINDS[k]+'</option>'; }).join('') +
     '</select></label>';
   document.getElementById('sections-container').innerHTML = ecTrailCrumb(isTraining ? (id ? 'Edit training' : 'Log training') : (id ? 'Edit rank / badge / award' : 'Log rank / badge / award')) + '<div class="ec-form">' +
     kindSel +
-    perfField('lm-title', (isTraining ? 'Training name *' : 'Rank / badge / award name *'), p.title) +
+    '<div id="lm-title-wrap">' + lmTitleField(isTraining, (!isTraining && kind === 'rank' && lmIsCadet), p.title) + '</div>' +
+    '<span id="lm-cadet-flag" style="display:none">' + (lmIsCadet ? '1' : '') + '</span>' +
     perfField('lm-date', (isTraining ? 'Training date *' : 'Date attained *'), p.event_date, 'date') +
     perfField('lm-location', 'Location', p.location) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
