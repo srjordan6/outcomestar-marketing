@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v230 (2026-07-16): Sea Cadet entry detail renders three read-only cards - Unit Information, Training, Promotions - from details JSONB, above the rank/training logs. Cards deep-link to Edit.
   // v229 (2026-07-16): Sea Cadet block reorganized into three sections - Unit Information (area/region/unit/drills), Training (Recruit Training date + advanced-training checkboxes from USNSCC curricula + notes), Promotions (NLCC/NSCC rate ladder dropdown, promotion date, PT-benchmarks-current, coursework). Training checkboxes collected to details.usnscc_trainings array.
   // v228 (2026-07-16): USNSCC structure block on Sea Cadet affiliations - Field Area dropdown (six official areas per seacadets.org), Region free-text, Unit name/code, drill location + schedule. Detects sea-cadet programs live like the USA Swimming block; keys stored in details JSONB (usnscc_area/usnscc_region/usnscc_unit/usnscc_unit_code/drill_location/drill_schedule).
   // v227 (2026-07-16): Best Times grouped by stroke (Freestyle, Backstroke, Breaststroke, Butterfly, IM) with LCM then SCY sub-bands under each stroke; navy stroke header rows, lavender course subheader rows.
@@ -2849,6 +2850,32 @@ function renderEntryDetail(catCode, progCode, affilId) {
       _dmids.map(function(mid){
         return '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;cursor:pointer" onclick="mediaWidgetView(\'' + mid + '\')" title="Open media">\ud83d\udcce ' + mid.slice(0, 8) + '</span>';
       }).join('') + '</div></div>';
+  }
+  // v230: three read-only USNSCC cards on the Sea Cadet entry detail
+  if (/sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((prog && prog.title) || ''))) {
+    const dd0 = (a.details && typeof a.details === 'object') ? a.details : {};
+    function _cCard(title, rows) {
+      const body = rows.filter(function(r){ return r[1]; }).map(function(r){
+        return '<div style="display:flex;gap:8px;font-size:13.5px;padding:2px 0"><span style="color:#7A8A9E;min-width:150px">' + r[0] + '</span><span style="color:var(--navy)">' + escapeHTML(String(r[1])) + '</span></div>';
+      }).join('');
+      return '<div style="flex:1;min-width:260px;padding:14px 16px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
+        '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:15px;margin-bottom:8px">' + title + '</div>' +
+        (body || '<div style="font-size:13px;color:#7A8A9E">Nothing recorded yet \u2014 use Edit to fill this in.</div>') + '</div>';
+    }
+    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:18px">' +
+      _cCard('Unit Information', [
+        ['Field Area', dd0.usnscc_area], ['Region', dd0.usnscc_region],
+        ['Unit', dd0.usnscc_unit], ['Unit code', dd0.usnscc_unit_code],
+        ['Drill location', dd0.drill_location], ['Drill schedule', dd0.drill_schedule]]) +
+      _cCard('Training', [
+        ['Recruit Training / NLO', dd0.usnscc_rt_completed],
+        ['Advanced trainings', Array.isArray(dd0.usnscc_trainings) && dd0.usnscc_trainings.length ? dd0.usnscc_trainings.join(', ') : ''],
+        ['Notes', dd0.usnscc_training_notes]]) +
+      _cCard('Promotions', [
+        ['Current rate', dd0.usnscc_rank], ['Last promotion', dd0.usnscc_rank_date],
+        ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : ''],
+        ['Coursework', dd0.usnscc_coursework]]) +
+      '</div>';
   }
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
     const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
