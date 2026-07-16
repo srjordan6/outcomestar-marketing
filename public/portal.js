@@ -148,6 +148,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v243 (2026-07-16): universal media widget on ALL EC logger forms - Log training / rank / badge / award (lmEdit, widget id lm-media), performance (perfEdit, pf-media), and session (sessionEdit, sess-media). Chips prefill from record media_ids; saves send media_ids on the ec-sessions payload (backend v0.12.145 stores in events.details.media_ids). STANDING RULE reaffirmed: every data-entry form carries the media widget. Requires backend v0.12.145 FIRST (extra=forbid).
+  // v242 (2026-07-16): Advanced-training checkboxes REMOVED from the Training card editor (and the Advanced-trainings row from the detail card) - trainings are now entered exclusively through Log training, whose dropdown is fed by the self-learning cadet_training_catalog. Editor keeps Recruit Training / NLO date + notes, with a hint pointing at Log training. Stored usnscc_trainings values preserved (key no longer sent, never overwritten). Dead USNSCC_TRAININGS/_ct consts dropped from ecEdit.
   // v241 (2026-07-16): Cadet training logger upgrades. (1) Training name on Sea Cadet entries is a dropdown fed by the shared cadet_training_catalog (GET /catalogs/cadet-trainings, cached in CADET_TRAINING_CATALOG) - every new training any cadet enters is auto-learned server-side and appears for the next cadet; 'Other (type below)' option reveals a free-text input that feeds the catalog on save. (2) Two separate date pickers: Start date * (event_date) + End date (event_end_date, new in backend v0.12.144). Training rows show 'start \u2192 end'. Requires backend v0.12.144 deployed FIRST (extra=forbid).
   // v240 (2026-07-16): SITE-WIDE STANDARD LOCATION BLOCK. New stdLocWire(pfx, defaultToHome) + stdLocString(pfx) helpers. The Personal-pillar address component now backs every location entry: EC entry organization location (block 'ecorg'; city/state to real columns, street/line2/county/zip/country to details.org_*), Sea Cadet drill block (home-default on new), session logger, rank/badge/award logger, performance logger (blocks sessloc/lmloc/pfloc composed into the single location string alongside the venue name). New forms default to the child's PHYSICAL home address, correctable in-form; existing records never auto-overwritten (default only applies when the block is empty AND the record is new). Swim meet form keeps its established ZIP-trio + home-default (paste-driven schema).
   // v239 (2026-07-16): Drill location in Unit Information upgraded to the FULL standard address block from the Personal pillar (addrFields prefix 'drill'): Postal/ZIP (auto-fill), Country (datalist), Address line 1, Address line 2, City/Town, County (US reveal), State/Province select via onCountryChange. Wired with onCountryChange+zipAttach on form render; saved via readAddr to details drill_* keys incl. line2/county/country.
@@ -2929,7 +2931,6 @@ function renderEntryDetail(catCode, progCode, affilId) {
     html += _cShell('Training <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'training\')">Edit</button>',
       '<div id="cadet-sec-training">' + _cRows([
         ['Recruit Training / NLO', dd0.usnscc_rt_completed],
-        ['Advanced trainings', Array.isArray(dd0.usnscc_trainings) && dd0.usnscc_trainings.length ? dd0.usnscc_trainings.join(', ') : ''],
         ['Notes', dd0.usnscc_training_notes]]) + '</div>' +
       '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
@@ -2987,14 +2988,10 @@ function cadetSecEdit(kind) {
   const box = document.getElementById('cadet-sec-' + kind); if (!box) return;
   let f = '';
   if (kind === 'training') {
-    const ct = Array.isArray(dd.usnscc_trainings) ? dd.usnscc_trainings : [];
     f = '<div class="ec-two">' +
       '<label class="ec-lbl">Recruit Training / NLO completed<input class="ec-in" id="cs-rt" type="date" value="' + escapeAttr(dd.usnscc_rt_completed || '') + '"></label>' +
       '<label class="ec-lbl">Other trainings / notes<input class="ec-in" id="cs-notes" value="' + escapeAttr(dd.usnscc_training_notes || '') + '"></label></div>' +
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 12px;margin:8px 0">' +
-      CADET_TRAININGS.map(function(t){
-        return '<label class="ec-check" style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" class="cs-tr" value="' + escapeAttr(t) + '"' + (ct.indexOf(t) !== -1 ? ' checked' : '') + '> ' + escapeHTML(t) + '</label>';
-      }).join('') + '</div>';
+      '<div class="ec-hint" style="margin-top:6px">Individual trainings are logged with "Log training" below \u2014 pick from the list or add a new one.</div>';
   } else {
     f = '<label class="ec-lbl">Current rate / rank<select class="ec-in" id="cs-rank"><option value=""></option>' +
       CADET_RATES.map(function(g){
@@ -3014,7 +3011,6 @@ async function cadetSecSave(kind) {
   if (kind === 'training') {
     patch.usnscc_rt_completed = (document.getElementById('cs-rt') || {}).value || '';
     patch.usnscc_training_notes = (document.getElementById('cs-notes') || {}).value || '';
-    patch.usnscc_trainings = Array.from(document.querySelectorAll('.cs-tr:checked')).map(function(cb){ return cb.value; });
   } else {
     patch.usnscc_rank = (document.getElementById('cs-rank') || {}).value || '';
     patch.usnscc_pt_current = !!(document.getElementById('cs-pt') || {}).checked;
@@ -3070,12 +3066,14 @@ function perfEdit(id) {
     perfField('pf-location', 'Venue / place name', p.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('pfloc', {}) +
+    mediaWidgetHtml('pf-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
     '<label class="ec-check"><input type="checkbox" id="pf-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="perfSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
   stdLocWire('pfloc', !id);
+  mediaWidgetRenderChips('pf-media');
 }
 
 function lmTrainingField(catalog, val) {
@@ -3144,6 +3142,7 @@ async function lmEdit(id, presetKind) {
         perfField('lm-end', 'End date', p.event_end_date, 'date') + '</div>'
       : perfField('lm-date', 'Date attained *', p.event_date, 'date')) +
     perfField('lm-location', 'Venue / place name', p.location) +
+    mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('lmloc', {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
@@ -3152,6 +3151,7 @@ async function lmEdit(id, presetKind) {
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
   stdLocWire('lmloc', !id);
+  mediaWidgetRenderChips('lm-media');
 }
 
 async function lmSave(id, fixedKind) {
@@ -3161,6 +3161,7 @@ async function lmSave(id, fixedKind) {
     event_type: 'leadership_milestone',
     title: lmTitleValue(), event_date: v('lm-date'),
     event_end_date: v('lm-end') || null,
+    media_ids: mediaWidgetCollect('lm-media'),
     milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
     location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
@@ -3188,6 +3189,7 @@ async function perfSave(id) {
     title: v('pf-title'), event_date: v('pf-date'),
     instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
     composer: v('pf-composer') || null,
+    media_ids: mediaWidgetCollect('pf-media'),
     location: [v('pf-location'), stdLocString('pfloc')].filter(Boolean).join(', ') || null,
     notes: v('pf-notes') || null,
     show_on_showcase: document.getElementById('pf-showcase').checked
@@ -3516,8 +3518,6 @@ function ecEdit(id, presetProgCode) {
     ['NLCC (Navy League Cadets, ages 10-13)', ['Cadet Recruit', 'Cadet Apprentice', 'Able Cadet', 'Cadet Petty Officer 3rd Class', 'Cadet Petty Officer 2nd Class', 'Cadet Petty Officer 1st Class', 'Cadet Chief Petty Officer']],
     ['NSCC (Sea Cadets, ages 13-18)', ['Seaman Recruit (E-1)', 'Seaman Apprentice (E-2)', 'Seaman (E-3)', 'Petty Officer 3rd Class (E-4)', 'Petty Officer 2nd Class (E-5)', 'Petty Officer 1st Class (E-6)', 'Chief Petty Officer (E-7)']]
   ];
-  const USNSCC_TRAININGS = ['SeaPerch Underwater Robotics', 'Aviation Ground School', 'Cybersecurity', 'Marine Engineering', 'Field Medical (First Aid / CPR)', 'Seamanship & Navigation', 'Firefighting', 'Wilderness Survival'];
-  const _ct = Array.isArray(dd.usnscc_trainings) ? dd.usnscc_trainings : [];
   function _cadetFormCard(t, sub, inner) {
     return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin:10px 0;display:flex;flex-direction:column;gap:10px">' +
       '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">' + t +
@@ -9208,6 +9208,7 @@ function sessionEdit(id) {
     ecField('location','Venue / place name',s.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('sessloc', {}) +
+    mediaWidgetHtml('sess-media', 'Photos, videos & documents', normalizeMediaIds(s)) +
     '<label class="ec-lbl">Link to affiliation<select class="ec-in" data-k="related_affiliation_id">'+affilOpts+'</select></label>' +
     ecArea('notes','Notes',s.notes) +
     skillsGainedField(s.skills_gained) +
@@ -9215,11 +9216,13 @@ function sessionEdit(id) {
     '<div class="ec-bar"><button class="save-btn" onclick="sessionSave(\''+(id||'')+'\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="SESSIONS_FILTER ? openSessionKind(SESSIONS_FILTER) : renderSessionKinds()">Cancel</button></div></div>';
   stdLocWire('sessloc', !id);
+  mediaWidgetRenderChips('sess-media');
 }
 async function sessionSave(id) {
   const item = {};
   if (id) item.id = id;
   collectEcForm(item);
+  item.media_ids = mediaWidgetCollect('sess-media');
   var _sl = stdLocString('sessloc');
   if (_sl) item.location = [item.location, _sl].filter(Boolean).join(', ');
   if (!item.title || !item.event_date || !item.event_type) { showToast('Type, title, and date required','error'); return; }
