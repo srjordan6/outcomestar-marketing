@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v245 (2026-07-16): logger address blocks STAY FILLED on re-edit. v240 composed the block into the single location string (undecomposable), so the block reopened empty. Saves now also send location_parts (readAddr output) stored in events.details.location_parts (backend v0.12.146); lmEdit/perfEdit/sessionEdit prefill addrFields from record.location_parts. Home-default unchanged (only when block empty AND record new). ecSessionPost degradation guard extended to strip location_parts alongside media_ids on 422 against an older backend.
   // v244 (2026-07-16): graceful degradation for media on logger saves. Render pipeline minutes exhausted mid-rollout, so live backend may be v0.12.144 (no media_ids on EcSessionItem -> 422). New ecSessionPost(item): tries the save as-is; on a 422/media_ids rejection strips media_ids and retries once, warning that attachments will save after the backend update. lmSave/perfSave/sessionSave all use it. Harmless once v0.12.145 deploys - first attempt just succeeds.
   // v243 (2026-07-16): universal media widget on ALL EC logger forms - Log training / rank / badge / award (lmEdit, widget id lm-media), performance (perfEdit, pf-media), and session (sessionEdit, sess-media). Chips prefill from record media_ids; saves send media_ids on the ec-sessions payload (backend v0.12.145 stores in events.details.media_ids). STANDING RULE reaffirmed: every data-entry form carries the media widget. Requires backend v0.12.145 FIRST (extra=forbid).
   // v242 (2026-07-16): Advanced-training checkboxes REMOVED from the Training card editor (and the Advanced-trainings row from the detail card) - trainings are now entered exclusively through Log training, whose dropdown is fed by the self-learning cadet_training_catalog. Editor keeps Recruit Training / NLO date + notes, with a hint pointing at Log training. Stored usnscc_trainings values preserved (key no longer sent, never overwritten). Dead USNSCC_TRAININGS/_ct consts dropped from ecEdit.
@@ -2253,8 +2254,8 @@ async function ecSessionPost(item) {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
   } catch (e) {
     var msg = (e && e.message) || '';
-    if (item.media_ids !== undefined && /media_ids|422|unprocessable/i.test(msg)) {
-      delete item.media_ids;
+    if ((item.media_ids !== undefined || item.location_parts !== undefined) && /media_ids|location_parts|422|unprocessable/i.test(msg)) {
+      delete item.media_ids; delete item.location_parts;
       await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
       showToast('Saved. Media attachments will start saving after the next backend update.', 'info');
       return;
@@ -3081,7 +3082,7 @@ function perfEdit(id) {
     perfField('pf-composer', 'Composer(s)', p.composer) +
     perfField('pf-location', 'Venue / place name', p.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
-    addrFields('pfloc', {}) +
+    addrFields('pfloc', p.location_parts || {}) +
     mediaWidgetHtml('pf-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
@@ -3160,7 +3161,7 @@ async function lmEdit(id, presetKind) {
     perfField('lm-location', 'Venue / place name', p.location) +
     mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
-    addrFields('lmloc', {}) +
+    addrFields('lmloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
@@ -3178,6 +3179,7 @@ async function lmSave(id, fixedKind) {
     title: lmTitleValue(), event_date: v('lm-date'),
     event_end_date: v('lm-end') || null,
     media_ids: mediaWidgetCollect('lm-media'),
+    location_parts: document.getElementById('lmloc-zip_postal_code') ? readAddr('lmloc') : null,
     milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
     location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
@@ -3206,6 +3208,7 @@ async function perfSave(id) {
     instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
     composer: v('pf-composer') || null,
     media_ids: mediaWidgetCollect('pf-media'),
+    location_parts: document.getElementById('pfloc-zip_postal_code') ? readAddr('pfloc') : null,
     location: [v('pf-location'), stdLocString('pfloc')].filter(Boolean).join(', ') || null,
     notes: v('pf-notes') || null,
     show_on_showcase: document.getElementById('pf-showcase').checked
@@ -9223,7 +9226,7 @@ function sessionEdit(id) {
              ecField('duration_hours','Hours',s.duration_hours,false,'number')) +
     ecField('location','Venue / place name',s.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
-    addrFields('sessloc', {}) +
+    addrFields('sessloc', s.location_parts || {}) +
     mediaWidgetHtml('sess-media', 'Photos, videos & documents', normalizeMediaIds(s)) +
     '<label class="ec-lbl">Link to affiliation<select class="ec-in" data-k="related_affiliation_id">'+affilOpts+'</select></label>' +
     ecArea('notes','Notes',s.notes) +
@@ -9239,6 +9242,7 @@ async function sessionSave(id) {
   if (id) item.id = id;
   collectEcForm(item);
   item.media_ids = mediaWidgetCollect('sess-media');
+  item.location_parts = document.getElementById('sessloc-zip_postal_code') ? readAddr('sessloc') : null;
   var _sl = stdLocString('sessloc');
   if (_sl) item.location = [item.location, _sl].filter(Boolean).join(', ');
   if (!item.title || !item.event_date || !item.event_type) { showToast('Type, title, and date required','error'); return; }
