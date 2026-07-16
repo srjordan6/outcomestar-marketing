@@ -2068,6 +2068,8 @@ function collectEcForm(item) {
       item.skills_gained = (item.skills_gained || []).concat(extras);
     } else if (k === 'show_on_showcase') {
       item.show_on_showcase = el.checked;
+    } else if (el.type === 'checkbox') {
+      item[k] = el.checked;
     } else {
       const v = (el.value || '').trim();
       if (v) item[k] = (el.type === 'number' ? parseFloat(v) : v);
@@ -3017,16 +3019,24 @@ function ecEdit(id, presetProgCode) {
   const a = id ? EC_DATA.find(x => x.id === id) : { affiliation_type: EC_FILTER || 'program', program_code: presetProgCode || null };
   if (!a) return;
   const showPicker = EC_FILTER === 'program' || a.program_code || a.affiliation_type === 'program' || a.affiliation_type === 'activity';
-  // v217: USA Swimming structure (Zone > LSC > Club) on swim affiliations.
+  // v217/v218: USA Swimming structure (Zone > LSC > Club) on swim affiliations,
+  // gated behind a member-club checkbox (not every swim team is USA Swimming).
   const _prog = (EC_PROGRAMS || []).find(p => p.code === a.program_code) || (PROG_VIEW && (EC_PROGRAMS || []).find(p => p.code === PROG_VIEW.code)) || null;
   const isSwimAffil = /swim/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const usaOn = !!(a.usa_member || a.usa_zone || a.usa_lsc || a.usa_club_code);
   const usaBlock = isSwimAffil ?
-    '<div class="ec-lbl" style="font-weight:600;margin-top:8px">USA Swimming structure <span style="font-weight:400;color:#7A8A9E">Zone \u203a LSC \u203a Club</span></div>' +
+    '<label class="ec-lbl" style="flex-direction:row;align-items:center;gap:8px;margin-top:8px">' +
+    '<input type="checkbox" class="ec-in" data-k="usa_member"' + (usaOn ? ' checked' : '') +
+    ' onchange="var f=document.getElementById(\'usa-sw-fields\');if(f)f.style.display=this.checked?\'\':\'none\'">' +
+    ' This team is a USA Swimming member club</label>' +
+    '<div id="usa-sw-fields" style="' + (usaOn ? '' : 'display:none') + '">' +
+    '<div class="ec-lbl" style="font-weight:600">USA Swimming structure <span style="font-weight:400;color:#7A8A9E">Zone \u203a LSC \u203a Club</span></div>' +
     '<label class="ec-lbl">Zone<select class="ec-in" data-k="usa_zone"><option value=""></option>' +
     ['Eastern','Central','Southern','Western'].map(z => '<option' + (a.usa_zone === z ? ' selected' : '') + '>' + z + '</option>').join('') +
     '</select></label>' +
     ecRowTwo(ecField('usa_lsc', 'LSC \u2014 Local Swimming Committee (e.g. North Texas Swimming (NT))', a.usa_lsc),
-             ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code))
+             ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code)) +
+    '</div>'
     : '';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
