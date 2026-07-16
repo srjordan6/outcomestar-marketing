@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v240 (2026-07-16): SITE-WIDE STANDARD LOCATION BLOCK. New stdLocWire(pfx, defaultToHome) + stdLocString(pfx) helpers. The Personal-pillar address component now backs every location entry: EC entry organization location (block 'ecorg'; city/state to real columns, street/line2/county/zip/country to details.org_*), Sea Cadet drill block (home-default on new), session logger, rank/badge/award logger, performance logger (blocks sessloc/lmloc/pfloc composed into the single location string alongside the venue name). New forms default to the child's PHYSICAL home address, correctable in-form; existing records never auto-overwritten (default only applies when the block is empty AND the record is new). Swim meet form keeps its established ZIP-trio + home-default (paste-driven schema).
   // v239 (2026-07-16): Drill location in Unit Information upgraded to the FULL standard address block from the Personal pillar (addrFields prefix 'drill'): Postal/ZIP (auto-fill), Country (datalist), Address line 1, Address line 2, City/Town, County (US reveal), State/Province select via onCountryChange. Wired with onCountryChange+zipAttach on form render; saved via readAddr to details drill_* keys incl. line2/county/country.
   // v238 (2026-07-16): (1) Rank logger on Sea Cadet entries - when Type=Rank the name field becomes the NLCC/NSCC rate-ladder dropdown (badge/award keep free text; live-switches with Type); non-cadet entries unchanged. (2) Promotions card: Naval-coursework field removed everywhere (editor, save patch, detail row); PT-benchmarks checkbox on its own row.
   // v237 (2026-07-16): Training and Promotions REMOVED from the entry edit form (the form now carries Unit Information only). Each detail card gains its own Edit button opening an inline editor inside the card, saving just that section's keys via the affiliations endpoint (details merge). Entry form _cKeys trimmed to unit + drill keys.
@@ -1444,6 +1445,38 @@ function readAddr(pfx) {
            city_town: v('city_town'), county: v('county'), state_province: v('state_province'),
            zip_postal_code: v('zip_postal_code'),
            country: countryCodeFromName(v('country')) || v('country') };
+}
+// v240: site-wide standard location block helpers
+async function stdLocWire(pfx, defaultToHome) {
+  if (!document.getElementById(pfx + '-zip_postal_code')) return;
+  onCountryChange(pfx); zipAttach(pfx);
+  if (typeof acAttach === 'function') acAttach(pfx);
+  if (typeof countryAttach === 'function') countryAttach(pfx);
+  if (defaultToHome) {
+    var st = document.getElementById(pfx + '-street_address');
+    var zp = document.getElementById(pfx + '-zip_postal_code');
+    var ct = document.getElementById(pfx + '-city_town');
+    if (st && zp && ct && !st.value.trim() && !zp.value.trim() && !ct.value.trim()) {
+      var h = await studentHomeAddr();
+      var set = function(k, v){ var el = document.getElementById(pfx + '-' + k); if (el && v) el.value = v; };
+      set('street_address', h.street_address); set('street_address_line_2', h.street_address_line_2);
+      set('city_town', h.city_town); set('county', h.county); set('zip_postal_code', h.zip_postal_code);
+      var cEl = document.getElementById(pfx + '-country');
+      if (cEl && h.country) cEl.value = countryName(h.country);
+      await onCountryChange(pfx);
+      var sEl = document.getElementById(pfx + '-state_province');
+      if (sEl && h.state_province) sEl.value = h.state_province;
+    }
+  }
+}
+function stdLocString(pfx) {
+  if (!document.getElementById(pfx + '-zip_postal_code')) return '';
+  var a = readAddr(pfx);
+  if (!a.street_address && !a.city_town) return '';
+  var st = (a.state_province || '').split('-').pop();
+  return [a.street_address, a.street_address_line_2, a.city_town,
+          [st, a.zip_postal_code].filter(Boolean).join(' '),
+          (a.country && a.country !== 'US') ? a.country : ''].filter(Boolean).join(', ');
 }
 async function saveAddresses() {
   var st = document.getElementById('adr-status');
@@ -3026,12 +3059,15 @@ function perfEdit(id) {
     perfField('pf-instrument', 'Instrument', p.instrument) +
     perfField('pf-music', 'Music played (piece or program)', p.music_played) +
     perfField('pf-composer', 'Composer(s)', p.composer) +
-    perfField('pf-location', 'Venue / location', p.location) +
+    perfField('pf-location', 'Venue / place name', p.location) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('pfloc', {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
     '<label class="ec-check"><input type="checkbox" id="pf-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="perfSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+  stdLocWire('pfloc', !id);
 }
 
 function lmTitleField(isTraining, rankDropdown, val) {
@@ -3071,12 +3107,15 @@ function lmEdit(id, presetKind) {
     '<div id="lm-title-wrap">' + lmTitleField(isTraining, (!isTraining && kind === 'rank' && lmIsCadet), p.title) + '</div>' +
     '<span id="lm-cadet-flag" style="display:none">' + (lmIsCadet ? '1' : '') + '</span>' +
     perfField('lm-date', (isTraining ? 'Training date *' : 'Date attained *'), p.event_date, 'date') +
-    perfField('lm-location', 'Location', p.location) +
+    perfField('lm-location', 'Venue / place name', p.location) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('lmloc', {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+  stdLocWire('lmloc', !id);
 }
 
 async function lmSave(id, fixedKind) {
@@ -3086,7 +3125,7 @@ async function lmSave(id, fixedKind) {
     event_type: 'leadership_milestone',
     title: v('lm-title'), event_date: v('lm-date'),
     milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
-    location: v('lm-location') || null,
+    location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
     skills_gained: readSkillsFromForm(),
     show_on_showcase: document.getElementById('lm-showcase').checked,
@@ -3110,7 +3149,8 @@ async function perfSave(id) {
     event_type: 'music_performance',
     title: v('pf-title'), event_date: v('pf-date'),
     instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
-    composer: v('pf-composer') || null, location: v('pf-location') || null,
+    composer: v('pf-composer') || null,
+    location: [v('pf-location'), stdLocString('pfloc')].filter(Boolean).join(', ') || null,
     notes: v('pf-notes') || null,
     show_on_showcase: document.getElementById('pf-showcase').checked
   };
@@ -3479,9 +3519,10 @@ function ecEdit(id, presetProgCode) {
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
     ecRowTwo(ecField('weekly_hours', 'Hours per week', a.weekly_hours, false, 'number'),
              ecField('total_hours', 'Total hours', a.total_hours, false, 'number')) +
-    ecRowTwo('<label class="ec-lbl">ZIP code<input id="ec-org-zip" class="rec-i" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state"></label>',
-             ecRowTwo(ecField('organization_city', 'City', a.organization_city),
-                      ecField('organization_state', 'State', a.organization_state))) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Organization location</div>' +
+    addrFields('ecorg', { street_address: dd.org_street, street_address_line_2: dd.org_line2,
+      city_town: a.organization_city, county: dd.org_county, state_province: a.organization_state,
+      zip_postal_code: dd.org_zip, country: dd.org_country || 'US' }) +
     ecField('organization_url', 'Website', a.organization_url) +
     (EC_FILTER === 'coach_relationship' || a.coach_name ?
       ecRowTwo(ecField('coach_name', 'Coach/mentor name', a.coach_name),
@@ -3494,12 +3535,8 @@ function ecEdit(id, presetProgCode) {
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
-  attachZipTrio(document.getElementById('ec-org-zip'), byKey('organization_city'), byKey('organization_state'), !id);
-  if (isCadetAffil || document.getElementById('drill-zip_postal_code')) {  // v239: standard drill address block
-    onCountryChange('drill'); zipAttach('drill');
-    if (typeof acAttach === 'function') acAttach('drill');
-    if (typeof countryAttach === 'function') countryAttach('drill');
-  }
+  stdLocWire('ecorg', !id);
+  stdLocWire('drill', !id);
   mediaWidgetRenderChips('ec-media'); // v226
 }
 
@@ -3540,6 +3577,17 @@ async function ecSave(id) {
   } else {
     var _cd = {};
     _cKeys.forEach(function(k){ if (item[k]) _cd[k] = item[k]; delete item[k]; });
+    // v240: organization location via the standard block
+    if (document.getElementById('ecorg-zip_postal_code')) {
+      var _oa = readAddr('ecorg');
+      item.organization_city = _oa.city_town || '';
+      item.organization_state = (_oa.state_province || '').split('-').pop();
+      _cd.org_street = _oa.street_address || '';
+      _cd.org_line2 = _oa.street_address_line_2 || '';
+      _cd.org_county = _oa.county || '';
+      _cd.org_zip = _oa.zip_postal_code || '';
+      _cd.org_country = _oa.country || 'US';
+    }
     // v239: drill address via the standard block
     if (document.getElementById('drill-zip_postal_code')) {
       var _da = readAddr('drill');
@@ -9119,18 +9167,23 @@ function sessionEdit(id) {
     ecField('title','What was it? (title)',s.title,true) +
     ecRowTwo(ecField('event_date','Date',s.event_date,true,'date'),
              ecField('duration_hours','Hours',s.duration_hours,false,'number')) +
-    ecField('location','Location',s.location) +
+    ecField('location','Venue / place name',s.location) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('sessloc', {}) +
     '<label class="ec-lbl">Link to affiliation<select class="ec-in" data-k="related_affiliation_id">'+affilOpts+'</select></label>' +
     ecArea('notes','Notes',s.notes) +
     skillsGainedField(s.skills_gained) +
     showcaseField(s.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="sessionSave(\''+(id||'')+'\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="SESSIONS_FILTER ? openSessionKind(SESSIONS_FILTER) : renderSessionKinds()">Cancel</button></div></div>';
+  stdLocWire('sessloc', !id);
 }
 async function sessionSave(id) {
   const item = {};
   if (id) item.id = id;
   collectEcForm(item);
+  var _sl = stdLocString('sessloc');
+  if (_sl) item.location = [item.location, _sl].filter(Boolean).join(', ');
   if (!item.title || !item.event_date || !item.event_type) { showToast('Type, title, and date required','error'); return; }
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
