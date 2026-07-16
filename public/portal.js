@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v229 (2026-07-16): Sea Cadet block reorganized into three sections - Unit Information (area/region/unit/drills), Training (Recruit Training date + advanced-training checkboxes from USNSCC curricula + notes), Promotions (NLCC/NSCC rate ladder dropdown, promotion date, PT-benchmarks-current, coursework). Training checkboxes collected to details.usnscc_trainings array.
   // v228 (2026-07-16): USNSCC structure block on Sea Cadet affiliations - Field Area dropdown (six official areas per seacadets.org), Region free-text, Unit name/code, drill location + schedule. Detects sea-cadet programs live like the USA Swimming block; keys stored in details JSONB (usnscc_area/usnscc_region/usnscc_unit/usnscc_unit_code/drill_location/drill_schedule).
   // v227 (2026-07-16): Best Times grouped by stroke (Freestyle, Backstroke, Breaststroke, Butterfly, IM) with LCM then SCY sub-bands under each stroke; navy stroke header rows, lavender course subheader rows.
   // v226 (2026-07-16): universal media widget on every Extracurricular entry (Swim and Dive Club and every other program). Parents can attach photos, videos, and documents on any EC form. Widget renders in ecEdit, chip count on ecRow, chip grid on renderEntryDetail. IDs stored on affiliation.media_ids (JSONB passthrough) and re-hydrated on read.
@@ -3304,9 +3305,16 @@ function ecEdit(id, presetProgCode) {
   const USNSCC_AREAS = ['Northeast', 'Southeast', 'North Central', 'South Central', 'Northwest', 'Pacific Southwest'];
   const isCadetAffil = /sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
   const dd = (a.details && typeof a.details === 'object') ? a.details : {};
+  const NLCC_NSCC_RATES = [
+    ['NLCC (Navy League Cadets, ages 10-13)', ['Cadet Recruit', 'Cadet Apprentice', 'Able Cadet', 'Cadet Petty Officer 3rd Class', 'Cadet Petty Officer 2nd Class', 'Cadet Petty Officer 1st Class', 'Cadet Chief Petty Officer']],
+    ['NSCC (Sea Cadets, ages 13-18)', ['Seaman Recruit (E-1)', 'Seaman Apprentice (E-2)', 'Seaman (E-3)', 'Petty Officer 3rd Class (E-4)', 'Petty Officer 2nd Class (E-5)', 'Petty Officer 1st Class (E-6)', 'Chief Petty Officer (E-7)']]
+  ];
+  const USNSCC_TRAININGS = ['SeaPerch Underwater Robotics', 'Aviation Ground School', 'Cybersecurity', 'Marine Engineering', 'Field Medical (First Aid / CPR)', 'Seamanship & Navigation', 'Firefighting', 'Wilderness Survival'];
+  const _ct = Array.isArray(dd.usnscc_trainings) ? dd.usnscc_trainings : [];
+  function _cadetHdr(t) { return '<div class="ec-lbl" style="font-weight:600;margin-top:12px;padding:6px 10px;background:#EEEDF7;border-radius:6px;color:var(--navy)">' + t + '</div>'; }
   const cadetBlock =
     '<div id="usnscc-wrap" style="' + (isCadetAffil ? '' : 'display:none') + '">' +
-    '<div class="ec-lbl" style="font-weight:600">USNSCC structure <span style="font-weight:400;color:#7A8A9E">Field Area \u203a Region \u203a Unit</span></div>' +
+    _cadetHdr('Unit Information <span style="font-weight:400;color:#7A8A9E">Field Area \u203a Region \u203a Unit</span>') +
     ecRowTwo(
       '<label class="ec-lbl">Field Area<select class="ec-in" data-k="usnscc_area"><option value=""></option>' +
       USNSCC_AREAS.map(function(z){ return '<option' + ((a.usnscc_area || dd.usnscc_area) === z ? ' selected' : '') + '>' + z + '</option>'; }).join('') +
@@ -3316,6 +3324,25 @@ function ecEdit(id, presetProgCode) {
              ecField('usnscc_unit_code', 'Unit code (e.g. BLACK CAT SQ)', a.usnscc_unit_code || dd.usnscc_unit_code)) +
     ecField('drill_location', 'Drill location', a.drill_location || dd.drill_location) +
     ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule) +
+    _cadetHdr('Training <span style="font-weight:400;color:#7A8A9E">Recruit Training + advanced trainings</span>') +
+    ecRowTwo(ecField('usnscc_rt_completed', 'Recruit Training / NLO completed', dd.usnscc_rt_completed, false, 'date'),
+             ecField('usnscc_training_notes', 'Other trainings / notes', dd.usnscc_training_notes)) +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 12px;margin:6px 0 2px">' +
+    USNSCC_TRAININGS.map(function(t){
+      return '<label class="ec-check" style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" class="usnscc-tr" value="' + escapeAttr(t) + '"' + (_ct.indexOf(t) !== -1 ? ' checked' : '') + '> ' + escapeHTML(t) + '</label>';
+    }).join('') + '</div>' +
+    _cadetHdr('Promotions <span style="font-weight:400;color:#7A8A9E">rate, advancement requirements</span>') +
+    ecRowTwo(
+      '<label class="ec-lbl">Current rate / rank<select class="ec-in" data-k="usnscc_rank"><option value=""></option>' +
+      NLCC_NSCC_RATES.map(function(g){
+        return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
+          return '<option' + ((dd.usnscc_rank) === r ? ' selected' : '') + '>' + r + '</option>';
+        }).join('') + '</optgroup>';
+      }).join('') + '</select></label>',
+      ecField('usnscc_rank_date', 'Date of last promotion', dd.usnscc_rank_date, false, 'date')) +
+    ecRowTwo(
+      '<label class="ec-check" style="margin-top:8px;display:flex;align-items:center;gap:8px;white-space:nowrap"><input type="checkbox" class="ec-in" data-k="usnscc_pt_current"' + (dd.usnscc_pt_current ? ' checked' : '') + '> PT benchmarks current (biannual)</label>',
+      ecField('usnscc_coursework', 'Naval coursework completed', dd.usnscc_coursework)) +
     '</div>';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
@@ -3376,12 +3403,15 @@ async function ecSave(id) {
   }
   // v228: USNSCC keys live in details JSONB; drop them when the block is hidden
   var _cWrap = document.getElementById('usnscc-wrap');
-  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_location', 'drill_schedule'];
+  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_location', 'drill_schedule',
+                'usnscc_rt_completed', 'usnscc_training_notes', 'usnscc_rank', 'usnscc_rank_date', 'usnscc_pt_current', 'usnscc_coursework'];
   if (!_cWrap || _cWrap.style.display === 'none') {
     _cKeys.forEach(function(k){ delete item[k]; });
   } else {
     var _cd = {};
     _cKeys.forEach(function(k){ if (item[k]) _cd[k] = item[k]; delete item[k]; });
+    // v229: training checkboxes -> details.usnscc_trainings array
+    _cd.usnscc_trainings = Array.from(document.querySelectorAll('.usnscc-tr:checked')).map(function(cb){ return cb.value; });
     item.details = Object.assign({}, item.details || {}, _cd);
   }
   item.skills_gained = readSkillsFromForm();
