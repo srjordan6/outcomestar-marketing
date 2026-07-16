@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v207 (2026-07-16): Swim Metrics strip (IMX/IMR/Power Index, computed on read) on the Extracurricular hub for any competitive swimmer.
   // v206 (2026-07-15): fire the wizard on any first login, not just #t= handoff.
   // Previous gate required sessionStorage.focms_fresh_signup === '1', set only by the
   // welcome-email #t= URL adoption path. Parents who log in via email+password (or
@@ -2141,7 +2142,49 @@ function renderEcSections() {
     '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
     '<div class="ec-count">'+unassigned+' <span>on record</span></div></button>';
   ecSetHeader('Extracurricular', 'Programs, activities, service, and coach relationships. Each one is a signal the engine reads for engagement, breadth, and sustained involvement.');
-  document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + '</div>';
+  document.getElementById('sections-container').innerHTML = '<div id="swim-metrics-strip"></div><div class="ec-grid">' + cards + '</div>';
+  loadSwimMetricsStrip();
+}
+
+/* v207: always-on swim metrics (IMX / IMR / Power Index) for any competitive
+   swimmer. Computed on read by the backend; strip renders only when the
+   student has scored swim events, so non-swimmers never see it. Non-blocking:
+   the hub renders instantly and the strip fills in when the fetches land. */
+async function loadSwimMetricsStrip() {
+  const host = document.getElementById('swim-metrics-strip');
+  if (!host) return;
+  try {
+    const [imx, pi] = await Promise.all([
+      apiGet('/focms/v1/student/' + STUDENT_ID + '/computed/imx-imr').catch(() => null),
+      apiGet('/focms/v1/student/' + STUDENT_ID + '/computed/power-index').catch(() => null)
+    ]);
+    if (!imx || !imx.imx) { host.innerHTML = ''; return; }
+    const anyScored = ['SCY','LCM'].some(c =>
+      ((imx.imx[c] || {}).events_scored || 0) > 0 || ((imx.imr && imx.imr[c]) || {}).events_scored > 0);
+    if (!anyScored) { host.innerHTML = ''; return; }
+    const chip = (label, s) => {
+      if (!s) return '';
+      const val = (s.lifetime_total != null) ? s.lifetime_total.toLocaleString() : '\u2014';
+      const frac = s.events_scored + '/' + s.events_required;
+      const season = (s.season_total != null) ? ('season ' + s.season_total.toLocaleString()) : 'season \u2014';
+      const done = s.complete ? ' swm-done' : '';
+      return '<div class="swm-chip' + done + '"><div class="swm-lbl">' + label + '</div>' +
+             '<div class="swm-val">' + val + '</div>' +
+             '<div class="swm-sub">' + frac + ' \u00b7 ' + season + '</div></div>';
+    };
+    const piVal = pi && pi.power_index && pi.power_index.value != null ? pi.power_index.value : null;
+    const piChip = piVal != null
+      ? '<div class="swm-chip swm-pi"><div class="swm-lbl">Power Index</div><div class="swm-val">' + piVal + '</div><div class="swm-sub">top-4 weighted \u00b7 lower is faster</div></div>'
+      : '';
+    host.innerHTML =
+      '<div class="swm-strip">' +
+      '<div class="swm-title">Swim Metrics <span class="swm-age">age group ' + escapeHTML(String(imx.age_group || '')) + '</span></div>' +
+      '<div class="swm-row">' +
+      chip('IMX \u00b7 SCY', imx.imx.SCY) + chip('IMX \u00b7 LCM', imx.imx.LCM) +
+      chip('IMR \u00b7 SCY', imx.imr && imx.imr.SCY) + chip('IMR \u00b7 LCM', imx.imr && imx.imr.LCM) +
+      piChip +
+      '</div></div>';
+  } catch (e) { host.innerHTML = ''; }
 }
 
 let CAT_FILTER = null;
