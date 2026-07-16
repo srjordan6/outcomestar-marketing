@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v235 (2026-07-16): USNSCC sections now render as the portal-standard white .section cards (white bg, #E5E7EB border, 14px radius) on BOTH the edit form and the detail view, so Training and Promotions content is unmistakably contained in its own card. Removed the Date-of-last-promotion field (form, save keys, detail row).
   // v234 (2026-07-16): Unit Information gains Unit ID (e.g. 084BCS), Commanding Officer, Unit phone, Unit email, Member type (NLCC/NSCC dropdown) - on the edit form, the save keys, and the detail card.
   // v233 (2026-07-16): USNSCC cards restyled to the portal-standard flat row look (matching every other card in the app): no gray boxes - flat sections with hairline #F6F6F3 dividers, Lora navy section titles, ec-meta gray field rows. Applied to both the detail-view cards and the edit-form section cards.
   // v232 (2026-07-16): Sea Cadet EDIT form sections wrapped in card containers (matching the detail-view cards) - Unit Information / Training / Promotions each render as a bordered card with its fields inside, instead of flat header dividers.
@@ -2869,7 +2870,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
       }).join('') || '<div class="ec-notes">Nothing recorded yet \u2014 use Edit above to fill this in.</div>';
     }
     function _cShell(title, inner) {
-      return '<div style="padding:14px 0;border-bottom:1px solid #F6F6F3">' +
+      return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
         '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:8px">' + title + '</div>' + inner + '</div>';
     }
     html += _cShell('Unit Information', _cRows([
@@ -2890,7 +2891,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
       (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
     html += _cShell('Promotions',
       _cRows([
-        ['Current rate', dd0.usnscc_rank], ['Last promotion', dd0.usnscc_rank_date],
+        ['Current rate', dd0.usnscc_rank],
         ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : ''],
         ['Coursework', dd0.usnscc_coursework]]) +
       '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
@@ -3360,8 +3361,8 @@ function ecEdit(id, presetProgCode) {
   const USNSCC_TRAININGS = ['SeaPerch Underwater Robotics', 'Aviation Ground School', 'Cybersecurity', 'Marine Engineering', 'Field Medical (First Aid / CPR)', 'Seamanship & Navigation', 'Firefighting', 'Wilderness Survival'];
   const _ct = Array.isArray(dd.usnscc_trainings) ? dd.usnscc_trainings : [];
   function _cadetFormCard(t, sub, inner) {
-    return '<div style="padding:14px 0;border-bottom:1px solid #F6F6F3">' +
-      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:15px;margin-bottom:6px">' + t +
+    return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin:10px 0;display:flex;flex-direction:column;gap:10px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">' + t +
       (sub ? ' <span class="ec-meta" style="margin-top:0;display:inline">' + sub + '</span>' : '') + '</div>' + inner + '</div>';
   }
   const cadetBlock =
@@ -3392,14 +3393,12 @@ function ecEdit(id, presetProgCode) {
       return '<label class="ec-check" style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" class="usnscc-tr" value="' + escapeAttr(t) + '"' + (_ct.indexOf(t) !== -1 ? ' checked' : '') + '> ' + escapeHTML(t) + '</label>';
     }).join('') + '</div>') +
     _cadetFormCard('Promotions', 'rate, advancement requirements',
-    ecRowTwo(
-      '<label class="ec-lbl">Current rate / rank<select class="ec-in" data-k="usnscc_rank"><option value=""></option>' +
+    '<label class="ec-lbl">Current rate / rank<select class="ec-in" data-k="usnscc_rank"><option value=""></option>' +
       NLCC_NSCC_RATES.map(function(g){
         return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
           return '<option' + ((dd.usnscc_rank) === r ? ' selected' : '') + '>' + r + '</option>';
         }).join('') + '</optgroup>';
-      }).join('') + '</select></label>',
-      ecField('usnscc_rank_date', 'Date of last promotion', dd.usnscc_rank_date, false, 'date')) +
+      }).join('') + '</select></label>' +
     ecRowTwo(
       '<label class="ec-check" style="margin-top:8px;display:flex;align-items:center;gap:8px;white-space:nowrap"><input type="checkbox" class="ec-in" data-k="usnscc_pt_current"' + (dd.usnscc_pt_current ? ' checked' : '') + '> PT benchmarks current (biannual)</label>',
       ecField('usnscc_coursework', 'Naval coursework completed', dd.usnscc_coursework))) +
@@ -3465,7 +3464,7 @@ async function ecSave(id) {
   var _cWrap = document.getElementById('usnscc-wrap');
   var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_location', 'drill_schedule',
                 'usnscc_unit_id', 'usnscc_member_type', 'usnscc_co', 'usnscc_unit_phone', 'usnscc_unit_email',
-                'usnscc_rt_completed', 'usnscc_training_notes', 'usnscc_rank', 'usnscc_rank_date', 'usnscc_pt_current', 'usnscc_coursework'];
+                'usnscc_rt_completed', 'usnscc_training_notes', 'usnscc_rank', 'usnscc_pt_current', 'usnscc_coursework'];
   if (!_cWrap || _cWrap.style.display === 'none') {
     _cKeys.forEach(function(k){ delete item[k]; });
   } else {
