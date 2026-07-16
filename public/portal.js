@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v209 (2026-07-16): Swim Metrics strip moved from the EC hub to the swim program page (Extracurricular > Mainstream Sports & Athletics > Youth Swim Team); age-group label prettified.
   // v208 (2026-07-16): Swim Meet Results tabular entry form (meet + per-event time/points/place rows) in the Extracurricular hub.
   // v207 (2026-07-16): Swim Metrics strip (IMX/IMR/Power Index, computed on read) on the Extracurricular hub for any competitive swimmer.
   // v206 (2026-07-15): fire the wizard on any first login, not just #t= handoff.
@@ -2143,8 +2144,7 @@ function renderEcSections() {
     '<div><div class="ec-name">Needs a program</div><div class="ec-desc">Entries not linked to a program yet \u2014 open each and pick one</div></div>' +
     '<div class="ec-count">'+unassigned+' <span>on record</span></div></button>';
   ecSetHeader('Extracurricular', 'Programs, activities, service, and coach relationships. Each one is a signal the engine reads for engagement, breadth, and sustained involvement.');
-  document.getElementById('sections-container').innerHTML = '<div id="swim-metrics-strip"></div><div class="ec-grid">' + cards + '</div>';
-  loadSwimMetricsStrip();
+  document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + '</div>';
 }
 
 /* v207: always-on swim metrics (IMX / IMR / Power Index) for any competitive
@@ -2177,9 +2177,10 @@ async function loadSwimMetricsStrip() {
     const piChip = piVal != null
       ? '<div class="swm-chip swm-pi"><div class="swm-lbl">Power Index</div><div class="swm-val">' + piVal + '</div><div class="swm-sub">top-4 weighted \u00b7 lower is faster</div></div>'
       : '';
+    const ageLbl = String(imx.age_group || '').replace('10_under', '10 & under').replace('_', '-');
     host.innerHTML =
       '<div class="swm-strip">' +
-      '<div class="swm-title">Swim Metrics <span class="swm-age">age group ' + escapeHTML(String(imx.age_group || '')) + '</span></div>' +
+      '<div class="swm-title">Swim Metrics <span class="swm-age">age group ' + escapeHTML(ageLbl) + '</span></div>' +
       '<div class="swm-row">' +
       chip('IMX \u00b7 SCY', imx.imx.SCY) + chip('IMX \u00b7 LCM', imx.imx.LCM) +
       chip('IMR \u00b7 SCY', imx.imr && imx.imr.SCY) + chip('IMR \u00b7 LCM', imx.imr && imx.imr.LCM) +
@@ -2576,9 +2577,11 @@ function renderProgramEntries(catCode, progCode) {
     { label: t ? t.label : '', go: "renderCategoryList('" + catCode + "')" },
     { label: prog ? prog.title : 'Program' }
   ]);
+  const isSwimProg = /swim/i.test((prog && prog.title) || '');
   html += '<div class="ec-bar"><button class="save-btn" onclick="ecEditForProgram(\''+catCode+'\',\''+progCode+'\')">Add ' + escapeHTML(prog ? prog.title : 'program') + ' entry</button>' +
-    (/swim/i.test((prog && prog.title) || '') ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
+    (isSwimProg ? '<button class="save-btn" onclick="renderSwimMeetForm()">Swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderCategoryList(\''+catCode+'\')">Back to ' + escapeHTML(t ? t.label : 'category') + '</button></div>';
+  if (isSwimProg) html += '<div id="swim-metrics-strip"></div>';
   if (!rows.length) html += '<div class="cr-waiting">Nothing here yet. Add the first entry.</div>';
   else {
     const cards = rows.map(a => {
@@ -2596,6 +2599,7 @@ function renderProgramEntries(catCode, progCode) {
   }
   ecSetHeader(prog ? prog.title : 'Program', t ? t.label : '');
   document.getElementById('sections-container').innerHTML = html;
+  if (isSwimProg) loadSwimMetricsStrip();
 }
 
 function renderEntryDetail(catCode, progCode, affilId) {
