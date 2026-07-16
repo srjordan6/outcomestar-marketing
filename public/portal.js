@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v244 (2026-07-16): graceful degradation for media on logger saves. Render pipeline minutes exhausted mid-rollout, so live backend may be v0.12.144 (no media_ids on EcSessionItem -> 422). New ecSessionPost(item): tries the save as-is; on a 422/media_ids rejection strips media_ids and retries once, warning that attachments will save after the backend update. lmSave/perfSave/sessionSave all use it. Harmless once v0.12.145 deploys - first attempt just succeeds.
   // v243 (2026-07-16): universal media widget on ALL EC logger forms - Log training / rank / badge / award (lmEdit, widget id lm-media), performance (perfEdit, pf-media), and session (sessionEdit, sess-media). Chips prefill from record media_ids; saves send media_ids on the ec-sessions payload (backend v0.12.145 stores in events.details.media_ids). STANDING RULE reaffirmed: every data-entry form carries the media widget. Requires backend v0.12.145 FIRST (extra=forbid).
   // v242 (2026-07-16): Advanced-training checkboxes REMOVED from the Training card editor (and the Advanced-trainings row from the detail card) - trainings are now entered exclusively through Log training, whose dropdown is fed by the self-learning cadet_training_catalog. Editor keeps Recruit Training / NLO date + notes, with a hint pointing at Log training. Stored usnscc_trainings values preserved (key no longer sent, never overwritten). Dead USNSCC_TRAININGS/_ct consts dropped from ecEdit.
   // v241 (2026-07-16): Cadet training logger upgrades. (1) Training name on Sea Cadet entries is a dropdown fed by the shared cadet_training_catalog (GET /catalogs/cadet-trainings, cached in CADET_TRAINING_CATALOG) - every new training any cadet enters is auto-learned server-side and appears for the next cadet; 'Other (type below)' option reveals a free-text input that feeds the catalog on save. (2) Two separate date pickers: Start date * (event_date) + End date (event_end_date, new in backend v0.12.144). Training rows show 'start \u2192 end'. Requires backend v0.12.144 deployed FIRST (extra=forbid).
@@ -2246,6 +2247,21 @@ function readSkillsFromForm() {
   return Array.from(new Set(out));
 }
 const LM_KINDS = { rank: 'Rank', merit_badge: 'Merit badge', award: 'Award' };
+// v244: save ec-session items; degrade gracefully if live backend predates media_ids
+async function ecSessionPost(item) {
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+  } catch (e) {
+    var msg = (e && e.message) || '';
+    if (item.media_ids !== undefined && /media_ids|422|unprocessable/i.test(msg)) {
+      delete item.media_ids;
+      await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+      showToast('Saved. Media attachments will start saving after the next backend update.', 'info');
+      return;
+    }
+    throw e;
+  }
+}
 var CADET_TRAINING_CATALOG = null;  // v241: shared cross-tenant training list
 async function loadCadetTrainings() {
   if (CADET_TRAINING_CATALOG) return CADET_TRAINING_CATALOG;
@@ -3172,7 +3188,7 @@ async function lmSave(id, fixedKind) {
   if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
   if (id) item.id = id;
   try {
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    await ecSessionPost(item);
     showToast('Saved', 'success');
     CADET_TRAINING_CATALOG = null;  // v241: re-fetch so a just-learned training appears immediately
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
@@ -3199,7 +3215,7 @@ async function perfSave(id) {
   if (id) item.id = id;
   item.related_affiliation_id = ENTRY_VIEW.id;
   try {
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    await ecSessionPost(item);
     showToast('Saved', 'success');
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
@@ -9227,7 +9243,7 @@ async function sessionSave(id) {
   if (_sl) item.location = [item.location, _sl].filter(Boolean).join(', ');
   if (!item.title || !item.event_date || !item.event_type) { showToast('Type, title, and date required','error'); return; }
   try {
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    await ecSessionPost(item);
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
     if (SESSIONS_FILTER) openSessionKind(SESSIONS_FILTER); else renderSessionKinds(); showToast('Saved','success');
