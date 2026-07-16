@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v233 (2026-07-16): USNSCC cards restyled to the portal-standard flat row look (matching every other card in the app): no gray boxes - flat sections with hairline #F6F6F3 dividers, Lora navy section titles, ec-meta gray field rows. Applied to both the detail-view cards and the edit-form section cards.
   // v232 (2026-07-16): Sea Cadet EDIT form sections wrapped in card containers (matching the detail-view cards) - Unit Information / Training / Promotions each render as a bordered card with its fields inside, instead of flat header dividers.
   // v231 (2026-07-16): Sea Cadet detail - rank/badge/award log now lives INSIDE the Promotions card and the training log INSIDE the Training card; the three cards stack full-width. Generic Leadership log sections suppressed for sea-cadet entries (still render for BSA/CAP/etc).
   // v230 (2026-07-16): Sea Cadet entry detail renders three read-only cards - Unit Information, Training, Promotions - from details JSONB, above the rank/training logs. Cards deep-link to Edit.
@@ -2846,7 +2847,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
   // v226: read-only media chip grid on entry detail (widget rendered inside ecEdit is the editable one)
   const _dmids = normalizeMediaIds(a);
   if (_dmids.length) {
-    html += '<div style="margin-top:18px;padding:12px 14px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
+    html += '<div style="padding:14px 0;border-bottom:1px solid #F6F6F3">' +
       '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px;margin-bottom:8px">Attached media <span style="font-weight:400;color:#7A8A9E;font-size:12px">(' + _dmids.length + ')</span></div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
       _dmids.map(function(mid){
@@ -2863,12 +2864,12 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const _trainings = _all.filter(s => s.milestone_kind === 'training');
     function _cRows(rows) {
       return rows.filter(function(r){ return r[1]; }).map(function(r){
-        return '<div style="display:flex;gap:8px;font-size:13.5px;padding:2px 0"><span style="color:#7A8A9E;min-width:170px">' + r[0] + '</span><span style="color:var(--navy)">' + escapeHTML(String(r[1])) + '</span></div>';
-      }).join('') || '<div style="font-size:13px;color:#7A8A9E">Nothing recorded yet \u2014 use Edit above to fill this in.</div>';
+        return '<div style="display:flex;gap:8px;padding:2px 0"><span class="ec-meta" style="min-width:170px;margin-top:0">' + r[0] + '</span><span class="ec-title" style="font-weight:400">' + escapeHTML(String(r[1])) + '</span></div>';
+      }).join('') || '<div class="ec-notes">Nothing recorded yet \u2014 use Edit above to fill this in.</div>';
     }
     function _cShell(title, inner) {
-      return '<div style="margin-top:16px;padding:16px 18px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
-        '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:10px">' + title + '</div>' + inner + '</div>';
+      return '<div style="padding:14px 0;border-bottom:1px solid #F6F6F3">' +
+        '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:8px">' + title + '</div>' + inner + '</div>';
     }
     html += _cShell('Unit Information', _cRows([
       ['Field Area', dd0.usnscc_area], ['Region', dd0.usnscc_region],
@@ -3219,7 +3220,7 @@ function mediaKindIcon(k) {
 function mediaWidgetHtml(id, label, initialIds) {
   const arr = Array.isArray(initialIds) ? initialIds.filter(Boolean) : [];
   const attr = escapeAttr(JSON.stringify(arr));
-  return '<div class="ec-media-widget" id="' + id + '" data-mids="' + attr + '" style="margin:10px 0 14px;padding:12px 14px;border:1px dashed #C7CBD6;border-radius:10px;background:#FAFBFD">' +
+  return '<div class="ec-media-widget" id="' + id + '" data-mids="' + attr + '" style="margin:10px 0 14px;padding:12px 0;border-top:1px solid #F6F6F3;border-bottom:1px solid #F6F6F3">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
     '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">' + escapeHTML(label || 'Photos, videos & documents') +
     ' <span style="font-weight:400;color:#7A8A9E;font-size:12px">(optional, multi-attach)</span></div>' +
@@ -3355,9 +3356,9 @@ function ecEdit(id, presetProgCode) {
   const USNSCC_TRAININGS = ['SeaPerch Underwater Robotics', 'Aviation Ground School', 'Cybersecurity', 'Marine Engineering', 'Field Medical (First Aid / CPR)', 'Seamanship & Navigation', 'Firefighting', 'Wilderness Survival'];
   const _ct = Array.isArray(dd.usnscc_trainings) ? dd.usnscc_trainings : [];
   function _cadetFormCard(t, sub, inner) {
-    return '<div style="margin:12px 0;padding:14px 16px;background:#FAFBFD;border:1px solid #E7E9EF;border-radius:10px">' +
-      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:15px">' + t +
-      (sub ? ' <span style="font-family:Poppins,sans-serif;font-weight:400;color:#7A8A9E;font-size:12px">' + sub + '</span>' : '') + '</div>' + inner + '</div>';
+    return '<div style="padding:14px 0;border-bottom:1px solid #F6F6F3">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:15px;margin-bottom:6px">' + t +
+      (sub ? ' <span class="ec-meta" style="margin-top:0;display:inline">' + sub + '</span>' : '') + '</div>' + inner + '</div>';
   }
   const cadetBlock =
     '<div id="usnscc-wrap" style="' + (isCadetAffil ? '' : 'display:none') + '">' +
