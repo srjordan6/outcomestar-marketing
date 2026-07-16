@@ -2232,32 +2232,56 @@ function swmParsePaste() {
   const msg = document.getElementById('swm-paste-msg');
   const raw = (ta.value || '').trim();
   if (!raw) { msg.textContent = 'Nothing to parse.'; return; }
+  const EVENT_START = /^(\d{2,4})\s+(FR|FREE|BK|BACK|BR|BREAST|FL|FLY|IM)\s+(SCY|LCM|SCM)\b/i;
+  // The Data Hub can copy as one-line-per-ROW (tab separated) or one-line-per-CELL
+  // (each column on its own line, meet names possibly wrapped across two lines).
+  // Normalize: any line that STARTS a new event begins a new logical row; all
+  // following lines are its cells until the next event line. Rows already
+  // containing content after the event stay as-is.
+  const rawLines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const rowLines = [];
+  let cur = null;
+  rawLines.forEach(l => {
+    const em = l.match(EVENT_START);
+    if (em) {
+      if (cur) rowLines.push(cur);
+      cur = l.slice(em[0].length).trim() ? l : em[0]; // keep full line if row-style
+      if (cur === em[0]) cur = l; // cell-style: start accumulating
+    } else if (cur) {
+      cur += '\t' + l;
+    }
+    // lines before the first event line (headers like "Event Time Age...") are ignored
+  });
+  if (cur) rowLines.push(cur);
   const parsed = [];
   const skipped = [];
-  raw.split(/\r?\n/).forEach(line => {
-    const t = line.trim();
-    if (!t) return;
-    // event: "<dist> <STROKE> <COURSE>" at line start
-    const em = t.match(/^(\d{2,4})\s+(FR|FREE|BK|BACK|BR|BREAST|FL|FLY|IM)\s+(SCY|LCM|SCM)\b/i);
+  rowLines.forEach(t => {
+    const em = t.match(EVENT_START);
     if (!em) { skipped.push(t.slice(0, 40)); return; }
     const dist = em[1], stroke = SWM_STROKE_FROM_CODE[em[2].toUpperCase()], course = em[3].toUpperCase();
     const rest = t.slice(em[0].length);
     const time = (rest.match(/(\d+:)?\d{1,2}\.\d{1,2}/) || [null])[0];
     const pts = (rest.match(/(\d{2,4})\s*pts/i) || [null, null])[1];
     const std = (rest.match(/\b(AAAA|AAA|AA|A|BB|B)\b/) || [null, null])[1];
-    const dateM = rest.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    const isoDate = dateM ? (dateM[3] + '-' + dateM[1] + '-' + dateM[2]) : null;
+    const dateM = rest.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const isoDate = dateM ? (dateM[3] + '-' + dateM[1].padStart(2, '0') + '-' + dateM[2].padStart(2, '0')) : null;
     // age = standalone 1-2 digit number that isn't the points and isn't inside the time
     let age = null;
-    const restNoTime = rest.replace(/(\d+:)?\d{1,2}\.\d{1,2}/, ' ').replace(/(\d{2,4})\s*pts\.?/i, ' ');
+    const restNoTime = rest.replace(/(\d+:)?\d{1,2}\.\d{1,2}/, ' ').replace(/(\d{2,4})\s*pts\.?/i, ' ').replace(/\d{1,2}\/\d{1,2}\/\d{4}/, ' ');
     const am = restNoTime.match(/(?:^|[\s\t])(\d{1,2})(?:[\s\t]|$)/);
     if (am) age = parseInt(am[1], 10);
-    // meet + team: text between std and date, split on tab or 2+ spaces
+    // meet + team: the two cells immediately before the date cell
     let meet = null, team = null;
     const cells = t.split(/\t| {2,}/).map(s => s.trim()).filter(Boolean);
-    if (cells.length >= 6) {
-      const dIdx = cells.findIndex(c => /^\d{2}\/\d{2}\/\d{4}$/.test(c));
-      if (dIdx >= 2) { team = cells[dIdx - 1]; meet = cells[dIdx - 2]; }
+    const dIdx = cells.findIndex(c => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(c));
+    if (dIdx >= 2) {
+      team = cells[dIdx - 1];
+      // meet may have wrapped across multiple pasted lines -> multiple cells
+      // between the standard cell and the team cell; rejoin them.
+      let sIdx = -1;
+      for (let i = 1; i < dIdx - 1; i++) if (/^(AAAA|AAA|AA|A|BB|B)$/.test(cells[i])) sIdx = i;
+      const from = sIdx >= 0 ? sIdx + 1 : Math.max(1, dIdx - 2);
+      meet = cells.slice(from, dIdx - 1).join(' ').trim() || null;
     }
     if (!time) { skipped.push(t.slice(0, 40)); return; }
     parsed.push({ ev: dist + ' ' + stroke, course: course, time: time, pts: pts ? parseInt(pts, 10) : null,
