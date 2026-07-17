@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v246 (2026-07-16): media widget UX. (1) POSITION: widget moved to the bottom of every data-entry form, directly AFTER the skills field and before the showcase toggle - ecEdit, lmEdit, perfEdit, sessionEdit. (2) THUMBNAILS: chips replaced by 72px image thumbnails (img src=/focms/v1/media/{id}; 302-follows to R2/CDN); non-image files (PDF/video/docs) fall back to the paperclip chip via onerror. Click opens full file; x removes. Same renderer everywhere the widget appears.
   // v245 (2026-07-16): logger address blocks STAY FILLED on re-edit. v240 composed the block into the single location string (undecomposable), so the block reopened empty. Saves now also send location_parts (readAddr output) stored in events.details.location_parts (backend v0.12.146); lmEdit/perfEdit/sessionEdit prefill addrFields from record.location_parts. Home-default unchanged (only when block empty AND record new). ecSessionPost degradation guard extended to strip location_parts alongside media_ids on 422 against an older backend.
   // v244 (2026-07-16): graceful degradation for media on logger saves. Render pipeline minutes exhausted mid-rollout, so live backend may be v0.12.144 (no media_ids on EcSessionItem -> 422). New ecSessionPost(item): tries the save as-is; on a 422/media_ids rejection strips media_ids and retries once, warning that attachments will save after the backend update. lmSave/perfSave/sessionSave all use it. Harmless once v0.12.145 deploys - first attempt just succeeds.
   // v243 (2026-07-16): universal media widget on ALL EC logger forms - Log training / rank / badge / award (lmEdit, widget id lm-media), performance (perfEdit, pf-media), and session (sessionEdit, sess-media). Chips prefill from record media_ids; saves send media_ids on the ec-sessions payload (backend v0.12.145 stores in events.details.media_ids). STANDING RULE reaffirmed: every data-entry form carries the media widget. Requires backend v0.12.145 FIRST (extra=forbid).
@@ -2917,7 +2918,11 @@ function renderEntryDetail(catCode, progCode, affilId) {
       '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px;margin-bottom:8px">Attached media <span style="font-weight:400;color:#7A8A9E;font-size:12px">(' + _dmids.length + ')</span></div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
       _dmids.map(function(mid){
-        return '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;cursor:pointer" onclick="mediaWidgetView(\'' + mid + '\')" title="Open media">\ud83d\udcce ' + mid.slice(0, 8) + '</span>';
+        var msrc = API_BASE + '/focms/v1/media/' + mid;
+        return '<span style="display:inline-block"><img src="' + msrc + '" alt="" loading="lazy" ' +
+          'style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;cursor:pointer;display:block;background:#EEEDF7" ' +
+          'onclick="mediaWidgetView(\'' + mid + '\')" ' +
+          'onerror="this.outerHTML=\'<span class=&quot;art-chip&quot; style=&quot;background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;cursor:pointer&quot; onclick=&quot;mediaWidgetView(\\\'' + mid + '\\\')&quot;>\ud83d\udcce ' + mid.slice(0, 8) + '</span>\'"></span>';
       }).join('') + '</div></div>';
   }
   // v231: three stacked USNSCC cards; Training and Promotions embed their logs
@@ -3083,9 +3088,9 @@ function perfEdit(id) {
     perfField('pf-location', 'Venue / place name', p.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('pfloc', p.location_parts || {}) +
-    mediaWidgetHtml('pf-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
+    mediaWidgetHtml('pf-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="pf-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="perfSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
@@ -3159,11 +3164,11 @@ async function lmEdit(id, presetKind) {
         perfField('lm-end', 'End date', p.event_end_date, 'date') + '</div>'
       : perfField('lm-date', 'Date attained *', p.event_date, 'date')) +
     perfField('lm-location', 'Venue / place name', p.location) +
-    mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('lmloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
+    mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
@@ -3429,16 +3434,29 @@ function mediaWidgetCollect(id) {
   const c = document.getElementById(id);
   return mediaWidgetIds(c);
 }
+function mediaThumbHtml(mid) {
+  // v246: image thumbnail with paperclip-chip fallback for non-image files
+  var src = API_BASE + '/focms/v1/media/' + mid;
+  return '<span class="ec-media-thumb" data-mid="' + mid + '" style="position:relative;display:inline-block">' +
+    '<img src="' + src + '" alt="" loading="lazy" ' +
+    'style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;cursor:pointer;display:block;background:#EEEDF7" ' +
+    'onclick="mediaWidgetView(\'' + mid + '\')" ' +
+    'onerror="mediaThumbFallback(this,\'' + mid + '\')">' +
+    '<span class="art-x" style="position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid #E5E7EB;border-radius:50%;width:18px;height:18px;line-height:16px;text-align:center;cursor:pointer;color:#B93A2F;font-weight:700;font-size:12px" ' +
+    'onclick="mediaWidgetRemove(this,\'' + mid + '\')">\u00d7</span></span>';
+}
+function mediaThumbFallback(imgEl, mid) {
+  var holder = imgEl.parentElement; if (!holder) return;
+  holder.innerHTML = '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;display:inline-flex;align-items:center;gap:6px;height:72px;box-sizing:border-box" title="Click to open">' +
+    '<span onclick="mediaWidgetView(\'' + mid + '\')" style="cursor:pointer">\ud83d\udcce ' + mid.slice(0, 8) + '</span>' +
+    '<span class="art-x" style="cursor:pointer;color:#B93A2F;font-weight:700" onclick="mediaWidgetRemove(this,\'' + mid + '\')">\u00d7</span></span>';
+}
 function mediaWidgetRenderChips(id) {
   const c = document.getElementById(id); if (!c) return;
   const wrap = c.querySelector('.ec-media-chips'); if (!wrap) return;
   const ids = mediaWidgetIds(c);
   if (!ids.length) { wrap.innerHTML = '<span style="font-size:12px;color:#7A8A9E">No media attached yet.</span>'; return; }
-  wrap.innerHTML = ids.map(function(mid){
-    return '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;display:inline-flex;align-items:center;gap:6px" title="Click to open">' +
-      '<span onclick="mediaWidgetView(\'' + mid + '\')" style="cursor:pointer">\ud83d\udcce ' + mid.slice(0, 8) + '</span>' +
-      '<span class="art-x" style="cursor:pointer;color:#B93A2F;font-weight:700" onclick="mediaWidgetRemove(this,\'' + mid + '\')">\u00d7</span></span>';
-  }).join('');
+  wrap.innerHTML = ids.map(mediaThumbHtml).join('');
 }
 async function mediaWidgetOnPick(inputEl) {
   const container = mediaWidgetContainer(inputEl);
@@ -3587,8 +3605,8 @@ function ecEdit(id, presetProgCode) {
       ecField('coach_email', 'Coach email', a.coach_email) : '') +
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
-    mediaWidgetHtml('ec-media', 'Photos, videos & documents', normalizeMediaIds(a)) +
     skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil) +
+    mediaWidgetHtml('ec-media', 'Photos, videos & documents', normalizeMediaIds(a)) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
@@ -9227,10 +9245,10 @@ function sessionEdit(id) {
     ecField('location','Venue / place name',s.location) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('sessloc', s.location_parts || {}) +
-    mediaWidgetHtml('sess-media', 'Photos, videos & documents', normalizeMediaIds(s)) +
     '<label class="ec-lbl">Link to affiliation<select class="ec-in" data-k="related_affiliation_id">'+affilOpts+'</select></label>' +
     ecArea('notes','Notes',s.notes) +
     skillsGainedField(s.skills_gained) +
+    mediaWidgetHtml('sess-media', 'Photos, videos & documents', normalizeMediaIds(s)) +
     showcaseField(s.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="sessionSave(\''+(id||'')+'\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="SESSIONS_FILTER ? openSessionKind(SESSIONS_FILTER) : renderSessionKinds()">Cancel</button></div></div>';
