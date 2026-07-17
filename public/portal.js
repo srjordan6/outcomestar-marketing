@@ -148,6 +148,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v257 (2026-07-16): AI resume price disclosure + payment handling (pairs with backend v0.12.148). The Enhance with AI label now states the $1.00 + tax charge to the card on file, applicable on every plan including free and cohort signups. When the backend returns 402 (declined / no card on file), the portal shows the payment message and falls back to the FREE standard structured resume; on other tailoring failures the existing fallback message stands (backend auto-refunds any successful charge when its own LLM step fails).
+  // v256 (2026-07-16): AI resume enhancement always available. The grounded /resume-tailor endpoint (never-invent rules, ATS formatting, JSON-validated, Claude via _llm_complete) previously only ran when a target was filled in. The resume modal now has an 'Enhance with AI' checkbox (default ON, both resume kinds): with no target, the endpoint is called in general-purpose mode ('produce the strongest general resume'); with a target, behavior unchanged. Unchecking yields the raw structured resume. Backend unchanged. AI output remains fully editable/removable in the editor before Generate.
   // v255 (2026-07-16): Academic Resume rebuilt to the standard academic-CV structure, reverse chronological, drawing on the FULL record (user confirmed multiple schools + teachers were being left out). Sections: CONTACT (name/city-state/email/phone - lean header, replaces the full STUDENT dossier for this form only); EDUCATION (ALL school profiles, reverse-chron by start_date, with city/state, grades attended, and attendance dates - previously only the current school appeared); RELEVANT COURSEWORK (grouped per school, reverse-chron, each course shows year/grade level, AP/Honors/IB/Dual-credit rigor tags, grade received, and TEACHER); HONORS & AWARDS (achieved milestones + course completion awards); STANDARDIZED TESTS; ACADEMIC & LEADERSHIP EXPERIENCE (affiliations with roles/dates); SKILLS (acquired skills from the skills record); LANGUAGES (language at home). GPA emitted under EDUCATION when the academics record has one. Research/publications sections appear only when the record has content (nothing fabricated). Extracurricular checkbox from v253 still appends the EC sections after these.
   // v254 (2026-07-16): resume/UCA editor cleanup after v253 feedback. (1) LAYOUT FIX: .ec-lbl is display:flex column - v253's inline display:block broke field stretching (tiny floating textareas). Rows now render a flex header line (label text + x Remove button right-aligned) above the full-width textarea, no label style overrides. (2) Editor bar: Save renamed Generate; Print/PDF/Delete removed from the editor - Generate lands on the saved library where Print / PDF / Edit / Delete already exist per item. ucaEditorOut removed; ucaPrintX/ucaPdfX retained (library uses them via ucaPrint/ucaPdfOut).
   // v253 (2026-07-16): Academic Resume upgrades. (1) Target modal gains an 'Include Extracurricular information' checkbox (default ON, academic resume only) - when checked the generated resume also pulls the extracurricular record: every logger session grouped by kind (service, summer, leadership, competition, STEM, music performance) plus swim best times, via new ucaEcSections(). (2) The resume editor gains per-row Remove (x) toggles - every prefilled row defaults to KEEP; edit the text to change it, or click x to drop it from the saved/printed document (undoable before save). Removed rows are excluded on save; emptied sections vanish. (3) Editor action bar gains Print / PDF / Delete: Print and PDF render the CURRENT editor content (deletions and edits applied, no save required) via new ucaPrintX/ucaPdfX object variants that back the existing id-based ucaPrint/ucaPdfOut; Delete appears only when editing a saved instance.
@@ -7056,6 +7058,7 @@ function ucaResumeCreate(code){
         + fld('uc-loc','Employer location (city, state)','',1) + fld('uc-ct','Hiring manager / contact (if known)','',1)
         + fld('uc-phone','Employer telephone (if known)','',1) + fld('uc-type','Hours / status','e.g. Part time, weekends',1))
     + (acad ? '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ec" checked style="width:auto;margin-right:8px;vertical-align:middle">Include Extracurricular information</label>' : '')
+    + '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ai" checked style="width:auto;margin-right:8px;vertical-align:middle">Enhance with AI \u2014 selects, orders, and words your records professionally (facts only, never invented). <b>$1.00 + tax</b>, charged to your card on file \u2014 applies on every plan.</label>'
     +'<label class="ec-lbl">Paste the '+(acad?'program, scholarship, or opportunity description':'job posting / description')+' (optional)'
     +'<textarea class="rec-i" id="uc-jd" rows="7"></textarea></label>'
     +'<div class="rec-bar"><button class="save-btn" id="uc-jd-go">Continue</button>'
@@ -7066,6 +7069,7 @@ function ucaResumeCreate(code){
     var org=gv('uc-org'), pos=gv('uc-pos'), loc=gv('uc-loc'), ct=gv('uc-ct'),
         phone=gv('uc-phone'), htype=gv('uc-type'), fld2=gv('uc-fld'), dead=gv('uc-dead'), jd=gv('uc-jd');
     var incEc = acad && (function(){ var el=document.getElementById('uc-ec'); return el ? el.checked : false; })();
+    var useAi2 = (function(){ var el=document.getElementById('uc-ai'); return el ? el.checked : false; })();
     ov.remove();
     const d = await appData();
     var secs = await ucaBuildSections(code, null, d);
@@ -7081,8 +7085,9 @@ function ucaResumeCreate(code){
     if (htype) parts.push('Hours/status: '+htype);
     if (dead)  parts.push('Deadline: '+dead);
     if (jd)    parts.push('Description:\n'+jd);
-    if (parts.length) {
-      showToast('Tailoring resume\u2026','success');
+    if (!parts.length && useAi2) parts.push('No specific target \u2014 produce the strongest general-purpose ' + (acad ? 'academic resume for admissions and scholarship review' : 'resume') + ' from this record.');
+    if (parts.length && useAi2) {
+      showToast('Enhancing resume with AI\u2026','success');
       try {
         const r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/resume-tailor',
           { resume_kind: code, job_description: parts.join('\n'), sections: secs.filter(function(s){return s.title!=='STUDENT';}) });
@@ -7096,7 +7101,14 @@ function ucaResumeCreate(code){
           secs = (stu?[stu]:[]).concat(tgt.rows.length?[tgt]:[], r.sections);
           title += ' \u2014 ' + (pos||org||'tailored') + (pos&&org?(', '+org):'');
         }
-      } catch(e){ showToast('Tailoring unavailable \u2014 using standard resume','error'); }
+      } catch(e){
+        var pm = String(e.message||'');
+        if (/payment_failed|payment_required|payment_unavailable/.test(pm)) {
+          showToast('Card charge failed \u2014 AI enhancement skipped. ' + pm.replace(/^.*?:\s*/,'') + ' Showing the free standard resume.','error');
+        } else {
+          showToast('AI enhancement unavailable \u2014 using the free standard resume (no charge)','error');
+        }
+      }
     }
     ucaEditorWith(code, null, null, secs, title);
   };
