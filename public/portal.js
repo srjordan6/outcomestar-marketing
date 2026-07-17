@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v253 (2026-07-16): Academic Resume upgrades. (1) Target modal gains an 'Include Extracurricular information' checkbox (default ON, academic resume only) - when checked the generated resume also pulls the extracurricular record: every logger session grouped by kind (service, summer, leadership, competition, STEM, music performance) plus swim best times, via new ucaEcSections(). (2) The resume editor gains per-row Remove (x) toggles - every prefilled row defaults to KEEP; edit the text to change it, or click x to drop it from the saved/printed document (undoable before save). Removed rows are excluded on save; emptied sections vanish. (3) Editor action bar gains Print / PDF / Delete: Print and PDF render the CURRENT editor content (deletions and edits applied, no save required) via new ucaPrintX/ucaPdfX object variants that back the existing id-based ucaPrint/ucaPdfOut; Delete appears only when editing a saved instance.
   // v252 (2026-07-16): Edit button removed from the Rank, Badges & Awards card header. Current rate / PT rows remain display-only; rank progression is captured through Log rank / badge / award. cadetSecEdit/cadetSecSave retained but unreferenced (promo path) - candidate for removal in a future cleanup.
   // v251 (2026-07-16): venue gets its own slot. v240 composed venue + address into the single location string AND the venue field read that whole string back, so on edit the venue input showed 'Schreiner University, 2100 Memorial Blvd., Kerrville, TX 78028' with an empty address block. Now: location_parts carries a 'venue' key; the venue input prefills from location_parts.venue when stored (falls back to the raw location string only for legacy rows); the composed location column is unchanged for display. lmEdit/perfEdit/sessionEdit + their saves. Backend needs no change (location_parts is an opaque dict). Pre-v245 rows are repaired server-side via MCP (location decomposed into venue + parts).
   // v250 (2026-07-16): Promotions card renamed to 'Rank, Badges & Awards'; the redundant inner 'Rank, merit badges & awards' subheader removed (bar keeps just the Log button next to the rate rows). Pairs with v248's Training card cleanup - the two cadet cards are now Training (log only) and Rank, Badges & Awards (rate + PT + log). The generic (non-cadet) leadership section header renamed to match.
@@ -6974,6 +6975,33 @@ function ucaReportCreate(code){
     };
   })();
 }
+async function ucaEcSections(){
+  async function g(p){ try { return await apiGet('/focms/v1/student/' + STUDENT_ID + p); } catch(e){ return {}; } }
+  const [es, sb] = await Promise.all([ g('/ec-sessions'), g('/computed/swim-bests') ]);
+  var rows = es.sessions || [];
+  function S(t, rs){ return { title: t, rows: rs.filter(function(r){ return r[1] != null && r[1] !== ''; }) }; }
+  function venueOf(x){
+    var lp = x.location_parts;
+    if (lp && typeof lp === 'object' && lp.venue) return lp.venue;
+    return x.location || '';
+  }
+  var secs = [];
+  EC_EVENT_TYPES.forEach(function(t){
+    var list = rows.filter(function(x){ return x.event_type === t.code; });
+    if (!list.length) return;
+    secs.push(S(t.label.toUpperCase() + 'S', list.map(function(x){
+      return [x.title || t.label, [x.event_date, venueOf(x)].filter(Boolean).join(' \u00b7 ')];
+    })));
+  });
+  var bestsRaw = (sb && sb.bests) || {}, bestRows = [];
+  if (Array.isArray(bestsRaw)) {
+    bestRows = bestsRaw.map(function(b){ return [String(b.title||b.event||''), [b.time||b.swim_time, b.usa_standard||b.time_standard, b.date].filter(Boolean).join(' \u00b7 ')]; });
+  } else {
+    bestRows = Object.keys(bestsRaw).map(function(k){ var b=bestsRaw[k]||{}; return [k, [b.time, b.usa_standard, b.date].filter(Boolean).join(' \u00b7 ')]; });
+  }
+  if (bestRows.length) secs.push(S('SWIMMING \u2014 BEST TIMES', bestRows));
+  return secs.filter(function(x){ return x.rows.length; });
+}
 function ucaResumeCreate(code){
   var acad = (code==='resume_academic');
   function fld(id,label,ph,half){ return '<label class="ec-lbl" style="'+(half?'width:48%;display:inline-block;margin-right:2%':'')+'">'+label+'<input class="rec-i" id="'+id+'" placeholder="'+(ph||'')+'"></label>'; }
@@ -6987,6 +7015,7 @@ function ucaResumeCreate(code){
       : fld('uc-org','Employer / company name','e.g. Iron Horse Aquatics',1) + fld('uc-pos','Position title','e.g. Assistant Age-Group Coach',1)
         + fld('uc-loc','Employer location (city, state)','',1) + fld('uc-ct','Hiring manager / contact (if known)','',1)
         + fld('uc-phone','Employer telephone (if known)','',1) + fld('uc-type','Hours / status','e.g. Part time, weekends',1))
+    + (acad ? '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ec" checked style="width:auto;margin-right:8px;vertical-align:middle">Include Extracurricular information</label>' : '')
     +'<label class="ec-lbl">Paste the '+(acad?'program, scholarship, or opportunity description':'job posting / description')+' (optional)'
     +'<textarea class="rec-i" id="uc-jd" rows="7"></textarea></label>'
     +'<div class="rec-bar"><button class="save-btn" id="uc-jd-go">Continue</button>'
@@ -6996,9 +7025,11 @@ function ucaResumeCreate(code){
     function gv(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
     var org=gv('uc-org'), pos=gv('uc-pos'), loc=gv('uc-loc'), ct=gv('uc-ct'),
         phone=gv('uc-phone'), htype=gv('uc-type'), fld2=gv('uc-fld'), dead=gv('uc-dead'), jd=gv('uc-jd');
+    var incEc = acad && (function(){ var el=document.getElementById('uc-ec'); return el ? el.checked : false; })();
     ov.remove();
     const d = await appData();
     var secs = await ucaBuildSections(code, null, d);
+    if (incEc) secs = secs.concat(await ucaEcSections());
     var title = ucaFormName(code);
     var parts = [];
     if (org)   parts.push((acad?'Institution/Organization: ':'Employer: ')+org);
@@ -7049,13 +7080,17 @@ async function ucaEditor(code, appId, instanceId){
   }
   window.__UCAED = { code: code, appId: appId, instanceId: instanceId };
   var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">Save</button>'
+    + '<button class="save-btn save-btn-ghost" onclick="ucaEditorOut(\'print\')">Print</button>'
+    + '<button class="save-btn save-btn-ghost" onclick="ucaEditorOut(\'pdf\')">PDF</button>'
+    + (instanceId ? '<button class="save-btn save-btn-ghost" onclick="ucaDelete(\'' + instanceId + '\')">Delete</button>' : '')
     + '<button class="save-btn save-btn-ghost" onclick="renderUcaTopic(\'' + code + '\')">Cancel</button></div>'
     + '<div class="ec-form" style="max-width:820px">'
     + '<label class="ec-lbl">Title<input class="ec-in" id="uca-title" value="' + escapeHTML(title||'') + '"></label>';
   secs.forEach(function(sec, si){
     html += '<h3 style="font-family:Lora,serif;color:var(--navy);background:#EEEDF7;padding:6px 10px;border-radius:6px;margin:14px 0 4px">' + escapeHTML(sec.title) + '</h3>';
     sec.rows.forEach(function(r, ri){
-      html += '<label class="ec-lbl">' + escapeHTML(r[0])
+      html += '<label class="ec-lbl" style="position:relative;display:block">' + escapeHTML(r[0])
+        + '<button type="button" class="save-btn save-btn-ghost uca-x" data-s="'+si+'" data-r="'+ri+'" onclick="ucaRowDel(this)" title="Remove from this document" style="position:absolute;right:0;top:-4px;padding:1px 9px;font-size:12px;line-height:1.6">\u2715</button>'
         + '<textarea class="ec-in uca-f" data-s="'+si+'" data-r="'+ri+'" rows="' + (String(r[1]).length>120?4:1) + '">' + escapeHTML(String(r[1])) + '</textarea></label>';
     });
   });
@@ -7064,11 +7099,34 @@ async function ucaEditor(code, appId, instanceId){
   document.getElementById('sections-container').innerHTML = html;
   window.scrollTo({top:0});
 }
-async function ucaSaveInstance(){
+function ucaRowDel(btn){
+  var ta = document.querySelector('.uca-f[data-s="'+btn.dataset.s+'"][data-r="'+btn.dataset.r+'"]');
+  if (!ta) return;
+  var del = ta.dataset.del === '1';
+  ta.dataset.del = del ? '' : '1';
+  ta.disabled = !del;
+  ta.style.textDecoration = del ? '' : 'line-through';
+  ta.style.opacity = del ? '' : '0.45';
+  btn.textContent = del ? '\u2715' : '\u21a9';
+  btn.title = del ? 'Remove from this document' : 'Restore';
+}
+function ucaCollectSecs(){
   var secs = JSON.parse(JSON.stringify(window.__UCASECS||[]));
   document.querySelectorAll('.uca-f').forEach(function(el){
-    secs[parseInt(el.dataset.s,10)].rows[parseInt(el.dataset.r,10)][1] = el.value;
+    var row = secs[parseInt(el.dataset.s,10)].rows[parseInt(el.dataset.r,10)];
+    row[1] = el.value;
+    if (el.dataset.del === '1') row[2] = '__DEL__';
   });
+  secs.forEach(function(s){ s.rows = s.rows.filter(function(r){ return r[2] !== '__DEL__'; }); });
+  return secs.filter(function(s){ return s.rows.length; });
+}
+function ucaEditorOut(mode){
+  var e = window.__UCAED || {};
+  var x = { form_code: e.code, title: (document.getElementById('uca-title')||{value:''}).value.trim() || ucaFormName(e.code), data: { sections: ucaCollectSecs() } };
+  if (mode === 'print') ucaPrintX(x); else ucaPdfX(x);
+}
+async function ucaSaveInstance(){
+  var secs = ucaCollectSecs();
   var e = window.__UCAED;
   var item = { form_code: e.code, application_id: e.appId, title: document.getElementById('uca-title').value.trim(), data: { sections: secs } };
   if (e.instanceId) item.id = e.instanceId;
@@ -7481,6 +7539,9 @@ function ucaFullDoc(x){
 }
 function ucaPrint(id){
   var x = UCA_SAVED.find(function(v){return v.id===id;}); if(!x) return;
+  ucaPrintX(x);
+}
+function ucaPrintX(x){
   var w=window.open('','_blank');
   w.document.write('<!DOCTYPE html><html><head><title>'+ucaEsc(x.title)+'</title>'
     +'<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">'
@@ -7491,6 +7552,9 @@ function ucaPrint(id){
 }
 function ucaPdfOut(id){
   var x = UCA_SAVED.find(function(v){return v.id===id;}); if(!x) return;
+  ucaPdfX(x);
+}
+function ucaPdfX(x){
   function run(){
     var host=document.createElement('div');
     host.style.cssText='position:absolute;left:-10000px;top:0;width:816px;background:#fff';
