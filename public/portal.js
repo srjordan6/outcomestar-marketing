@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v249 (2026-07-16): per-training skill options. Training catalog is now cached as objects [{title, skill_options}] (backend v0.12.147); when the selected training has skill_options, the skills dropdown offers ONLY those titles and the custom free-text input is hidden - e.g. Navy League Orientation offers exactly its 13 defined skills. Switching to a training without options restores the full skill pool + custom input. Applied on dropdown change AND on edit-form open for an existing record. Options save as custom skill titles (deduped by v0.12.143).
   // v248 (2026-07-16): Sea Cadet Training card simplified - the Recruit Training / NLO date + Other trainings / notes fields and the card's Edit button are removed; every training (including Recruit Training) lives in the Log training flow with dates, skills, media, and location. cadetSecEdit/cadetSecSave keep only the promo branch. Stored usnscc_rt_completed / usnscc_training_notes preserved (keys never sent, never overwritten).
   // v247 (2026-07-16): three fixes. (1) MEDIA OPEN: mediaWidgetView used fetch+blob, which dies on CORS when /media/{id} 302s to R2/CDN ('failed to fetch'); now plain window.open of the API URL - the browser follows the 302 natively. (2) DUPLICATE ADDRESS on Sea Cadet entries: the generic Organization location block (ecorg) duplicated the Unit Information drill address; ecorg block + wiring omitted on cadet affiliations (drill block is the address of record); stored org_* details preserved untouched. (3) LATENT v240 BUG: the ecorg save-read was nested inside the cadet-only branch, so NON-cadet organizations rendered the block but never saved it; the read now runs whenever the block is present, independent of the cadet branch.
   // v246 (2026-07-16): media widget UX. (1) POSITION: widget moved to the bottom of every data-entry form, directly AFTER the skills field and before the showcase toggle - ecEdit, lmEdit, perfEdit, sessionEdit. (2) THUMBNAILS: chips replaced by 72px image thumbnails (img src=/focms/v1/media/{id}; 302-follows to R2/CDN); non-image files (PDF/video/docs) fall back to the paperclip chip via onerror. Click opens full file; x removes. Same renderer everywhere the widget appears.
@@ -2266,12 +2267,39 @@ async function ecSessionPost(item) {
     throw e;
   }
 }
-var CADET_TRAINING_CATALOG = null;  // v241: shared cross-tenant training list
+var CADET_TRAINING_CATALOG = null;  // v241: shared cross-tenant training list (titles)
+var CADET_TRAINING_ITEMS = null;    // v249: [{title, skill_options}]
 async function loadCadetTrainings() {
   if (CADET_TRAINING_CATALOG) return CADET_TRAINING_CATALOG;
-  try { const d = await apiGet('/focms/v1/catalogs/cadet-trainings'); CADET_TRAINING_CATALOG = d.trainings || []; }
-  catch (e) { CADET_TRAINING_CATALOG = (typeof CADET_TRAININGS !== 'undefined' ? CADET_TRAININGS.slice() : []); }
+  try {
+    const d = await apiGet('/focms/v1/catalogs/cadet-trainings');
+    CADET_TRAINING_ITEMS = d.items || (d.trainings || []).map(function(t){ return { title: t, skill_options: null }; });
+    CADET_TRAINING_CATALOG = CADET_TRAINING_ITEMS.map(function(i){ return i.title; });
+  }
+  catch (e) {
+    CADET_TRAINING_CATALOG = (typeof CADET_TRAININGS !== 'undefined' ? CADET_TRAININGS.slice() : []);
+    CADET_TRAINING_ITEMS = CADET_TRAINING_CATALOG.map(function(t){ return { title: t, skill_options: null }; });
+  }
   return CADET_TRAINING_CATALOG;
+}
+function trainingSkillOptions(title) {
+  var it = (CADET_TRAINING_ITEMS || []).find(function(i){ return i.title === title; });
+  return (it && Array.isArray(it.skill_options) && it.skill_options.length) ? it.skill_options : null;
+}
+// v249: restrict or restore the skills dropdown based on the selected training
+function applyTrainingSkillOptions(title) {
+  var sel = document.getElementById('sk-add');
+  var cus = document.querySelector('.ec-in.ec-skills-custom');
+  if (!sel) return;
+  var opts = title ? trainingSkillOptions(title) : null;
+  if (opts) {
+    sel.innerHTML = '<option value="">-- add a skill --</option>' +
+      opts.map(function(t){ return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>'; }).join('');
+    if (cus) { cus.value = ''; cus.style.display = 'none'; }
+  } else {
+    sel.innerHTML = '<option value="">-- add a skill --</option>' + EC_POOL_OPTS;
+    if (cus) cus.style.display = '';
+  }
 }
 function latestMilestone(affilId) {
   const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && (s.milestone_kind || 'rank') !== 'training');
@@ -3102,6 +3130,8 @@ function lmTrainingSwitch() {
   var sel = document.getElementById('lm-title-sel');
   var w = document.getElementById('lm-title-other-wrap');
   if (sel && w) w.style.display = sel.value === '__other__' ? '' : 'none';
+  // v249: a training with defined skill_options restricts the skills dropdown
+  if (sel) applyTrainingSkillOptions(sel.value === '__other__' ? '' : sel.value);
 }
 function lmTitleValue() {
   var sel = document.getElementById('lm-title-sel');
@@ -3162,6 +3192,7 @@ async function lmEdit(id, presetKind) {
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
   stdLocWire('lmloc', !id);
+  if (_tCat) applyTrainingSkillOptions((p.title && _tCat.indexOf(p.title) !== -1) ? p.title : '');  // v249
   mediaWidgetRenderChips('lm-media');
 }
 
