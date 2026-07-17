@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v251 (2026-07-16): venue gets its own slot. v240 composed venue + address into the single location string AND the venue field read that whole string back, so on edit the venue input showed 'Schreiner University, 2100 Memorial Blvd., Kerrville, TX 78028' with an empty address block. Now: location_parts carries a 'venue' key; the venue input prefills from location_parts.venue when stored (falls back to the raw location string only for legacy rows); the composed location column is unchanged for display. lmEdit/perfEdit/sessionEdit + their saves. Backend needs no change (location_parts is an opaque dict). Pre-v245 rows are repaired server-side via MCP (location decomposed into venue + parts).
   // v250 (2026-07-16): Promotions card renamed to 'Rank, Badges & Awards'; the redundant inner 'Rank, merit badges & awards' subheader removed (bar keeps just the Log button next to the rate rows). Pairs with v248's Training card cleanup - the two cadet cards are now Training (log only) and Rank, Badges & Awards (rate + PT + log). The generic (non-cadet) leadership section header renamed to match.
   // v249 (2026-07-16): per-training skill options. Training catalog is now cached as objects [{title, skill_options}] (backend v0.12.147); when the selected training has skill_options, the skills dropdown offers ONLY those titles and the custom free-text input is hidden - e.g. Navy League Orientation offers exactly its 13 defined skills. Switching to a training without options restores the full skill pool + custom input. Applied on dropdown change AND on edit-form open for an existing record. Options save as custom skill titles (deduped by v0.12.143).
   // v248 (2026-07-16): Sea Cadet Training card simplified - the Recruit Training / NLO date + Other trainings / notes fields and the card's Edit button are removed; every training (including Recruit Training) lives in the Log training flow with dates, skills, media, and location. cadetSecEdit/cadetSecSave keep only the promo branch. Stored usnscc_rt_completed / usnscc_training_notes preserved (keys never sent, never overwritten).
@@ -1478,6 +1479,12 @@ async function stdLocWire(pfx, defaultToHome) {
       if (sEl && h.state_province) sEl.value = h.state_province;
     }
   }
+}
+// v251: venue prefill - stored venue wins; legacy rows fall back to the composed location string
+function venuePrefill(rec) {
+  var lp = rec && rec.location_parts;
+  if (lp && typeof lp === 'object' && lp.venue !== undefined && lp.venue !== null) return lp.venue;
+  return (rec && rec.location) || '';
 }
 function stdLocString(pfx) {
   if (!document.getElementById(pfx + '-zip_postal_code')) return '';
@@ -3102,7 +3109,7 @@ function perfEdit(id) {
     perfField('pf-instrument', 'Instrument', p.instrument) +
     perfField('pf-music', 'Music played (piece or program)', p.music_played) +
     perfField('pf-composer', 'Composer(s)', p.composer) +
-    perfField('pf-location', 'Venue / place name', p.location) +
+    perfField('pf-location', 'Venue / place name', venuePrefill(p)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('pfloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
@@ -3182,7 +3189,7 @@ async function lmEdit(id, presetKind) {
       ? '<div class="ec-two">' + perfField('lm-date', 'Start date *', p.event_date, 'date') +
         perfField('lm-end', 'End date', p.event_end_date, 'date') + '</div>'
       : perfField('lm-date', 'Date attained *', p.event_date, 'date')) +
-    perfField('lm-location', 'Venue / place name', p.location) +
+    perfField('lm-location', 'Venue / place name', venuePrefill(p)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('lmloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
@@ -3204,7 +3211,7 @@ async function lmSave(id, fixedKind) {
     title: lmTitleValue(), event_date: v('lm-date'),
     event_end_date: v('lm-end') || null,
     media_ids: mediaWidgetCollect('lm-media'),
-    location_parts: document.getElementById('lmloc-zip_postal_code') ? readAddr('lmloc') : null,
+    location_parts: document.getElementById('lmloc-zip_postal_code') ? Object.assign(readAddr('lmloc'), { venue: v('lm-location') || '' }) : null,
     milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
     location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
@@ -3233,7 +3240,7 @@ async function perfSave(id) {
     instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
     composer: v('pf-composer') || null,
     media_ids: mediaWidgetCollect('pf-media'),
-    location_parts: document.getElementById('pfloc-zip_postal_code') ? readAddr('pfloc') : null,
+    location_parts: document.getElementById('pfloc-zip_postal_code') ? Object.assign(readAddr('pfloc'), { venue: v('pf-location') || '' }) : null,
     location: [v('pf-location'), stdLocString('pfloc')].filter(Boolean).join(', ') || null,
     notes: v('pf-notes') || null,
     show_on_showcase: document.getElementById('pf-showcase').checked
@@ -9258,7 +9265,7 @@ function sessionEdit(id) {
     ecField('title','What was it? (title)',s.title,true) +
     ecRowTwo(ecField('event_date','Date',s.event_date,true,'date'),
              ecField('duration_hours','Hours',s.duration_hours,false,'number')) +
-    ecField('location','Venue / place name',s.location) +
+    ecField('location','Venue / place name',venuePrefill(s)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('sessloc', s.location_parts || {}) +
     '<label class="ec-lbl">Link to affiliation<select class="ec-in" data-k="related_affiliation_id">'+affilOpts+'</select></label>' +
@@ -9276,7 +9283,7 @@ async function sessionSave(id) {
   if (id) item.id = id;
   collectEcForm(item);
   item.media_ids = mediaWidgetCollect('sess-media');
-  item.location_parts = document.getElementById('sessloc-zip_postal_code') ? readAddr('sessloc') : null;
+  item.location_parts = document.getElementById('sessloc-zip_postal_code') ? Object.assign(readAddr('sessloc'), { venue: item.location || '' }) : null;
   var _sl = stdLocString('sessloc');
   if (_sl) item.location = [item.location, _sl].filter(Boolean).join(', ');
   if (!item.title || !item.event_date || !item.event_type) { showToast('Type, title, and date required','error'); return; }
