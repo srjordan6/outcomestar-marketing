@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v258 (2026-07-16): Age gate UI for college applications + essays (pairs with backend v0.12.149, operator decision: creation opens at age 17). New heAge17() fetches/caches personal-details date_of_birth and computes age. Under 17: the Add application / Add essay buttons are replaced with an explanatory banner (the record keeps building; applications and essays unlock at 17); existing rows still display. Backend enforces the same rule server-side (403 age_restricted), so the UI gate is presentation, not the security boundary.
   // v257 (2026-07-16): AI resume price disclosure + payment handling (pairs with backend v0.12.148). The Enhance with AI label now states the $1.00 + tax charge to the card on file, applicable on every plan including free and cohort signups. When the backend returns 402 (declined / no card on file), the portal shows the payment message and falls back to the FREE standard structured resume; on other tailoring failures the existing fallback message stands (backend auto-refunds any successful charge when its own LLM step fails).
   // v256 (2026-07-16): AI resume enhancement always available. The grounded /resume-tailor endpoint (never-invent rules, ATS formatting, JSON-validated, Claude via _llm_complete) previously only ran when a target was filled in. The resume modal now has an 'Enhance with AI' checkbox (default ON, both resume kinds): with no target, the endpoint is called in general-purpose mode ('produce the strongest general resume'); with a target, behavior unchanged. Unchecking yields the raw structured resume. Backend unchanged. AI output remains fully editable/removable in the editor before Generate.
   // v255 (2026-07-16): Academic Resume rebuilt to the standard academic-CV structure, reverse chronological, drawing on the FULL record (user confirmed multiple schools + teachers were being left out). Sections: CONTACT (name/city-state/email/phone - lean header, replaces the full STUDENT dossier for this form only); EDUCATION (ALL school profiles, reverse-chron by start_date, with city/state, grades attended, and attendance dates - previously only the current school appeared); RELEVANT COURSEWORK (grouped per school, reverse-chron, each course shows year/grade level, AP/Honors/IB/Dual-credit rigor tags, grade received, and TEACHER); HONORS & AWARDS (achieved milestones + course completion awards); STANDARDIZED TESTS; ACADEMIC & LEADERSHIP EXPERIENCE (affiliations with roles/dates); SKILLS (acquired skills from the skills record); LANGUAGES (language at home). GPA emitted under EDUCATION when the academics record has one. Research/publications sections appear only when the record has content (nothing fabricated). Extracurricular checkbox from v253 still appends the EC sections after these.
@@ -8275,8 +8276,10 @@ function openHeSection(code) {
 let HE_ESSAYS = [], HE_RECS = [], HE_FINAID = [], HE_TESTS = [];
 
 /* ---- Essays ---- */
-function renderEssaysList() {
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="essayEdit(null)">Add essay</button><button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
+async function renderEssaysList() {
+  var ok17e = await heAge17();
+  let html = '<div class="ec-bar">' + (ok17e ? '<button class="save-btn" onclick="essayEdit(null)">Add essay</button>' : '') + '<button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
+  if (!ok17e) html += heAgeBanner('College essays');
   if (!HE_ESSAYS.length) html += '<div class="cr-waiting">No essays yet. Add the personal statement or a supplemental prompt.</div>';
   else html += HE_ESSAYS.map(e => {
     const wc = e.word_count ? e.word_count + (e.word_limit ? '/' + e.word_limit : '') + ' words' : '';
@@ -8869,11 +8872,32 @@ async function heLoadCip() {
   return CIP_CATALOG;
 }
 
-function renderAppsList() {
+var __HE_AGE = null;
+async function heAge17() {
+  if (__HE_AGE !== null) return __HE_AGE >= 17;
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/personal-details');
+    var dob = d && d.personal && d.personal.date_of_birth;
+    if (dob) {
+      var b = new Date(dob), n = new Date();
+      var a = n.getFullYear() - b.getFullYear();
+      if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) a--;
+      __HE_AGE = a;
+    } else { __HE_AGE = -1; }
+  } catch (e) { __HE_AGE = -1; }
+  return __HE_AGE >= 17;
+}
+function heAgeBanner(what) {
+  return '<div class="cr-waiting" style="border-left:3px solid var(--orange);padding-left:14px;text-align:left">' +
+    what + ' open at age 17. Until then, keep building the record \u2014 every course, activity, award, and best time logged now is what fills the ' + what.toLowerCase() + ' automatically later.</div>';
+}
+async function renderAppsList() {
   const rows = HE_APPS;
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="appEdit(null)">Add application</button>' +
+  var ok17 = await heAge17();
+  let html = '<div class="ec-bar">' + (ok17 ? '<button class="save-btn" onclick="appEdit(null)">Add application</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
-  if (!rows.length) html += '<div class="cr-waiting">No applications yet. Add one when you decide where to apply.</div>';
+  if (!ok17) html += heAgeBanner('College applications');
+  if (!rows.length) { if (ok17) html += '<div class="cr-waiting">No applications yet. Add one when you decide where to apply.</div>'; }
   else html += rows.map(appRow).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
