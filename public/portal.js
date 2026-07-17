@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v254 (2026-07-16): resume/UCA editor cleanup after v253 feedback. (1) LAYOUT FIX: .ec-lbl is display:flex column - v253's inline display:block broke field stretching (tiny floating textareas). Rows now render a flex header line (label text + x Remove button right-aligned) above the full-width textarea, no label style overrides. (2) Editor bar: Save renamed Generate; Print/PDF/Delete removed from the editor - Generate lands on the saved library where Print / PDF / Edit / Delete already exist per item. ucaEditorOut removed; ucaPrintX/ucaPdfX retained (library uses them via ucaPrint/ucaPdfOut).
   // v253 (2026-07-16): Academic Resume upgrades. (1) Target modal gains an 'Include Extracurricular information' checkbox (default ON, academic resume only) - when checked the generated resume also pulls the extracurricular record: every logger session grouped by kind (service, summer, leadership, competition, STEM, music performance) plus swim best times, via new ucaEcSections(). (2) The resume editor gains per-row Remove (x) toggles - every prefilled row defaults to KEEP; edit the text to change it, or click x to drop it from the saved/printed document (undoable before save). Removed rows are excluded on save; emptied sections vanish. (3) Editor action bar gains Print / PDF / Delete: Print and PDF render the CURRENT editor content (deletions and edits applied, no save required) via new ucaPrintX/ucaPdfX object variants that back the existing id-based ucaPrint/ucaPdfOut; Delete appears only when editing a saved instance.
   // v252 (2026-07-16): Edit button removed from the Rank, Badges & Awards card header. Current rate / PT rows remain display-only; rank progression is captured through Log rank / badge / award. cadetSecEdit/cadetSecSave retained but unreferenced (promo path) - candidate for removal in a future cleanup.
   // v251 (2026-07-16): venue gets its own slot. v240 composed venue + address into the single location string AND the venue field read that whole string back, so on edit the venue input showed 'Schreiner University, 2100 Memorial Blvd., Kerrville, TX 78028' with an empty address block. Now: location_parts carries a 'venue' key; the venue input prefills from location_parts.venue when stored (falls back to the raw location string only for legacy rows); the composed location column is unchanged for display. lmEdit/perfEdit/sessionEdit + their saves. Backend needs no change (location_parts is an opaque dict). Pre-v245 rows are repaired server-side via MCP (location decomposed into venue + parts).
@@ -7079,18 +7080,16 @@ async function ucaEditor(code, appId, instanceId){
     title = ucaFormName(code) + (APP ? (' \u2014 ' + (APP.common_name||APP.university_name)) : '');
   }
   window.__UCAED = { code: code, appId: appId, instanceId: instanceId };
-  var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">Save</button>'
-    + '<button class="save-btn save-btn-ghost" onclick="ucaEditorOut(\'print\')">Print</button>'
-    + '<button class="save-btn save-btn-ghost" onclick="ucaEditorOut(\'pdf\')">PDF</button>'
-    + (instanceId ? '<button class="save-btn save-btn-ghost" onclick="ucaDelete(\'' + instanceId + '\')">Delete</button>' : '')
+  var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">Generate</button>'
     + '<button class="save-btn save-btn-ghost" onclick="renderUcaTopic(\'' + code + '\')">Cancel</button></div>'
     + '<div class="ec-form" style="max-width:820px">'
     + '<label class="ec-lbl">Title<input class="ec-in" id="uca-title" value="' + escapeHTML(title||'') + '"></label>';
   secs.forEach(function(sec, si){
     html += '<h3 style="font-family:Lora,serif;color:var(--navy);background:#EEEDF7;padding:6px 10px;border-radius:6px;margin:14px 0 4px">' + escapeHTML(sec.title) + '</h3>';
     sec.rows.forEach(function(r, ri){
-      html += '<label class="ec-lbl" style="position:relative;display:block">' + escapeHTML(r[0])
-        + '<button type="button" class="save-btn save-btn-ghost uca-x" data-s="'+si+'" data-r="'+ri+'" onclick="ucaRowDel(this)" title="Remove from this document" style="position:absolute;right:0;top:-4px;padding:1px 9px;font-size:12px;line-height:1.6">\u2715</button>'
+      html += '<label class="ec-lbl">'
+        + '<span style="display:flex;justify-content:space-between;align-items:center">' + escapeHTML(r[0])
+        + '<button type="button" class="uca-x" data-s="'+si+'" data-r="'+ri+'" onclick="ucaRowDel(this)" title="Remove from this document" style="border:1px solid #E3E7ED;background:#fff;color:var(--navy);border-radius:6px;padding:0 8px;font-size:12px;line-height:1.7;cursor:pointer">\u2715</button></span>'
         + '<textarea class="ec-in uca-f" data-s="'+si+'" data-r="'+ri+'" rows="' + (String(r[1]).length>120?4:1) + '">' + escapeHTML(String(r[1])) + '</textarea></label>';
     });
   });
@@ -7119,11 +7118,6 @@ function ucaCollectSecs(){
   });
   secs.forEach(function(s){ s.rows = s.rows.filter(function(r){ return r[2] !== '__DEL__'; }); });
   return secs.filter(function(s){ return s.rows.length; });
-}
-function ucaEditorOut(mode){
-  var e = window.__UCAED || {};
-  var x = { form_code: e.code, title: (document.getElementById('uca-title')||{value:''}).value.trim() || ucaFormName(e.code), data: { sections: ucaCollectSecs() } };
-  if (mode === 'print') ucaPrintX(x); else ucaPdfX(x);
 }
 async function ucaSaveInstance(){
   var secs = ucaCollectSecs();
