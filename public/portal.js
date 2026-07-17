@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v247 (2026-07-16): three fixes. (1) MEDIA OPEN: mediaWidgetView used fetch+blob, which dies on CORS when /media/{id} 302s to R2/CDN ('failed to fetch'); now plain window.open of the API URL - the browser follows the 302 natively. (2) DUPLICATE ADDRESS on Sea Cadet entries: the generic Organization location block (ecorg) duplicated the Unit Information drill address; ecorg block + wiring omitted on cadet affiliations (drill block is the address of record); stored org_* details preserved untouched. (3) LATENT v240 BUG: the ecorg save-read was nested inside the cadet-only branch, so NON-cadet organizations rendered the block but never saved it; the read now runs whenever the block is present, independent of the cadet branch.
   // v246 (2026-07-16): media widget UX. (1) POSITION: widget moved to the bottom of every data-entry form, directly AFTER the skills field and before the showcase toggle - ecEdit, lmEdit, perfEdit, sessionEdit. (2) THUMBNAILS: chips replaced by 72px image thumbnails (img src=/focms/v1/media/{id}; 302-follows to R2/CDN); non-image files (PDF/video/docs) fall back to the paperclip chip via onerror. Click opens full file; x removes. Same renderer everywhere the widget appears.
   // v245 (2026-07-16): logger address blocks STAY FILLED on re-edit. v240 composed the block into the single location string (undecomposable), so the block reopened empty. Saves now also send location_parts (readAddr output) stored in events.details.location_parts (backend v0.12.146); lmEdit/perfEdit/sessionEdit prefill addrFields from record.location_parts. Home-default unchanged (only when block empty AND record new). ecSessionPost degradation guard extended to strip location_parts alongside media_ids on 422 against an older backend.
   // v244 (2026-07-16): graceful degradation for media on logger saves. Render pipeline minutes exhausted mid-rollout, so live backend may be v0.12.144 (no media_ids on EcSessionItem -> 422). New ecSessionPost(item): tries the save as-is; on a 422/media_ids rejection strips media_ids and retries once, warning that attachments will save after the backend update. lmSave/perfSave/sessionSave all use it. Harmless once v0.12.145 deploys - first attempt just succeeds.
@@ -3500,19 +3501,10 @@ function mediaWidgetRemove(el, mid) {
   mediaWidgetSetIds(container, ids);
   mediaWidgetRenderChips(container.id);
 }
-async function mediaWidgetView(mid) {
-  try {
-    const r = await fetch(API_BASE + '/focms/v1/media/' + mid, {
-      headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Tenant-Id': TENANT_ID }
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener');
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 30000);
-  } catch (e) {
-    showToast('Could not open media: ' + e.message, 'error');
-  }
+function mediaWidgetView(mid) {
+  // v247: open the API URL directly; the browser follows the 302 to R2/CDN.
+  // fetch+blob broke on CORS for r2-backed media ('failed to fetch').
+  window.open(API_BASE + '/focms/v1/media/' + mid, '_blank', 'noopener');
 }
 function normalizeMediaIds(a) {
   // v226: accept ids on top-level media_ids OR nested in details.media_ids
@@ -3594,10 +3586,11 @@ function ecEdit(id, presetProgCode) {
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
     ecRowTwo(ecField('weekly_hours', 'Hours per week', a.weekly_hours, false, 'number'),
              ecField('total_hours', 'Total hours', a.total_hours, false, 'number')) +
-    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Organization location</div>' +
-    addrFields('ecorg', { street_address: dd.org_street, street_address_line_2: dd.org_line2,
-      city_town: a.organization_city, county: dd.org_county, state_province: a.organization_state,
-      zip_postal_code: dd.org_zip, country: dd.org_country || 'US' }) +
+    (isCadetAffil ? '' :
+      '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Organization location</div>' +
+      addrFields('ecorg', { street_address: dd.org_street, street_address_line_2: dd.org_line2,
+        city_town: a.organization_city, county: dd.org_county, state_province: a.organization_state,
+        zip_postal_code: dd.org_zip, country: dd.org_country || 'US' })) +
     ecField('organization_url', 'Website', a.organization_url) +
     (EC_FILTER === 'coach_relationship' || a.coach_name ?
       ecRowTwo(ecField('coach_name', 'Coach/mentor name', a.coach_name),
@@ -3610,7 +3603,7 @@ function ecEdit(id, presetProgCode) {
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
-  stdLocWire('ecorg', !id);
+  if (!isCadetAffil) stdLocWire('ecorg', !id);
   stdLocWire('drill', !id);
   mediaWidgetRenderChips('ec-media'); // v226
 }
@@ -3652,17 +3645,6 @@ async function ecSave(id) {
   } else {
     var _cd = {};
     _cKeys.forEach(function(k){ if (item[k]) _cd[k] = item[k]; delete item[k]; });
-    // v240: organization location via the standard block
-    if (document.getElementById('ecorg-zip_postal_code')) {
-      var _oa = readAddr('ecorg');
-      item.organization_city = _oa.city_town || '';
-      item.organization_state = (_oa.state_province || '').split('-').pop();
-      _cd.org_street = _oa.street_address || '';
-      _cd.org_line2 = _oa.street_address_line_2 || '';
-      _cd.org_county = _oa.county || '';
-      _cd.org_zip = _oa.zip_postal_code || '';
-      _cd.org_country = _oa.country || 'US';
-    }
     // v239: drill address via the standard block
     if (document.getElementById('drill-zip_postal_code')) {
       var _da = readAddr('drill');
@@ -3675,6 +3657,21 @@ async function ecSave(id) {
       _cd.drill_country = _da.country || 'US';
     }
     item.details = Object.assign({}, item.details || {}, _cd);
+  }
+  // v247: organization location via the standard block - runs whenever the
+  // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
+  // Was nested in the cadet-only branch since v240, so non-cadet orgs never saved it.
+  if (document.getElementById('ecorg-zip_postal_code')) {
+    var _oa = readAddr('ecorg');
+    item.organization_city = _oa.city_town || '';
+    item.organization_state = (_oa.state_province || '').split('-').pop();
+    item.details = Object.assign({}, item.details || {}, {
+      org_street: _oa.street_address || '',
+      org_line2: _oa.street_address_line_2 || '',
+      org_county: _oa.county || '',
+      org_zip: _oa.zip_postal_code || '',
+      org_country: _oa.country || 'US'
+    });
   }
   item.skills_gained = readSkillsFromForm();
   // v226: media widget - top-level + JSONB details fallback so older APIs still store it
