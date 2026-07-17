@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>outcomestar — Every outcome. One star.</title>
-<meta name="description" content="Stop scrambling senior fall. One longitudinal record for your child's whole journey — academics, athletics, activities, applications — kept by you, from first milestones to college admission.">
+<meta name="description" content="OutcomeStar is a lifelong record of your child's academic, athletic, and personal achievements — one place to capture everything, so college applications, resumes, and recruiting profiles fill themselves later. For parents of kids ages 0–18.">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style is:global>
@@ -21,10 +21,14 @@ h1,h2,h3{font-family:Lora,Georgia,serif;color:var(--navy);margin:0}
 .btn:hover{background:#C46300}
 .sub{display:block;margin-top:8px;font-size:13px;color:var(--gray)}
 .kicker{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--orange);margin-bottom:10px}
-.hero{padding:64px 0 48px;text-align:center}
+.hero{padding:56px 0 48px;text-align:center}
 .hero h1{font-size:clamp(32px,5.5vw,54px);line-height:1.15;letter-spacing:-.01em}
 .hero h1 span{color:var(--orange)}
 .hero p{max-width:660px;margin:18px auto 30px;font-size:18px;color:#4A5563}
+.hero p.define{max-width:700px;margin:18px auto 22px;font-size:18px;color:#4A5563}
+.who-band{max-width:760px;margin:0 auto 20px;background:#ECEAF6;border:1px solid #DDD9EE;border-radius:12px;padding:16px 22px;font-size:15px;color:#4A5563;text-align:left}
+.who-band b{color:var(--navy)}
+.trust{max-width:640px;margin:0 auto 26px;font-size:14px;color:var(--gray);font-style:italic}
 .rule{width:110px;border-bottom:3px solid var(--orange);margin:22px auto}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;padding:32px 0 20px}
 .card{background:#fff;border:1px solid #E3E7ED;border-radius:14px;padding:26px}
@@ -68,10 +72,23 @@ footer a{color:var(--navy);text-decoration:none}
 <!-- ===== HERO: the pain ===== -->
 <div class="wrap">
   <section class="hero">
-    <h1>Senior fall is coming.<br><span>Will you be ready?</span></h1>
+    <span class="kicker">A lifelong record for your child</span>
+    <h1>Every outcome, captured once.<br><span>Reused everywhere.</span></h1>
     <div class="rule"></div>
-    <p>Every family hits the same wall: applications open in August and suddenly you're excavating twelve years of report cards, race times, certificates, and half-remembered dates from shoeboxes, screenshots, and three dead school portals &mdash; on a deadline.</p>
-    <a class="btn" href="/signup">Start the record instead</a>
+    <p class="define">OutcomeStar is one place to record your child's academics, athletics, and achievements &mdash; from age 0 to 18 &mdash; so college applications, resumes, and recruiting profiles fill themselves later, instead of being reconstructed from shoeboxes on a deadline.</p>
+    <div class="who-band"><b>Who it's for:</b> Parents of kids ages 0&ndash;18. Start at 3 or start at 16 &mdash; the earlier the record begins, the more senior fall becomes an export instead of a scramble. Athletes get recruiting-ready data. Every student gets an application that fills itself.</div>
+    <p class="trust">Built by one dad to get one kid into the right school &mdash; and opened to your family. Not venture-backed. Your record is yours, exportable any time, never deleted.</p>
+    <a class="btn" href="/signup">Start your child's record &rarr;</a>
+    <span class="sub">Free for ages 0&ndash;10 &middot; Free for needs-based applicants &middot; Cancel anytime</span>
+  </section>
+
+  <!-- ===== THE PAIN (moved below the what/who gate) ===== -->
+  <section class="sect-head" style="padding-top:8px">
+    <span class="kicker">Senior fall is coming</span>
+    <h2>Will you be ready?</h2>
+  </section>
+  <section class="narrow" style="text-align:center;padding-top:14px">
+    <p style="max-width:660px;margin:0 auto;font-size:16.5px;color:#4A5563">Every family hits the same wall: applications open in August and suddenly you're excavating twelve years of report cards, race times, certificates, and half-remembered dates from shoeboxes, screenshots, and three dead school portals &mdash; on a deadline.</p>
   </section>
 
   <!-- ===== PAIN: name the three problems ===== -->
