@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v255 (2026-07-16): Academic Resume rebuilt to the standard academic-CV structure, reverse chronological, drawing on the FULL record (user confirmed multiple schools + teachers were being left out). Sections: CONTACT (name/city-state/email/phone - lean header, replaces the full STUDENT dossier for this form only); EDUCATION (ALL school profiles, reverse-chron by start_date, with city/state, grades attended, and attendance dates - previously only the current school appeared); RELEVANT COURSEWORK (grouped per school, reverse-chron, each course shows year/grade level, AP/Honors/IB/Dual-credit rigor tags, grade received, and TEACHER); HONORS & AWARDS (achieved milestones + course completion awards); STANDARDIZED TESTS; ACADEMIC & LEADERSHIP EXPERIENCE (affiliations with roles/dates); SKILLS (acquired skills from the skills record); LANGUAGES (language at home). GPA emitted under EDUCATION when the academics record has one. Research/publications sections appear only when the record has content (nothing fabricated). Extracurricular checkbox from v253 still appends the EC sections after these.
   // v254 (2026-07-16): resume/UCA editor cleanup after v253 feedback. (1) LAYOUT FIX: .ec-lbl is display:flex column - v253's inline display:block broke field stretching (tiny floating textareas). Rows now render a flex header line (label text + x Remove button right-aligned) above the full-width textarea, no label style overrides. (2) Editor bar: Save renamed Generate; Print/PDF/Delete removed from the editor - Generate lands on the saved library where Print / PDF / Edit / Delete already exist per item. ucaEditorOut removed; ucaPrintX/ucaPdfX retained (library uses them via ucaPrint/ucaPdfOut).
   // v253 (2026-07-16): Academic Resume upgrades. (1) Target modal gains an 'Include Extracurricular information' checkbox (default ON, academic resume only) - when checked the generated resume also pulls the extracurricular record: every logger session grouped by kind (service, summer, leadership, competition, STEM, music performance) plus swim best times, via new ucaEcSections(). (2) The resume editor gains per-row Remove (x) toggles - every prefilled row defaults to KEEP; edit the text to change it, or click x to drop it from the saved/printed document (undoable before save). Removed rows are excluded on save; emptied sections vanish. (3) Editor action bar gains Print / PDF / Delete: Print and PDF render the CURRENT editor content (deletions and edits applied, no save required) via new ucaPrintX/ucaPdfX object variants that back the existing id-based ucaPrint/ucaPdfOut; Delete appears only when editing a saved instance.
   // v252 (2026-07-16): Edit button removed from the Rank, Badges & Awards card header. Current rate / PT rows remain display-only; rank progression is captured through Log rank / badge / award. cadetSecEdit/cadetSecSave retained but unreferenced (promo path) - candidate for removal in a future cleanup.
@@ -6830,11 +6831,49 @@ async function ucaBuildSections(code, APP, d){
     var ar = d.acts.filter(function(a){ return /orchestra|music|art|theat|band|cello|choir/i.test((a.organization_name||'')+(a.role||'')); });
     secs.push(S('ARTS ACTIVITIES', ar.slice(0,10).map(function(a){ return [a.organization_name, [a.role, a.role_start_date, a.coach_name].filter(Boolean).join(' \u00b7 ')]; })));
   } else if (code === 'resume_academic') {
-    secs.push(S('EDUCATION', [[cur.school_name || 'Current school', [cur.city_town, cur.state_province, cur.school_ceeb_code?('CEEB '+cur.school_ceeb_code):''].filter(Boolean).join(', ')]]));
-    secs.push(S('COURSEWORK', d.courses.slice(0,20).map(function(c){ return [c.course_name, ['Grade '+(c.grade_level!=null?c.grade_level:''), c.grade_received?('Grade: '+c.grade_received):'', c.course_code].filter(Boolean).join(' \u00b7 ')]; })));
-    secs.push(S('STANDARDIZED TESTS', d.tests.slice(0,10).map(function(t){ return [t.test_name || 'Test', [t.test_date, t.total_score||t.score].filter(Boolean).join(' \u00b7 ')]; })));
-    secs.push(S('ACTIVITIES & LEADERSHIP', d.acts.slice(0,12).map(function(a){ return [a.organization_name || 'Activity', [a.role, a.role_start_date, a.weekly_hours?(a.weekly_hours+' hrs/wk'):''].filter(Boolean).join(' \u00b7 ')]; })));
+    // v255: standard academic-CV structure, reverse chronological, full record.
+    secs.length = 0;
+    async function g2(pth){ try { return await apiGet('/focms/v1/student/' + STUDENT_ID + pth); } catch(e){ return {}; } }
+    const [mil2, acad2, sk2] = await Promise.all([ g2('/milestones'), g2('/academics'), g2('/skills') ]);
+    secs.push(S('CONTACT', [
+      ['Name', full],
+      ['Location', [cur.city_town, cur.state_province].filter(Boolean).join(', ')],
+      ['Email', p.email_primary], ['Phone', p.phone_primary]
+    ]));
+    var schools = (d.sch || []).slice().sort(function(a,b){ return String(b.start_date||'').localeCompare(String(a.start_date||'')); });
+    var a2 = acad2 || {};
+    var gpaU = a2.unweighted_gpa_value || a2.gpa_value || (a2.gpa && a2.gpa.unweighted_gpa_value);
+    secs.push(S('EDUCATION', schools.map(function(s2, i2){
+      var span = [s2.start_date, s2.is_current_school ? 'present' : s2.end_date].filter(Boolean).join(' \u2013 ');
+      var bits = [[s2.city_town, s2.state_province].filter(Boolean).join(', '),
+                  (s2.grade_levels_attended && s2.grade_levels_attended.length) ? ('Grades ' + s2.grade_levels_attended.join(', ')) : '',
+                  span, (i2===0 && gpaU) ? ('GPA: ' + gpaU) : ''];
+      return [s2.school_name || 'School', bits.filter(Boolean).join(' \u00b7 ')];
+    })));
+    var bySch = {};
+    (d.courses || []).forEach(function(c){ var k = c.school_name || 'Coursework'; (bySch[k] = bySch[k] || []).push(c); });
+    Object.keys(bySch).sort(function(ka,kb){
+      function mx(k3){ return Math.max.apply(null, bySch[k3].map(function(c){ return c.grade_level||0; })); }
+      return mx(kb) - mx(ka);
+    }).forEach(function(k){
+      var list = bySch[k].slice().sort(function(a,b){ return (b.grade_level||0) - (a.grade_level||0) || String(b.school_year||'').localeCompare(String(a.school_year||'')); });
+      secs.push(S('RELEVANT COURSEWORK \u2014 ' + k.toUpperCase(), list.map(function(c){
+        var rig = [c.is_ap?'AP':'', c.is_ib?'IB':'', c.is_honors?'Honors':'', c.is_dual_credit?'Dual credit':''].filter(Boolean).join('/');
+        return [c.course_name, [c.school_year || (c.grade_level!=null?('Grade '+c.grade_level):''), rig,
+                c.grade_received?('Grade: '+c.grade_received):'', c.teacher_name?('Teacher: '+c.teacher_name):''].filter(Boolean).join(' \u00b7 ')];
+      })));
+    });
+    var ml2 = ((mil2 && mil2.custom) || []).concat(((mil2 && mil2.milestones) || []).filter(function(m){ return m.achieved || m.achieved_date; }));
+    var honors = ml2.map(function(m){ return [m.title || m.milestone_title || m.code, m.achieved_date || m.date || (m.achieved ? 'achieved' : '')]; });
+    (d.courses || []).forEach(function(c){ if (c.completion_award) honors.push([c.completion_award, [c.course_name, c.school_year].filter(Boolean).join(' \u00b7 ')]); });
+    secs.push(S('HONORS & AWARDS', honors));
+    secs.push(S('STANDARDIZED TESTS', d.tests.slice().sort(function(a,b){ return String(b.test_date||'').localeCompare(String(a.test_date||'')); }).map(function(t){ return [t.test_name || 'Test', [t.test_date, t.total_score||t.score].filter(Boolean).join(' \u00b7 ')]; })));
+    secs.push(S('ACADEMIC & LEADERSHIP EXPERIENCE', d.acts.slice().sort(function(a,b){ return String(b.role_start_date||'').localeCompare(String(a.role_start_date||'')); }).map(function(a3){ return [a3.organization_name || 'Activity', [a3.role, [a3.role_start_date, a3.role_end_date || (a3.is_current?'present':'')].filter(Boolean).join(' \u2013 '), a3.weekly_hours?(a3.weekly_hours+' hrs/wk'):''].filter(Boolean).join(' \u00b7 ')]; })));
     secs.push(S('EXPERIENCE', d.jobs.slice(0,6).map(function(j){ return [j.company_name || 'Job', [j.job_title, j.start_date, j.is_current?'current':''].filter(Boolean).join(' \u00b7 ')]; })));
+    var skl2 = (sk2 && (sk2.skills || [])) || [];
+    var att2 = skl2.filter(function(s3){ return s3.acquired || s3.proficiency; });
+    secs.push(S('SKILLS', att2.slice(0,40).map(function(s3){ return [s3.title || s3.skill_title || s3.custom_title || skillTitle(s3.skill_code), [s3.proficiency, s3.acquired_date].filter(Boolean).join(' \u00b7 ') || 'Acquired']; })));
+    secs.push(S('LANGUAGES', [['Language at home', p.language_spoken_at_home]]));
   } else if (code === 'resume_career') {
     secs.push(S('EXPERIENCE', d.jobs.slice(0,10).map(function(j){ return [j.company_name || 'Job', [j.job_title, [j.start_date, j.is_current?'present':j.end_date].filter(Boolean).join(' \u2013 ')].filter(Boolean).join(' \u00b7 ')]; })));
     secs.push(S('EDUCATION', [[cur.school_name || 'Current school', [cur.city_town, cur.state_province].filter(Boolean).join(', ')]]));
