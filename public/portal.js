@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v248 (2026-07-16): Sea Cadet Training card simplified - the Recruit Training / NLO date + Other trainings / notes fields and the card's Edit button are removed; every training (including Recruit Training) lives in the Log training flow with dates, skills, media, and location. cadetSecEdit/cadetSecSave keep only the promo branch. Stored usnscc_rt_completed / usnscc_training_notes preserved (keys never sent, never overwritten).
   // v247 (2026-07-16): three fixes. (1) MEDIA OPEN: mediaWidgetView used fetch+blob, which dies on CORS when /media/{id} 302s to R2/CDN ('failed to fetch'); now plain window.open of the API URL - the browser follows the 302 natively. (2) DUPLICATE ADDRESS on Sea Cadet entries: the generic Organization location block (ecorg) duplicated the Unit Information drill address; ecorg block + wiring omitted on cadet affiliations (drill block is the address of record); stored org_* details preserved untouched. (3) LATENT v240 BUG: the ecorg save-read was nested inside the cadet-only branch, so NON-cadet organizations rendered the block but never saved it; the read now runs whenever the block is present, independent of the cadet branch.
   // v246 (2026-07-16): media widget UX. (1) POSITION: widget moved to the bottom of every data-entry form, directly AFTER the skills field and before the showcase toggle - ecEdit, lmEdit, perfEdit, sessionEdit. (2) THUMBNAILS: chips replaced by 72px image thumbnails (img src=/focms/v1/media/{id}; 302-follows to R2/CDN); non-image files (PDF/video/docs) fall back to the paperclip chip via onerror. Click opens full file; x removes. Same renderer everywhere the widget appears.
   // v245 (2026-07-16): logger address blocks STAY FILLED on re-edit. v240 composed the block into the single location string (undecomposable), so the block reopened empty. Saves now also send location_parts (readAddr output) stored in events.details.location_parts (backend v0.12.146); lmEdit/perfEdit/sessionEdit prefill addrFields from record.location_parts. Home-default unchanged (only when block empty AND record new). ecSessionPost degradation guard extended to strip location_parts alongside media_ids on 422 against an older backend.
@@ -2951,11 +2952,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
       ['Unit phone', dd0.usnscc_unit_phone], ['Unit email', dd0.usnscc_unit_email],
       ['Drill location', [dd0.drill_street, dd0.drill_line2, dd0.drill_city, dd0.drill_county, [dd0.drill_state, dd0.drill_zip].filter(Boolean).join(' '), (dd0.drill_country && dd0.drill_country !== 'US') ? dd0.drill_country : ''].filter(Boolean).join(', ') || dd0.drill_location],
       ['Drill schedule', dd0.drill_schedule]]));
-    html += _cShell('Training <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'training\')">Edit</button>',
-      '<div id="cadet-sec-training">' + _cRows([
-        ['Recruit Training / NLO', dd0.usnscc_rt_completed],
-        ['Notes', dd0.usnscc_training_notes]]) + '</div>' +
-      '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
+    html += _cShell('Training',
+      '<div class="ec-bar" style="align-items:center">' +
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>' +
       (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
@@ -3010,12 +3008,7 @@ function cadetSecEdit(kind) {
   const dd = (a.details && typeof a.details === 'object') ? a.details : {};
   const box = document.getElementById('cadet-sec-' + kind); if (!box) return;
   let f = '';
-  if (kind === 'training') {
-    f = '<div class="ec-two">' +
-      '<label class="ec-lbl">Recruit Training / NLO completed<input class="ec-in" id="cs-rt" type="date" value="' + escapeAttr(dd.usnscc_rt_completed || '') + '"></label>' +
-      '<label class="ec-lbl">Other trainings / notes<input class="ec-in" id="cs-notes" value="' + escapeAttr(dd.usnscc_training_notes || '') + '"></label></div>' +
-      '<div class="ec-hint" style="margin-top:6px">Individual trainings are logged with "Log training" below \u2014 pick from the list or add a new one.</div>';
-  } else {
+  {
     f = '<label class="ec-lbl">Current rate / rank<select class="ec-in" id="cs-rank"><option value=""></option>' +
       CADET_RATES.map(function(g){
         return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
@@ -3031,13 +3024,8 @@ function cadetSecEdit(kind) {
 async function cadetSecSave(kind) {
   const a = EC_DATA.find(x => x.id === ENTRY_VIEW.id); if (!a) return;
   const patch = {};
-  if (kind === 'training') {
-    patch.usnscc_rt_completed = (document.getElementById('cs-rt') || {}).value || '';
-    patch.usnscc_training_notes = (document.getElementById('cs-notes') || {}).value || '';
-  } else {
-    patch.usnscc_rank = (document.getElementById('cs-rank') || {}).value || '';
-    patch.usnscc_pt_current = !!(document.getElementById('cs-pt') || {}).checked;
-  }
+  patch.usnscc_rank = (document.getElementById('cs-rank') || {}).value || '';
+  patch.usnscc_pt_current = !!(document.getElementById('cs-pt') || {}).checked;
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/affiliations', { items: [{
       id: a.id, affiliation_type: a.affiliation_type || 'program',
