@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v252 (2026-07-16): Edit button removed from the Rank, Badges & Awards card header. Current rate / PT rows remain display-only; rank progression is captured through Log rank / badge / award. cadetSecEdit/cadetSecSave retained but unreferenced (promo path) - candidate for removal in a future cleanup.
   // v251 (2026-07-16): venue gets its own slot. v240 composed venue + address into the single location string AND the venue field read that whole string back, so on edit the venue input showed 'Schreiner University, 2100 Memorial Blvd., Kerrville, TX 78028' with an empty address block. Now: location_parts carries a 'venue' key; the venue input prefills from location_parts.venue when stored (falls back to the raw location string only for legacy rows); the composed location column is unchanged for display. lmEdit/perfEdit/sessionEdit + their saves. Backend needs no change (location_parts is an opaque dict). Pre-v245 rows are repaired server-side via MCP (location decomposed into venue + parts).
   // v250 (2026-07-16): Promotions card renamed to 'Rank, Badges & Awards'; the redundant inner 'Rank, merit badges & awards' subheader removed (bar keeps just the Log button next to the rate rows). Pairs with v248's Training card cleanup - the two cadet cards are now Training (log only) and Rank, Badges & Awards (rate + PT + log). The generic (non-cadet) leadership section header renamed to match.
   // v249 (2026-07-16): per-training skill options. Training catalog is now cached as objects [{title, skill_options}] (backend v0.12.147); when the selected training has skill_options, the skills dropdown offers ONLY those titles and the custom free-text input is hidden - e.g. Navy League Orientation offers exactly its 13 defined skills. Switching to a training without options restores the full skill pool + custom input. Applied on dropdown change AND on edit-form open for an existing record. Options save as custom skill titles (deduped by v0.12.143).
@@ -2993,7 +2994,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>' +
       (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
-    html += _cShell('Rank, Badges &amp; Awards <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'promo\')">Edit</button>',
+    html += _cShell('Rank, Badges &amp; Awards',
       '<div id="cadet-sec-promo">' + _cRows([
         ['Current rate', dd0.usnscc_rank],
         ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : '']]) + '</div>' +
