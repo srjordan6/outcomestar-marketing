@@ -148,6 +148,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v250 (2026-07-16): Promotions card renamed to 'Rank, Badges & Awards'; the redundant inner 'Rank, merit badges & awards' subheader removed (bar keeps just the Log button next to the rate rows). Pairs with v248's Training card cleanup - the two cadet cards are now Training (log only) and Rank, Badges & Awards (rate + PT + log). The generic (non-cadet) leadership section header renamed to match.
   // v249 (2026-07-16): per-training skill options. Training catalog is now cached as objects [{title, skill_options}] (backend v0.12.147); when the selected training has skill_options, the skills dropdown offers ONLY those titles and the custom free-text input is hidden - e.g. Navy League Orientation offers exactly its 13 defined skills. Switching to a training without options restores the full skill pool + custom input. Applied on dropdown change AND on edit-form open for an existing record. Options save as custom skill titles (deduped by v0.12.143).
   // v248 (2026-07-16): Sea Cadet Training card simplified - the Recruit Training / NLO date + Other trainings / notes fields and the card's Edit button are removed; every training (including Recruit Training) lives in the Log training flow with dates, skills, media, and location. cadetSecEdit/cadetSecSave keep only the promo branch. Stored usnscc_rt_completed / usnscc_training_notes preserved (keys never sent, never overwritten).
   // v247 (2026-07-16): three fixes. (1) MEDIA OPEN: mediaWidgetView used fetch+blob, which dies on CORS when /media/{id} 302s to R2/CDN ('failed to fetch'); now plain window.open of the API URL - the browser follows the 302 natively. (2) DUPLICATE ADDRESS on Sea Cadet entries: the generic Organization location block (ecorg) duplicated the Unit Information drill address; ecorg block + wiring omitted on cadet affiliations (drill block is the address of record); stored org_* details preserved untouched. (3) LATENT v240 BUG: the ecorg save-read was nested inside the cadet-only branch, so NON-cadet organizations rendered the block but never saved it; the read now runs whenever the block is present, independent of the cadet branch.
@@ -2985,12 +2986,11 @@ function renderEntryDetail(catCode, progCode, affilId) {
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>' +
       (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
-    html += _cShell('Promotions <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'promo\')">Edit</button>',
+    html += _cShell('Rank, Badges &amp; Awards <button class="save-btn save-btn-ghost" style="float:right" onclick="cadetSecEdit(\'promo\')">Edit</button>',
       '<div id="cadet-sec-promo">' + _cRows([
         ['Current rate', dd0.usnscc_rank],
         ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : '']]) + '</div>' +
       '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
-      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Rank, merit badges &amp; awards</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>' +
       (_ranks.length ? _ranks.map(lmRow).join('') : '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>'));
   }
@@ -3011,7 +3011,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const lm = ranks[0] || null;
     if (lm) html += '<div class="ac-est" style="margin-top:20px">Latest ' + escapeHTML((LM_KINDS[lm.milestone_kind || 'rank'] || 'Rank').toLowerCase()) + ': <b>' + escapeHTML(lm.title) + '</b>' + (lm.event_date ? ' \u00b7 ' + escapeHTML(lm.event_date) : '') + '</div>';
     html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
-      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, merit badges &amp; awards</span>' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, Badges &amp; Awards</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>';
     if (!ranks.length) html += '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>';
     else html += ranks.map(lmRow).join('');
