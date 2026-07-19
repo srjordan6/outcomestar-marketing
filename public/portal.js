@@ -2102,6 +2102,10 @@ function ecSwimContext() {
   var isCadet = /sea cadet|usnscc|naval sea/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var cwrap = document.getElementById('usnscc-wrap');
   if (cwrap) cwrap.style.display = isCadet ? '' : 'none';
+  // v262: same live-detect for Scouting America
+  var isBsa = /boy scout|scouting america|\bbsa\b/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var bwrap = document.getElementById('bsa-wrap');
+  if (bwrap) bwrap.style.display = isBsa ? '' : 'none';
   var sel = document.getElementById('sk-add');
   if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : EC_POOL_OPTS);
   return isSwim;
@@ -2340,7 +2344,7 @@ function applyTrainingSkillOptions(title) {
   }
 }
 function latestMilestone(affilId) {
-  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && ['training','service_project'].indexOf(s.milestone_kind || 'rank') === -1);
+  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && ['training','service_project','campout'].indexOf(s.milestone_kind || 'rank') === -1);
   ms.sort(function(a, b){ return (b.event_date || '').localeCompare(a.event_date || ''); });
   return ms[0] || null;
 }
@@ -2999,7 +3003,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const dd0 = (a.details && typeof a.details === 'object') ? a.details : {};
     const _all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
-    const _ranks = _all.filter(s => ['training','service_project'].indexOf(s.milestone_kind || 'rank') === -1);
+    const _ranks = _all.filter(s => ['training','service_project','campout'].indexOf(s.milestone_kind || 'rank') === -1);
     const _trainings = _all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     function _cRows(rows) {
       return rows.filter(function(r){ return r[1]; }).map(function(r){
@@ -3043,7 +3047,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
   if (prog && prog.category === 'Leadership, Civic & Career Prep' && !isCadetEntry) {
     const all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
-    const ranks = all.filter(s => ['training','service_project'].indexOf(s.milestone_kind || 'rank') === -1);
+    const ranks = all.filter(s => ['training','service_project','campout'].indexOf(s.milestone_kind || 'rank') === -1);
     const trainings = all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     const lm = ranks[0] || null;
     if (LM_ORGS[ENTRY_VIEW.code] && ENTRY_VIEW.code !== 'usnscc') html += orgProfileCard(a, ENTRY_VIEW.code, lm);  // v261
@@ -3058,6 +3062,15 @@ function renderEntryDetail(catCode, progCode, affilId) {
       '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training / service</button></div>';
     if (!trainings.length) html += '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>';
     else html += trainings.map(lmRow).join('');
+    // v263: Camping & Outdoor Activities (BSA)
+    if (ENTRY_VIEW.code === 'bsa') {
+      const camps = all.filter(s => s.milestone_kind === 'campout');
+      html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
+        '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Camping &amp; Outdoor Activities</span>' +
+        '<button class="save-btn" onclick="campEdit(null)">Log campout / hike</button></div>';
+      if (!camps.length) html += '<div class="cr-waiting">Nothing logged yet. Record each campout or hike: nights camped, miles hiked or paddled, and any service hours \u2014 these feed merit badges and Order of the Arrow eligibility.</div>';
+      else html += camps.map(campRow).join('');
+    }
   }
   ecSetHeader(a.organization_name + (a.role ? ' \u2014 ' + a.role : ''), prog ? prog.title : '');
   document.getElementById('sections-container').innerHTML = html;
@@ -3720,10 +3733,34 @@ function ecEdit(id, presetProgCode) {
     ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule)) +
 '</div>';
   const c = document.getElementById('sections-container');
+  // v262: Scouting America structure on BSA affiliations. Four-tier national
+  // hierarchy (National > Territory > Council > District > Chartered Org/Unit)
+  // + troop internals (patrol, youth position). All keys ride item.details.
+  const isBsaAffil = /boy scout|scouting america|\bbsa\b/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const BSA_UNIT_TYPES = ['Cub Scout Pack (K\u20135)', 'Scouts BSA Troop (ages 11\u201317)', 'Venturing Crew (ages 14\u201320)', 'Sea Scout Ship (ages 14\u201320)', 'Exploring Post (ages 14\u201320)'];
+  const BSA_POSITIONS = ['Senior Patrol Leader', 'Assistant Senior Patrol Leader', 'Patrol Leader', 'Assistant Patrol Leader', 'Troop Guide', 'Den Chief', 'Scribe', 'Quartermaster', 'Librarian', 'Historian', 'Chaplain Aide', 'Instructor', 'Webmaster', 'Outdoor Ethics Guide', 'Bugler', 'Order of the Arrow Representative', 'Junior Assistant Scoutmaster'];
+  const bsaBlock =
+    '<div id="bsa-wrap" style="' + (isBsaAffil ? '' : 'display:none') + '">' +
+    _cadetFormCard('Scouting America structure', 'National \u203a Territory \u203a Council \u203a District \u203a Unit',
+      '<label class="ec-lbl">Unit type<select class="ec-in" data-k="bsa_unit_type"><option value=""></option>' +
+      BSA_UNIT_TYPES.map(function(t){ return '<option' + (dd.bsa_unit_type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecRowTwo(ecField('bsa_troop', 'Unit number (e.g. Troop 289)', dd.bsa_troop),
+               ecField('bsa_patrol', 'Patrol name (e.g. Fox, Panther, Eagle)', dd.bsa_patrol)) +
+      '<label class="ec-lbl">Youth leadership position<select class="ec-in" data-k="bsa_position"><option value=""></option>' +
+      BSA_POSITIONS.map(function(t){ return '<option' + (dd.bsa_position === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecField('bsa_chartered_org', 'Chartered organization (host: church, civic club, PTA\u2026)', dd.bsa_chartered_org) +
+      ecRowTwo(ecField('bsa_district', 'District', dd.bsa_district),
+               ecField('bsa_council', 'Local Council', dd.bsa_council)) +
+      ecRowTwo(ecField('bsa_territory', 'National Territory (Region)', dd.bsa_territory),
+               ecField('bsa_member_id', 'BSA ID number', dd.bsa_member_id))) +
+    '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
     cadetBlock +
+    bsaBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -3800,6 +3837,17 @@ async function ecSave(id) {
       _cd.drill_country = _da.country || 'US';
     }
     item.details = Object.assign({}, item.details || {}, _cd);
+  }
+  // v262: BSA keys live in details JSONB; drop them when the block is hidden
+  var _bWrap = document.getElementById('bsa-wrap');
+  var _bKeys = ['bsa_unit_type', 'bsa_troop', 'bsa_patrol', 'bsa_position',
+                'bsa_chartered_org', 'bsa_district', 'bsa_council', 'bsa_territory', 'bsa_member_id'];
+  if (!_bWrap || _bWrap.style.display === 'none') {
+    _bKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _bd = {};
+    _bKeys.forEach(function(k){ if (item[k] !== undefined) _bd[k] = item[k] || ''; delete item[k]; });
+    item.details = Object.assign({}, item.details || {}, _bd);
   }
   // v247: organization location via the standard block - runs whenever the
   // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
@@ -9581,6 +9629,85 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 })();
 
+/* ============ v263: Camping & Outdoor Activities logger (BSA) ============
+   Campouts, high-adventure treks, and day hikes as leadership_milestone
+   events with milestone_kind='campout'. Numerics (nights camped, miles
+   hiked/paddled, internal service hours) ride the free location_parts dict,
+   the same proven channel as service_hours on service projects. Miles and
+   nights feed Hiking/Backpacking/Canoeing merit badges and OA eligibility. */
+function campRow(p) {
+  var lp = p.location_parts || {};
+  var bits = [];
+  if (lp.nights_camped) bits.push(lp.nights_camped + ' night' + (Number(lp.nights_camped) === 1 ? '' : 's'));
+  if (lp.miles) bits.push(lp.miles + ' mi');
+  if (lp.service_hours) bits.push(lp.service_hours + ' service hrs');
+  return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || 'Campout') +
+    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) + (p.event_end_date ? ' \u2192 ' + escapeHTML(p.event_end_date) : '') : '') + '</div>' +
+    '<div class="ec-meta">Campout / hike' + (bits.length ? ' \u00b7 ' + bits.join(' \u00b7 ') : '') +
+    (p.location ? ' \u00b7 ' + escapeHTML(p.location) : '') + '</div>' +
+    renderRowSkillsAndBadge(p) +
+    (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
+    '<div class="ec-actions"><button onclick="campEdit(\'' + p.id + '\')">Edit</button>' +
+    '<button onclick="perfDelete(\'' + p.id + '\')">Delete</button></div></div>';
+}
+function campEdit(id) {
+  if (!ENTRY_VIEW) return;
+  const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
+  if (!p) return;
+  const lp = p.location_parts || {};
+  const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
+  document.getElementById('sections-container').innerHTML =
+    ecTrailCrumb(id ? 'Edit campout / hike' : 'Log campout / hike') + '<div class="ec-form">' +
+    perfField('cp-title', 'Event name * (campout, high adventure base, or day hike)', p.title) +
+    '<div class="ec-two">' + perfField('cp-date', 'Start date *', p.event_date, 'date') +
+    perfField('cp-end', 'End date', p.event_end_date, 'date') + '</div>' +
+    '<div class="ec-two">' + perfField('cp-nights', 'Nights camped', lp.nights_camped, 'number') +
+    perfField('cp-miles', 'Miles hiked / paddled', lp.miles, 'number') + '</div>' +
+    perfField('cp-svc-hours', 'Service project hours during this event', lp.service_hours, 'number') +
+    perfField('cp-location', 'Venue / place name', venuePrefill(p)) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('cploc', lp) +
+    '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="cp-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
+    skillsGainedField(p.skills_gained, CAT_FILTER) +
+    mediaWidgetHtml('cp-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
+    '<label class="ec-check"><input type="checkbox" id="cp-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
+    '<div class="ec-bar"><button class="save-btn" onclick="campSave(\'' + (id || '') + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+  stdLocWire('cploc', !id);
+  mediaWidgetRenderChips('cp-media');
+}
+async function campSave(id) {
+  if (!ENTRY_VIEW) return;
+  const v = function(k){ const el = document.getElementById(k); return el ? (el.value || '').trim() : ''; };
+  const lp = document.getElementById('cploc-zip_postal_code') ? Object.assign(readAddr('cploc'), { venue: v('cp-location') || '' }) : {};
+  const nights = parseFloat(v('cp-nights')); const miles = parseFloat(v('cp-miles')); const svc = parseFloat(v('cp-svc-hours'));
+  if (nights > 0) lp.nights_camped = nights;
+  if (miles > 0) lp.miles = miles;
+  if (svc > 0) lp.service_hours = svc;
+  const item = {
+    event_type: 'leadership_milestone',
+    milestone_kind: 'campout',
+    title: v('cp-title'), event_date: v('cp-date'),
+    event_end_date: v('cp-end') || null,
+    media_ids: mediaWidgetCollect('cp-media'),
+    location_parts: lp,
+    location: [v('cp-location'), stdLocString('cploc')].filter(Boolean).join(', ') || null,
+    notes: v('cp-notes') || null,
+    skills_gained: readSkillsFromForm(),
+    show_on_showcase: document.getElementById('cp-showcase').checked,
+    related_affiliation_id: ENTRY_VIEW.id
+  };
+  if (!item.title || !item.event_date) { showToast('Event name and start date are required', 'error'); return; }
+  if (id) item.id = id;
+  try {
+    await ecSessionPost(item);
+    showToast('Saved', 'success');
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
+    EC_SESSIONS = d.sessions || [];
+    renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
 /* ============ v261: org member profile (Scout Profile pattern) ============
    The Sea Cadets Unit Information card, generalized. Whitelisted per-org
    identity keys live in affiliations.details (backend v0.12.153 org-profile
@@ -9589,8 +9716,10 @@ document.addEventListener('DOMContentLoaded', function () {
    the affiliation's own role field. */
 var ORG_PROFILE_DEFS = {
   bsa:   { title: 'Scout Profile', fields: [
-    ['bsa_troop', 'Troop number'], ['bsa_patrol', 'Patrol name'],
-    ['bsa_member_id', 'BSA ID number'], ['bsa_council', 'Council'], ['bsa_district', 'District'] ] },
+    ['bsa_unit_type', 'Unit type'], ['bsa_troop', 'Unit number'], ['bsa_patrol', 'Patrol name'],
+    ['bsa_position', 'Youth leadership position'], ['bsa_member_id', 'BSA ID number'],
+    ['bsa_chartered_org', 'Chartered organization'], ['bsa_district', 'District'],
+    ['bsa_council', 'Local Council'], ['bsa_territory', 'National Territory'] ] },
   gsa:   { title: 'Girl Scout Profile', fields: [
     ['gsa_troop', 'Troop number'], ['gsa_member_id', 'Member ID'], ['gsa_council', 'Council'] ] },
   cap:   { title: 'Cadet Profile', fields: [
@@ -9600,6 +9729,9 @@ var ORG_PROFILE_DEFS = {
     ['jrotc_unit', 'Unit / school'], ['jrotc_company', 'Company / flight / platoon'] ] }
 };
 function orgProfileCard(a, org, latestRank) {
+  // v264: display-only, sourced from the entry's details (edited via the main
+  // Edit-entry form since v262); the whole card disappears when empty - no
+  // placeholder card, no separate Edit button.
   var def = ORG_PROFILE_DEFS[org]; if (!def) return '';
   var d = (a.details && typeof a.details === 'object') ? a.details : {};
   var rows = def.fields.map(function(f){
@@ -9607,14 +9739,14 @@ function orgProfileCard(a, org, latestRank) {
   });
   rows.unshift({ label: 'Current rank', val: latestRank ? latestRank.title : '' });
   if (a.role) rows.push({ label: 'Leadership role', val: a.role });
-  var body = rows.filter(function(r){ return r.val; }).map(function(r){
+  rows = rows.filter(function(r){ return r.val; });
+  if (!rows.length) return '';
+  var body = rows.map(function(r){
     return '<div style="display:flex;gap:8px;padding:2px 0"><span class="ec-meta" style="min-width:170px;margin-top:0">' +
       escapeHTML(r.label) + '</span><span class="ec-title" style="font-weight:400">' + escapeHTML(String(r.val)) + '</span></div>';
-  }).join('') || '<div class="ec-notes">Nothing recorded yet.</div>';
+  }).join('');
   return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:20px">' +
-    '<div class="ec-bar" style="align-items:center;margin-bottom:8px">' +
-    '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">' + escapeHTML(def.title) + '</span>' +
-    '<button class="save-btn save-btn-ghost" onclick="orgProfileEdit(\'' + a.id + '\',\'' + org + '\')">Edit</button></div>' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:8px">' + escapeHTML(def.title) + '</div>' +
     body + '</div>';
 }
 function orgProfileEdit(affilId, org) {
