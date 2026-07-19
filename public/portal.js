@@ -3750,6 +3750,65 @@ function ecEdit(id, presetProgCode) {
   // hierarchy (National > Territory > Council > District > Chartered Org/Unit)
   // + troop internals (patrol, youth position). All keys ride item.details.
   const isBsaAffil = /boy scout|scouting america|\bbsa\b/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  // v270: the 236 local councils of Scouting America (Wikipedia
+  // List_of_councils, fetched 2026-07-19; excludes region/national numbers
+  // 900+). Grouped by headquarters state; the em-dash city disambiguates
+  // duplicate names (two Piedmont Councils, two Cherokee Area Councils).
+  // Re-sync yearly - councils merge.
+  const BSA_COUNCILS = [
+    ['Alabama', ['Alabama-Florida Council — Dothan', 'Black Warrior Council — Tuscaloosa', 'Greater Alabama Council — Birmingham', 'Mobile Area Council — Mobile', 'Tukabatchee Area Council — Montgomery']],
+    ['Alaska', ['Great Alaska Council — Anchorage', 'Midnight Sun Council — Fairbanks']],
+    ['Arizona', ['Catalina Council — Tucson', 'Grand Canyon Council — Phoenix']],
+    ['Arkansas', ['Natural State Council — Little Rock']],
+    ['Belgium', ['Transatlantic Council — Brussels']],
+    ['California', ['California Inland Empire Council — Redlands', 'Golden Empire Council — Sacramento', 'Golden Gate Area Council — Pleasant Hill', 'Greater Los Angeles Area Council — Los Angeles', 'Greater Yosemite Council — Modesto', 'Long Beach Area Council — Long Beach', 'Los Padres Council — Santa Barbara', 'Marin Council — San Rafael', 'Orange County Council — Santa Ana', 'Pacific Skyline Council — Foster City', 'Piedmont Council — Piedmont', 'Redwood Empire Council — Santa Rosa', 'San Diego-Imperial Council — San Diego', 'Sequoia Council — Fresno', 'Silicon Valley Monterey Bay Council — San Jose', 'Southern Sierra Council — Bakersfield', 'Ventura County Council — Camarillo', 'Verdugo Hills Council — Glendale', 'Western Los Angeles County Council — Van Nuys']],
+    ['Colorado', ['Adventure West Council — Greeley', 'Greater Colorado Council — Denver', 'Pathway to the Rockies Council — Colorado Springs']],
+    ['Connecticut', ['Connecticut Rivers Council — Hartford', 'Connecticut Yankee Council — Milford', 'Greenwich Council — Greenwich', 'Housatonic Council — Derby']],
+    ['Delaware', ['Del-Mar-Va Council — Dover']],
+    ['Florida', ['Central Florida Council — Apopka', 'Greater Tampa Bay Area Council — Tampa', 'Gulf Coast Council — Pensacola', 'Gulf Stream Council — Palm Beach Gardens', 'North Florida Council — Jacksonville', 'South Florida Council — Miami Lakes', 'Southwest Florida Council — Fort Myers', 'Suwannee River Area Council — Tallahassee']],
+    ['Georgia', ['Atlanta Area Council — Atlanta', 'Central Georgia Council — Macon', 'Chattahoochee Council — Columbus', 'Coastal Georgia Council — Savannah', 'Flint River Council — Griffin', 'Georgia-Carolina Council — Augusta', 'Northeast Georgia Council — Jefferson', 'Northwest Georgia Council — Rome', 'South Georgia Council — Valdosta']],
+    ['Hawaii', ['Aloha Council — Honolulu']],
+    ['Idaho', ['Grand Teton Council — Idaho Falls', 'Mountain West Council[3] — Boise']],
+    ['Illinois', ['Abraham Lincoln Council — Springfield', 'Blackhawk Area Council — Rockford', 'Mississippi Valley Council — Quincy', 'Northeast Illinois Council — Highland Park', 'Pathway to Adventure Council — Chicago', 'Prairielands Council — Champaign', 'Rainbow Council — Morris', 'Three Fires Council — St Charles', 'W. D. Boyce Council — Peoria']],
+    ['Indiana', ['Anthony Wayne Area Council — Fort Wayne', 'Buffalo Trace Council — Evansville', 'Crossroads of America Council — Indianapolis', 'Hoosier Trails Council — Bloomington', 'La Salle Council — South Bend', 'Sagamore Council — Kokomo']],
+    ['Iowa', ['Hawkeye Area Council — Cedar Rapids', 'Illowa Council — Davenport', 'Mid-Iowa Council — Des Moines', 'Northeast Iowa Council — Dubuque', 'Winnebago Council — Waterloo']],
+    ['Japan', ['Far East Council — Camp Zama']],
+    ['Kansas', ['Coronado Area Council — Salina', 'Jayhawk Area Council — Topeka', 'Quivira Council — Wichita']],
+    ['Kentucky', ['Blue Grass Council — Lexington', 'Lincoln Heritage Council — Louisville']],
+    ['Louisiana', ['Calcasieu Area Council — Lake Charles', 'Evangeline Area Council — Lafayette', 'Istrouma Area Council — Baton Rouge', 'Louisiana Purchase Council — Monroe', 'Norwela Council — Shreveport', 'Southeast Louisiana Council — Metairie']],
+    ['Maine', ['Katahdin Area Council — Orono', 'Pine Tree Council — Portland']],
+    ['Maryland', ['Baltimore Area Council — Baltimore', 'National Capital Area Council — Bethesda']],
+    ['Massachusetts', ['Cape Cod and the Islands Council — Yarmouth Port', 'Heart of New England Council — Rutland', 'Mayflower Council — Milford', 'Spirit of Adventure Council — Woburn', 'Western Massachusetts Council — Westfield']],
+    ['Michigan', ['Michigan Crossroads Council — Eagle']],
+    ['Minnesota', ['Central Minnesota Council — Sartell', 'Gamehaven Council — Rochester', 'Northern Star Council — Saint Paul', 'Twin Valley Council — Mankato']],
+    ['Mississippi', ['Andrew Jackson Council — Jackson', 'Choctaw Area Council — Meridian', 'Natchez Trace Council — Tupelo', 'Pine Burr Area Council — Hattiesburg']],
+    ['Missouri', ['Great Rivers Council — Columbia', 'Greater Saint Louis Area Council — Saint Louis', 'Heart of America Council — Kansas City', 'Ozark Trails Council — Springfield', 'Pony Express Council — Saint Joseph']],
+    ['Montana', ['Montana Council — Great Falls']],
+    ['Nebraska', ['Cornhusker Council — Walton', 'Mid-America Council — Omaha']],
+    ['Nevada', ['Las Vegas Area Council — Las Vegas', 'Nevada Area Council — Reno']],
+    ['New Hampshire', ['Daniel Webster Council — Manchester']],
+    ['New Jersey', ['Garden State Council — Westampton', 'Jersey Shore Council — Toms River', 'Monmouth Council — Morganville', 'Northern New Jersey Council — Oakland', 'Patriots\' Path Council — Cedar Knolls']],
+    ['New Mexico', ['Conquistador Council — Roswell', 'High Desert Council — Albuquerque']],
+    ['New York', ['Allegheny Highlands Council — Falconer', 'Baden-Powell Council — Binghamton', 'Great Falls Council — Buffalo', 'Greater Hudson Valley Council — Fishkill', 'Greater New York Councils — New York', 'Leatherstocking Council — Utica', 'Longhouse Council — Syracuse', 'Rip Van Winkle Council — Kingston', 'Seneca Waterways Council — Rochester', 'Suffolk County Council — Medford', 'Theodore Roosevelt Council — Massapequa', 'Twin Rivers Council — Albany']],
+    ['North Carolina', ['Cape Fear Council — Wilmington', 'Central North Carolina Council — Albemarle', 'Daniel Boone Council — Asheville', 'East Carolina Council — Kinston', 'Mecklenburg County Council — Charlotte', 'Occoneechee Council — Raleigh', 'Old Hickory Council — Winston-Salem', 'Old North State Council — Greensboro', 'Piedmont Council — Gastonia', 'Tuscarora Council — Goldsboro']],
+    ['North Dakota', ['Northern Lights Council — Fargo']],
+    ['Ohio', ['Black Swamp Area Council — Findlay', 'Buckeye Council — Canton', 'Dan Beard Council — Cincinnati', 'Erie Shores Council — Toledo', 'Great Trail Council — Akron', 'Lake Erie Council — Cleveland', 'Miami Valley Council — Dayton', 'Muskingum Valley Council — Zanesville', 'Simon Kenton Council — Columbus', 'Tecumseh Council — Springfield']],
+    ['Oklahoma', ['Arbuckle Area Council — Ardmore', 'Cherokee Area Council — Bartlesville', 'Indian Nations Council — Tulsa', 'Last Frontier Council — Oklahoma City']],
+    ['Oregon', ['Cascade Pacific Council — Beaverton', 'Pacific Crest Council — Eugene']],
+    ['Pennsylvania', ['Bucktail Council — Du Bois', 'Chester County Council — Exton', 'Chief Cornplanter Council — Warren', 'Columbia-Montour Council — Bloomsburg', 'Cradle of Liberty Council — Philadelphia', 'French Creek Council — Erie', 'Hawk Mountain Council — Reading', 'Juniata Valley Council — Reedsville', 'Laurel Highlands Council — Pittsburgh', 'Minsi Trails Council — Lehigh Valley', 'Moraine Trails Council — Butler', 'New Birth of Freedom Council — Mechanicsburg', 'Northeastern Pennsylvania Council — Moosic', 'Pennsylvania Dutch Council — Lancaster', 'Susquehanna Council — Williamsport', 'Washington Crossing Council — Doylestown', 'Westmoreland-Fayette Council — Greensburg']],
+    ['Puerto Rico', ['Puerto Rico Council — Guaynabo']],
+    ['Rhode Island', ['Narragansett Council — East Providence']],
+    ['South Carolina', ['Blue Ridge Council — Greenville', 'Coastal Carolina Council — Charleston', 'Indian Waters Council — Columbia', 'Palmetto Area Council — Spartanburg']],
+    ['South Dakota', ['Black Hills Area Council — Rapid City', 'Sioux Council — Sioux Falls']],
+    ['Tennessee', ['Cherokee Area Council — Chattanooga', 'Chickasaw Council — Memphis', 'Great Smoky Mountain Council — Knoxville', 'Middle Tennessee Council — Nashville', 'Sequoyah Council — Johnson City', 'West Tennessee Area Council — Jackson']],
+    ['Texas', ['Alamo Area Council — San Antonio', 'Bay Area Council — Galveston', 'Buffalo Trail Council — Midland', 'Caddo Area Council — Texarkana', 'Capitol Area Council — Austin', 'Circle Ten Council — Dallas', 'Direct Service — Irving', 'East Texas Area Council — Tyler', 'Golden Spread Council — Amarillo', 'Longhorn Council — Hurst', 'Northwest Texas Council — Wichita Falls', 'Rio Grande Council — Harlingen', 'Sam Houston Area Council — Houston', 'South Plains Council — Lubbock', 'South Texas Council — Corpus Christi', 'Texas Southwest Council — San Angelo', 'Texas Trails Council — Abilene', 'Three Rivers Council — Beaumont']],
+    ['Utah', ['Crossroads of the West Council — Ogden']],
+    ['Vermont', ['Green Mountain Council — Waterbury']],
+    ['Virginia', ['Blue Ridge Mountains Council — Roanoke', 'Colonial Virginia Council — Newport News', 'Heart of Virginia Council — Richmond', 'Shenandoah Area Council — Winchester', 'Tidewater Council — Virginia Beach', 'Virginia Headwaters Council — Waynesboro']],
+    ['Washington', ['Blue Mountain Council — Kennewick', 'Chief Seattle Council — Seattle', 'Inland Northwest Council — Spokane', 'Mount Baker Council — Everett', 'Pacific Harbors Council — Tacoma']],
+    ['West Virginia', ['Buckskin Council — Charleston', 'Mountaineer Area Council — Fairmont']],
+    ['Wisconsin', ['Bay-Lakes Council — Appleton', 'Chippewa Valley Council — Eau Claire', 'Gateway Area Council — La Crosse', 'Glacier\'s Edge Council — Madison', 'Potawatomi Area Council — Waukesha', 'Samoset Council — Weston', 'Three Harbors Council — Milwaukee']]
+  ];
   // v269: Council Service Territories - numbered territories that route
   // national support to local councils (Frisco / North Texas councils sit in
   // Territory 7). Coverage labels per the operator's CST reference.
@@ -3781,8 +3840,13 @@ function ecEdit(id, presetProgCode) {
       ecRowTwo(ecField('bsa_troop', 'Unit number (e.g. Troop 289)', dd.bsa_troop),
                ecField('bsa_patrol', 'Patrol name (e.g. Fox, Panther, Eagle)', dd.bsa_patrol)) +
       ecField('bsa_chartered_org', 'Chartered organization (host: church, civic club, PTA\u2026)', dd.bsa_chartered_org) +
-      ecRowTwo(ecField('bsa_district', 'District', dd.bsa_district),
-               ecField('bsa_council', 'Local Council', dd.bsa_council)) +
+      ecField('bsa_district', 'District', dd.bsa_district) +
+      '<label class="ec-lbl">Local Council<select class="ec-in" data-k="bsa_council"><option value=""></option>' +
+      BSA_COUNCILS.map(function(g){
+        return '<optgroup label="' + g[0] + '">' + g[1].map(function(c){
+          return '<option' + (dd.bsa_council === c ? ' selected' : '') + '>' + escapeHTML(c) + '</option>';
+        }).join('') + '</optgroup>';
+      }).join('') + '</select></label>' +
       '<label class="ec-lbl">National Territory \u2014 Council Service Territory<select class="ec-in" data-k="bsa_territory"><option value=""></option>' +
       BSA_TERRITORIES.map(function(t){ return '<option' + (dd.bsa_territory === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
       '</select></label>' +
