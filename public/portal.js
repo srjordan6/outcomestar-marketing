@@ -3750,6 +3750,27 @@ function ecEdit(id, presetProgCode) {
   // hierarchy (National > Territory > Council > District > Chartered Org/Unit)
   // + troop internals (patrol, youth position). All keys ride item.details.
   const isBsaAffil = /boy scout|scouting america|\bbsa\b/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  // v269: Council Service Territories - numbered territories that route
+  // national support to local councils (Frisco / North Texas councils sit in
+  // Territory 7). Coverage labels per the operator's CST reference.
+  const BSA_TERRITORIES = [
+    'Territory 1 \u2014 California, Hawaii, Guam & the Pacific',
+    'Territory 2 \u2014 Western United States',
+    'Territory 3 \u2014 California, Hawaii, Guam & the Pacific',
+    'Territory 4 \u2014 Upper Midwest (Minnesota, Wisconsin, Iowa)',
+    'Territory 5 \u2014 Missouri, Kansas & Nebraska',
+    'Territory 6 \u2014 Illinois, Wisconsin & the Upper Midwest',
+    'Territory 7 \u2014 Texas, Oklahoma & Arkansas',
+    'Territory 8 \u2014 Gulf South (Louisiana, Mississippi, Alabama, Florida Panhandle)',
+    'Territory 9 \u2014 Southeast (Georgia, Florida, Puerto Rico)',
+    'Territory 10 \u2014 New York & portions of Pennsylvania',
+    'Territory 11 \u2014 Northeast & Mid-Atlantic',
+    'Territory 12 \u2014 Northeast & Mid-Atlantic',
+    'Territory 13 \u2014 Ohio Valley, Appalachia & Mid-Atlantic',
+    'Territory 14 \u2014 Ohio Valley, Appalachia & Mid-Atlantic (incl. National Capital Area)',
+    'Territory 15 \u2014 Pacific Northwest & Rocky Mountain',
+    'Territory 16 \u2014 Pacific Northwest & Rocky Mountain'
+  ];
   const BSA_UNIT_TYPES = ['Cub Scout Pack (K\u20135)', 'Scouts BSA Troop (ages 11\u201317)', 'Venturing Crew (ages 14\u201320)', 'Sea Scout Ship (ages 14\u201320)', 'Exploring Post (ages 14\u201320)'];
   const bsaBlock =
     '<div id="bsa-wrap" style="' + (isBsaAffil ? '' : 'display:none') + '">' +
@@ -3762,8 +3783,10 @@ function ecEdit(id, presetProgCode) {
       ecField('bsa_chartered_org', 'Chartered organization (host: church, civic club, PTA\u2026)', dd.bsa_chartered_org) +
       ecRowTwo(ecField('bsa_district', 'District', dd.bsa_district),
                ecField('bsa_council', 'Local Council', dd.bsa_council)) +
-      ecRowTwo(ecField('bsa_territory', 'National Territory (Region)', dd.bsa_territory),
-               ecField('bsa_member_id', 'BSA ID number', dd.bsa_member_id)) +
+      '<label class="ec-lbl">National Territory \u2014 Council Service Territory<select class="ec-in" data-k="bsa_territory"><option value=""></option>' +
+      BSA_TERRITORIES.map(function(t){ return '<option' + (dd.bsa_territory === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecField('bsa_member_id', 'BSA ID number', dd.bsa_member_id) +
       '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Unit contacts</div>' +
       ecRowTwo(ecField('bsa_scoutmaster', 'Scoutmaster', dd.bsa_scoutmaster),
                ecField('bsa_scoutmaster_phone', 'Scoutmaster phone', dd.bsa_scoutmaster_phone)) +
