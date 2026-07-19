@@ -2344,7 +2344,7 @@ function applyTrainingSkillOptions(title) {
   }
 }
 function latestMilestone(affilId) {
-  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && ['training','service_project','campout'].indexOf(s.milestone_kind || 'rank') === -1);
+  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && ['training','service_project','campout','leadership_position'].indexOf(s.milestone_kind || 'rank') === -1);
   ms.sort(function(a, b){ return (b.event_date || '').localeCompare(a.event_date || ''); });
   return ms[0] || null;
 }
@@ -3003,7 +3003,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const dd0 = (a.details && typeof a.details === 'object') ? a.details : {};
     const _all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
-    const _ranks = _all.filter(s => ['training','service_project','campout'].indexOf(s.milestone_kind || 'rank') === -1);
+    const _ranks = _all.filter(s => ['training','service_project','campout','leadership_position'].indexOf(s.milestone_kind || 'rank') === -1);
     const _trainings = _all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     function _cRows(rows) {
       return rows.filter(function(r){ return r[1]; }).map(function(r){
@@ -3047,10 +3047,19 @@ function renderEntryDetail(catCode, progCode, affilId) {
   if (prog && prog.category === 'Leadership, Civic & Career Prep' && !isCadetEntry) {
     const all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
-    const ranks = all.filter(s => ['training','service_project','campout'].indexOf(s.milestone_kind || 'rank') === -1);
+    const ranks = all.filter(s => ['training','service_project','campout','leadership_position'].indexOf(s.milestone_kind || 'rank') === -1);
     const trainings = all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     const lm = ranks[0] || null;
     if (LM_ORGS[ENTRY_VIEW.code] && ENTRY_VIEW.code !== 'usnscc') html += orgProfileCard(a, ENTRY_VIEW.code, lm);  // v261
+    // v265: Leadership Positions (BSA) - tenure feeds Star (4 mo) / Life & Eagle (6 mo)
+    if (ENTRY_VIEW.code === 'bsa') {
+      const poss = all.filter(s => s.milestone_kind === 'leadership_position');
+      html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
+        '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Leadership Positions</span>' +
+        '<button class="save-btn" onclick="posEdit(null)">Log position</button></div>';
+      if (!poss.length) html += '<div class="cr-waiting">No positions logged yet. Record each position of responsibility with its start and end dates \u2014 active tenure counts toward Star (4 months) and Life / Eagle (6 months).</div>';
+      else html += poss.map(posRow).join('');
+    }
     if (lm) html += '<div class="ac-est" style="margin-top:20px">Latest ' + escapeHTML((LM_KINDS[lm.milestone_kind || 'rank'] || 'Rank').toLowerCase()) + ': <b>' + escapeHTML(lm.title) + '</b>' + (lm.event_date ? ' \u00b7 ' + escapeHTML(lm.event_date) : '') + '</div>';
     html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, Badges &amp; Awards</span>' +
@@ -9628,6 +9637,101 @@ document.addEventListener('DOMContentLoaded', function () {
     harden(c);
   });
 })();
+
+/* ============ v265: Leadership Positions logger (BSA) ============
+   Positions of responsibility as leadership_milestone events with
+   milestone_kind='leadership_position'. title = position, event_date = start,
+   event_end_date = end (blank = currently serving). Months served computed
+   client-side against the Star (4-month) and Life/Eagle (6-month) active
+   tenure requirements. */
+var BSA_POSITIONS_G = ['Senior Patrol Leader', 'Assistant Senior Patrol Leader', 'Patrol Leader', 'Assistant Patrol Leader', 'Troop Guide', 'Den Chief', 'Scribe', 'Quartermaster', 'Librarian', 'Historian', 'Chaplain Aide', 'Instructor', 'Webmaster', 'Outdoor Ethics Guide', 'Bugler', 'Order of the Arrow Representative', 'Junior Assistant Scoutmaster'];
+function posMonthsServed(start, end) {
+  if (!start) return 0;
+  var s = new Date(start + 'T00:00:00');
+  var e = end ? new Date(end + 'T00:00:00') : new Date();
+  if (isNaN(s) || isNaN(e) || e < s) return 0;
+  var m = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+  if (e.getDate() < s.getDate()) m -= 1;
+  return m < 0 ? 0 : m;
+}
+function posTenureHint(m) {
+  if (m >= 6) return 'meets Life / Eagle tenure (6 mo)';
+  if (m >= 4) return 'meets Star tenure (4 mo)';
+  return '';
+}
+function posRow(p) {
+  var m = posMonthsServed(p.event_date, p.event_end_date);
+  var hint = posTenureHint(m);
+  return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || 'Position') +
+    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) + ' \u2192 ' + (p.event_end_date ? escapeHTML(p.event_end_date) : 'present') : '') + '</div>' +
+    '<div class="ec-meta">Leadership position \u00b7 ' + m + ' month' + (m === 1 ? '' : 's') + ' served' +
+    (hint ? ' \u00b7 ' + hint : '') + '</div>' +
+    renderRowSkillsAndBadge(p) +
+    (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
+    '<div class="ec-actions"><button onclick="posEdit(\'' + p.id + '\')">Edit</button>' +
+    '<button onclick="perfDelete(\'' + p.id + '\')">Delete</button></div></div>';
+}
+function posEdit(id) {
+  if (!ENTRY_VIEW) return;
+  const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
+  if (!p) return;
+  const inList = p.title && BSA_POSITIONS_G.indexOf(p.title) !== -1;
+  const other = p.title && !inList;
+  const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
+  document.getElementById('sections-container').innerHTML =
+    ecTrailCrumb(id ? 'Edit position' : 'Log position') + '<div class="ec-form">' +
+    '<label class="ec-lbl">Position *<select class="ec-in" id="pos-title" onchange="var w=document.getElementById(\'pos-other-wrap\');if(w)w.style.display=this.value===\'__other__\'?\'\':\'none\'">' +
+    '<option value=""></option>' +
+    BSA_POSITIONS_G.map(function(t){ return '<option' + (p.title === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+    '<option value="__other__"' + (other ? ' selected' : '') + '>Other (type below)</option>' +
+    '</select></label>' +
+    '<label class="ec-lbl" id="pos-other-wrap" style="' + (other ? '' : 'display:none') + '">Position name *' +
+    '<input class="ec-in" id="pos-other" type="text" value="' + escapeHTML(other ? p.title : '') + '"></label>' +
+    '<div class="ec-two">' + perfField('pos-date', 'Start date * (appointed or elected)', p.event_date, 'date') +
+    perfField('pos-end', 'End date (blank = currently serving)', p.event_end_date, 'date') + '</div>' +
+    '<div class="ec-notes" id="pos-months" style="margin-top:2px"></div>' +
+    '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pos-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
+    skillsGainedField(p.skills_gained, CAT_FILTER) +
+    mediaWidgetHtml('pos-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
+    '<label class="ec-check"><input type="checkbox" id="pos-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
+    '<div class="ec-bar"><button class="save-btn" onclick="posSave(\'' + (id || '') + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+  var upd = function(){
+    var m = posMonthsServed((document.getElementById('pos-date') || {}).value, (document.getElementById('pos-end') || {}).value);
+    var h = posTenureHint(m);
+    var el = document.getElementById('pos-months');
+    if (el) el.textContent = m + ' month' + (m === 1 ? '' : 's') + ' served' + (h ? ' \u2014 ' + h : '');
+  };
+  ['pos-date', 'pos-end'].forEach(function(fid){ var el = document.getElementById(fid); if (el) el.addEventListener('change', upd); });
+  upd();
+  mediaWidgetRenderChips('pos-media');
+}
+async function posSave(id) {
+  if (!ENTRY_VIEW) return;
+  const v = function(k){ const el = document.getElementById(k); return el ? (el.value || '').trim() : ''; };
+  var title = v('pos-title');
+  if (title === '__other__') title = v('pos-other');
+  const item = {
+    event_type: 'leadership_milestone',
+    milestone_kind: 'leadership_position',
+    title: title, event_date: v('pos-date'),
+    event_end_date: v('pos-end') || null,
+    media_ids: mediaWidgetCollect('pos-media'),
+    notes: v('pos-notes') || null,
+    skills_gained: readSkillsFromForm(),
+    show_on_showcase: document.getElementById('pos-showcase').checked,
+    related_affiliation_id: ENTRY_VIEW.id
+  };
+  if (!item.title || !item.event_date) { showToast('Position and start date are required', 'error'); return; }
+  if (id) item.id = id;
+  try {
+    await ecSessionPost(item);
+    showToast('Saved', 'success');
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
+    EC_SESSIONS = d.sessions || [];
+    renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+  } catch (e) { showToast(e.message, 'error'); }
+}
 
 /* ============ v263: Camping & Outdoor Activities logger (BSA) ============
    Campouts, high-adventure treks, and day hikes as leadership_milestone
