@@ -2106,6 +2106,9 @@ function ecSwimContext() {
   var isBsa = /boy scout|scouting america|\bbsa\b/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var bwrap = document.getElementById('bsa-wrap');
   if (bwrap) bwrap.style.display = isBsa ? '' : 'none';
+  // v266: org programs always use the program name - hide the duplicate field
+  var onw = document.getElementById('ec-orgname-wrap');
+  if (onw && progSel) onw.style.display = LM_ORGS[progSel.value] ? 'none' : '';
   var sel = document.getElementById('sk-add');
   if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : EC_POOL_OPTS);
   return isSwim;
@@ -3747,7 +3750,6 @@ function ecEdit(id, presetProgCode) {
   // + troop internals (patrol, youth position). All keys ride item.details.
   const isBsaAffil = /boy scout|scouting america|\bbsa\b/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
   const BSA_UNIT_TYPES = ['Cub Scout Pack (K\u20135)', 'Scouts BSA Troop (ages 11\u201317)', 'Venturing Crew (ages 14\u201320)', 'Sea Scout Ship (ages 14\u201320)', 'Exploring Post (ages 14\u201320)'];
-  const BSA_POSITIONS = ['Senior Patrol Leader', 'Assistant Senior Patrol Leader', 'Patrol Leader', 'Assistant Patrol Leader', 'Troop Guide', 'Den Chief', 'Scribe', 'Quartermaster', 'Librarian', 'Historian', 'Chaplain Aide', 'Instructor', 'Webmaster', 'Outdoor Ethics Guide', 'Bugler', 'Order of the Arrow Representative', 'Junior Assistant Scoutmaster'];
   const bsaBlock =
     '<div id="bsa-wrap" style="' + (isBsaAffil ? '' : 'display:none') + '">' +
     _cadetFormCard('Scouting America structure', 'National \u203a Territory \u203a Council \u203a District \u203a Unit',
@@ -3756,9 +3758,6 @@ function ecEdit(id, presetProgCode) {
       '</select></label>' +
       ecRowTwo(ecField('bsa_troop', 'Unit number (e.g. Troop 289)', dd.bsa_troop),
                ecField('bsa_patrol', 'Patrol name (e.g. Fox, Panther, Eagle)', dd.bsa_patrol)) +
-      '<label class="ec-lbl">Youth leadership position<select class="ec-in" data-k="bsa_position"><option value=""></option>' +
-      BSA_POSITIONS.map(function(t){ return '<option' + (dd.bsa_position === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
-      '</select></label>' +
       ecField('bsa_chartered_org', 'Chartered organization (host: church, civic club, PTA\u2026)', dd.bsa_chartered_org) +
       ecRowTwo(ecField('bsa_district', 'District', dd.bsa_district),
                ecField('bsa_council', 'Local Council', dd.bsa_council)) +
@@ -3803,8 +3802,9 @@ function ecProgramPicker(a) {
   return '<label class="ec-lbl">Program *' +
     '<select class="ec-in" data-k="program_code" onchange="if(typeof ecSwimContext===\'function\')ecSwimContext()">' +
     '<option value="">-- pick a program --</option>' + opts + '</select></label>' +
+    '<span id="ec-orgname-wrap" style="' + (LM_ORGS[a.program_code] ? 'display:none' : '') + '">' +
     '<label class="ec-lbl">Organization / provider name' +
-    '<input class="ec-in" data-k="organization_name" type="text" placeholder="e.g. Frisco School of Music (defaults to the program name)" value="'+escapeHTML(a.organization_name||'')+'" oninput="if(typeof ecSwimContext===\'function\')ecSwimContext()"></label>';
+    '<input class="ec-in" data-k="organization_name" type="text" placeholder="e.g. Frisco School of Music (defaults to the program name)" value="'+escapeHTML(a.organization_name||'')+'" oninput="if(typeof ecSwimContext===\'function\')ecSwimContext()"></label></span>';
 }
 
 function ecField(key, label, val, req, type) {
@@ -3849,7 +3849,7 @@ async function ecSave(id) {
   }
   // v262: BSA keys live in details JSONB; drop them when the block is hidden
   var _bWrap = document.getElementById('bsa-wrap');
-  var _bKeys = ['bsa_unit_type', 'bsa_troop', 'bsa_patrol', 'bsa_position',
+  var _bKeys = ['bsa_unit_type', 'bsa_troop', 'bsa_patrol',
                 'bsa_chartered_org', 'bsa_district', 'bsa_council', 'bsa_territory', 'bsa_member_id'];
   if (!_bWrap || _bWrap.style.display === 'none') {
     _bKeys.forEach(function(k){ delete item[k]; });
@@ -9821,7 +9821,7 @@ async function campSave(id) {
 var ORG_PROFILE_DEFS = {
   bsa:   { title: 'Scout Profile', fields: [
     ['bsa_unit_type', 'Unit type'], ['bsa_troop', 'Unit number'], ['bsa_patrol', 'Patrol name'],
-    ['bsa_position', 'Youth leadership position'], ['bsa_member_id', 'BSA ID number'],
+    ['bsa_member_id', 'BSA ID number'],
     ['bsa_chartered_org', 'Chartered organization'], ['bsa_district', 'District'],
     ['bsa_council', 'Local Council'], ['bsa_territory', 'National Territory'] ] },
   gsa:   { title: 'Girl Scout Profile', fields: [
