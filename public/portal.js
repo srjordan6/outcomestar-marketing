@@ -3763,7 +3763,14 @@ function ecEdit(id, presetProgCode) {
       ecRowTwo(ecField('bsa_district', 'District', dd.bsa_district),
                ecField('bsa_council', 'Local Council', dd.bsa_council)) +
       ecRowTwo(ecField('bsa_territory', 'National Territory (Region)', dd.bsa_territory),
-               ecField('bsa_member_id', 'BSA ID number', dd.bsa_member_id))) +
+               ecField('bsa_member_id', 'BSA ID number', dd.bsa_member_id)) +
+      '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Unit contacts</div>' +
+      ecRowTwo(ecField('bsa_scoutmaster', 'Scoutmaster', dd.bsa_scoutmaster),
+               ecField('bsa_scoutmaster_phone', 'Scoutmaster phone', dd.bsa_scoutmaster_phone)) +
+      ecField('bsa_scoutmaster_email', 'Scoutmaster email', dd.bsa_scoutmaster_email) +
+      ecRowTwo(ecField('bsa_unit_phone', 'Unit phone', dd.bsa_unit_phone),
+               ecField('bsa_unit_email', 'Unit email', dd.bsa_unit_email)) +
+      ecField('bsa_unit_website', 'Unit website', dd.bsa_unit_website)) +
     '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
@@ -3851,7 +3858,9 @@ async function ecSave(id) {
   // v262: BSA keys live in details JSONB; drop them when the block is hidden
   var _bWrap = document.getElementById('bsa-wrap');
   var _bKeys = ['bsa_unit_type', 'bsa_troop', 'bsa_patrol',
-                'bsa_chartered_org', 'bsa_district', 'bsa_council', 'bsa_territory', 'bsa_member_id'];
+                'bsa_chartered_org', 'bsa_district', 'bsa_council', 'bsa_territory', 'bsa_member_id',
+                'bsa_scoutmaster', 'bsa_scoutmaster_phone', 'bsa_scoutmaster_email',
+                'bsa_unit_phone', 'bsa_unit_email', 'bsa_unit_website'];
   if (!_bWrap || _bWrap.style.display === 'none') {
     _bKeys.forEach(function(k){ delete item[k]; });
   } else {
@@ -9848,7 +9857,10 @@ var ORG_PROFILE_DEFS = {
     ['bsa_unit_type', 'Unit type'], ['bsa_troop', 'Unit number'], ['bsa_patrol', 'Patrol name'],
     ['bsa_member_id', 'BSA ID number'],
     ['bsa_chartered_org', 'Chartered organization'], ['bsa_district', 'District'],
-    ['bsa_council', 'Local Council'], ['bsa_territory', 'National Territory'] ] },
+    ['bsa_council', 'Local Council'], ['bsa_territory', 'National Territory'],
+    ['bsa_scoutmaster', 'Scoutmaster'], ['bsa_scoutmaster_phone', 'Scoutmaster phone'],
+    ['bsa_scoutmaster_email', 'Scoutmaster email'], ['bsa_unit_phone', 'Unit phone'],
+    ['bsa_unit_email', 'Unit email'], ['bsa_unit_website', 'Unit website'] ] },
   gsa:   { title: 'Girl Scout Profile', fields: [
     ['gsa_troop', 'Troop number'], ['gsa_member_id', 'Member ID'], ['gsa_council', 'Council'] ] },
   cap:   { title: 'Cadet Profile', fields: [
