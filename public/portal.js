@@ -2297,6 +2297,29 @@ async function loadCadetTrainings() {
   }
   return CADET_TRAINING_CATALOG;
 }
+/* v260: org-scoped catalogs (backend v0.12.151/152). Boy Scouts, Girl Scouts,
+   CAP, and JROTC organized like Sea Cadets: per-org trainings, rank ladders,
+   and (bsa) the full 141-badge Merit Badge roster. LM_CTX carries the loaded
+   org data for the open logger form so lmKindSwitch can rebuild fields. */
+var ORG_TRAIN_CACHE = {}; var ORG_RANK_CACHE = {};
+var LM_ORGS = { usnscc: 1, bsa: 1, gsa: 1, cap: 1, jrotc: 1 };
+var LM_CTX = { org: null, ranks: null, badges: null };
+async function loadOrgTrainings(prog) {
+  if (ORG_TRAIN_CACHE[prog] !== undefined) return ORG_TRAIN_CACHE[prog];
+  try {
+    const d = await apiGet('/focms/v1/catalogs/org-trainings?program=' + prog);
+    ORG_TRAIN_CACHE[prog] = { items: d.items || [], titles: (d.items || []).map(function(i){ return i.title; }) };
+  } catch (e) { ORG_TRAIN_CACHE[prog] = null; }
+  return ORG_TRAIN_CACHE[prog];
+}
+async function loadOrgRanks(prog) {
+  if (ORG_RANK_CACHE[prog] !== undefined) return ORG_RANK_CACHE[prog];
+  try {
+    const d = await apiGet('/focms/v1/catalogs/org-ranks?program=' + prog);
+    ORG_RANK_CACHE[prog] = (d.ranks && d.ranks.length) ? d.ranks : null;
+  } catch (e) { ORG_RANK_CACHE[prog] = null; }
+  return ORG_RANK_CACHE[prog];
+}
 function trainingSkillOptions(title) {
   var it = (CADET_TRAINING_ITEMS || []).find(function(i){ return i.title === title; });
   return (it && Array.isArray(it.skill_options) && it.skill_options.length) ? it.skill_options : null;
@@ -2317,7 +2340,7 @@ function applyTrainingSkillOptions(title) {
   }
 }
 function latestMilestone(affilId) {
-  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && (s.milestone_kind || 'rank') !== 'training');
+  const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && ['training','service_project'].indexOf(s.milestone_kind || 'rank') === -1);
   ms.sort(function(a, b){ return (b.event_date || '').localeCompare(a.event_date || ''); });
   return ms[0] || null;
 }
@@ -2976,8 +2999,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const dd0 = (a.details && typeof a.details === 'object') ? a.details : {};
     const _all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
-    const _ranks = _all.filter(s => (s.milestone_kind || 'rank') !== 'training');
-    const _trainings = _all.filter(s => s.milestone_kind === 'training');
+    const _ranks = _all.filter(s => ['training','service_project'].indexOf(s.milestone_kind || 'rank') === -1);
+    const _trainings = _all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     function _cRows(rows) {
       return rows.filter(function(r){ return r[1]; }).map(function(r){
         return '<div style="display:flex;gap:8px;padding:2px 0"><span class="ec-meta" style="min-width:170px;margin-top:0">' + r[0] + '</span><span class="ec-title" style="font-weight:400">' + escapeHTML(String(r[1])) + '</span></div>';
@@ -2997,8 +3020,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
       ['Drill schedule', dd0.drill_schedule]]));
     html += _cShell('Training',
       '<div class="ec-bar" style="align-items:center">' +
-      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
-      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training &amp; Service Hours Log</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training / service</button></div>' +
       (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
     html += _cShell('Rank, Badges &amp; Awards',
       '<div id="cadet-sec-promo">' + _cRows([
@@ -3020,9 +3043,10 @@ function renderEntryDetail(catCode, progCode, affilId) {
   if (prog && prog.category === 'Leadership, Civic & Career Prep' && !isCadetEntry) {
     const all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
-    const ranks = all.filter(s => (s.milestone_kind || 'rank') !== 'training');
-    const trainings = all.filter(s => s.milestone_kind === 'training');
+    const ranks = all.filter(s => ['training','service_project'].indexOf(s.milestone_kind || 'rank') === -1);
+    const trainings = all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     const lm = ranks[0] || null;
+    if (LM_ORGS[ENTRY_VIEW.code] && ENTRY_VIEW.code !== 'usnscc') html += orgProfileCard(a, ENTRY_VIEW.code, lm);  // v261
     if (lm) html += '<div class="ac-est" style="margin-top:20px">Latest ' + escapeHTML((LM_KINDS[lm.milestone_kind || 'rank'] || 'Rank').toLowerCase()) + ': <b>' + escapeHTML(lm.title) + '</b>' + (lm.event_date ? ' \u00b7 ' + escapeHTML(lm.event_date) : '') + '</div>';
     html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
       '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, Badges &amp; Awards</span>' +
@@ -3030,8 +3054,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
     if (!ranks.length) html += '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>';
     else html += ranks.map(lmRow).join('');
     html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
-      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Training log</span>' +
-      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>';
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Training &amp; Service Hours Log</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training / service</button></div>';
     if (!trainings.length) html += '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>';
     else html += trainings.map(lmRow).join('');
   }
@@ -3090,10 +3114,11 @@ function perfRow(p) {
 }
 
 function lmRow(p) {
-  const kind = LM_KINDS[p.milestone_kind || 'rank'] || (p.milestone_kind === 'training' ? 'Training' : 'Rank');
+  const kind = LM_KINDS[p.milestone_kind || 'rank'] || (p.milestone_kind === 'training' ? 'Training' : (p.milestone_kind === 'service_project' ? 'Service Project' : 'Rank'));
+  const svcH = (p.milestone_kind === 'service_project' && p.location_parts && p.location_parts.service_hours) ? ' \u00b7 ' + p.location_parts.service_hours + ' service hrs' : '';
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || kind) +
     (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) + (p.event_end_date ? ' \u2192 ' + escapeHTML(p.event_end_date) : '') : '') + '</div>' +
-    '<div class="ec-meta">' + escapeHTML(p.milestone_kind === 'training' ? 'Training' : kind) + (p.location ? ' \u00b7 ' + escapeHTML(p.location) : '') + '</div>' +
+    '<div class="ec-meta">' + escapeHTML(p.milestone_kind === 'training' ? 'Training' : kind) + svcH + (p.location ? ' \u00b7 ' + escapeHTML(p.location) : '') + '</div>' +
     renderRowSkillsAndBadge(p) +
     (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
     '<div class="ec-actions"><button onclick="lmEdit(\'' + p.id + '\')">Edit</button>' +
@@ -3166,31 +3191,108 @@ function lmTitleField(isTraining, rankDropdown, val) {
   }
   return perfField('lm-title', (isTraining ? 'Training name *' : 'Rank / badge / award name *'), val);
 }
+function lmOrgRankField(ranks, val, orgLabel) {
+  // v260: ordered ladder with descriptions (option title attr)
+  return '<label class="ec-lbl">Rank *<select class="ec-in" id="lm-title">' +
+    '<option value=""></option><optgroup label="' + escapeHTML(orgLabel) + '">' +
+    ranks.map(function(r){
+      return '<option title="' + escapeHTML(r.description || '') + '"' + (val === r.title ? ' selected' : '') + '>' + escapeHTML(r.title) + '</option>';
+    }).join('') + '</optgroup></select></label>' +
+    '<div id="lm-rank-desc" class="ec-notes" style="margin-top:2px"></div>';
+}
+function lmBadgeField(badges, val) {
+  // v260: full official Merit Badge roster (stored stripped, e.g. 'Camping')
+  return '<label class="ec-lbl">Merit badge *<select class="ec-in" id="lm-title">' +
+    '<option value=""></option>' +
+    badges.map(function(b){ return '<option' + (val === b ? ' selected' : '') + '>' + escapeHTML(b) + '</option>'; }).join('') +
+    '</select></label>';
+}
+function lmRankDescWire() {
+  var sel = document.getElementById('lm-title'); var d = document.getElementById('lm-rank-desc');
+  if (!sel || !d || !LM_CTX.ranks) return;
+  var upd = function(){
+    var r = LM_CTX.ranks.find(function(x){ return x.title === sel.value; });
+    d.textContent = r && r.description ? r.description : '';
+  };
+  sel.addEventListener('change', upd); upd();
+}
 function lmKindSwitch() {
   const wrap = document.getElementById('lm-title-wrap'); if (!wrap) return;
   const isCadet = !!(document.getElementById('lm-cadet-flag') || {}).textContent;
   const k = (document.getElementById('lm-kind') || {}).value || 'rank';
   const cur = (document.getElementById('lm-title') || {}).value || '';
+  if (k === 'rank' && LM_CTX.ranks) {           // v260: org ladder
+    wrap.innerHTML = lmOrgRankField(LM_CTX.ranks, cur, LM_CTX.rankLabel || 'Ranks');
+    lmRankDescWire(); return;
+  }
+  if (k === 'merit_badge' && LM_CTX.badges) {   // v260: official badge roster
+    wrap.innerHTML = lmBadgeField(LM_CTX.badges, cur); return;
+  }
   wrap.innerHTML = lmTitleField(false, k === 'rank' && isCadet, cur);
+}
+function lmEntrySwitch() {
+  // v260: Training <-> Service Project on the training logger
+  var svc = ((document.getElementById('lm-entry') || {}).value || 'training') === 'service_project';
+  var tw = document.getElementById('lm-title-wrap');
+  var sw = document.getElementById('lm-svc-wrap');
+  if (tw) tw.style.display = svc ? 'none' : '';
+  if (sw) sw.style.display = svc ? '' : 'none';
 }
 async function lmEdit(id, presetKind) {
   if (!ENTRY_VIEW) return;
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10), milestone_kind: presetKind || 'rank' };
   if (!p) return;
   const kind = p.milestone_kind || 'rank';
-  const isTraining = kind === 'training';
+  const isTraining = kind === 'training' || kind === 'service_project';  // v260
   const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
   const _a = (EC_DATA || []).find(x => x.id === ENTRY_VIEW.id) || {};
   const _prog = (EC_PROGRAMS || []).find(pp => pp.code === ENTRY_VIEW.code) || {};
   const lmIsCadet = /sea cadet|usnscc|naval sea/i.test((_a.organization_name || '') + ' ' + (_prog.title || ''));
-  const _tCat = (isTraining && lmIsCadet) ? await loadCadetTrainings() : null;
-  const kindSel = isTraining ? '' :
-    '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind" onchange="lmKindSwitch()">' +
+  // v260: org context - trainings + rank ladders + (bsa) badge roster
+  const lmOrg = LM_ORGS[ENTRY_VIEW.code] ? ENTRY_VIEW.code : (lmIsCadet ? 'usnscc' : null);
+  LM_CTX = { org: lmOrg, ranks: null, badges: null, rankLabel: '' };
+  let _tCat = null;
+  if (isTraining && lmOrg === 'usnscc') _tCat = await loadCadetTrainings();
+  else if (isTraining && lmOrg) {
+    const oc = await loadOrgTrainings(lmOrg);
+    if (oc) {
+      CADET_TRAINING_ITEMS = oc.items;  // feeds applyTrainingSkillOptions
+      _tCat = oc.titles.filter(function(t){ return t.indexOf('Merit Badge - ') !== 0; });
+    }
+  }
+  if (!isTraining && lmOrg && lmOrg !== 'usnscc') {
+    LM_CTX.ranks = await loadOrgRanks(lmOrg);
+    LM_CTX.rankLabel = lmOrg === 'bsa' ? 'The 7 BSA Ranks' : (_prog.title || 'Ranks');
+    if (lmOrg === 'bsa') {
+      const oc2 = await loadOrgTrainings('bsa');
+      if (oc2) LM_CTX.badges = oc2.titles
+        .filter(function(t){ return t.indexOf('Merit Badge - ') === 0; })
+        .map(function(t){ return t.slice('Merit Badge - '.length); });
+    }
+  }
+  const isSvc = kind === 'service_project';
+  const svcHours = (p.location_parts && p.location_parts.service_hours) || '';
+  const kindSel = isTraining
+    ? '<label class="ec-lbl">Entry type *<select class="ec-in" id="lm-entry" onchange="lmEntrySwitch()">' +
+      '<option value="training"' + (isSvc ? '' : ' selected') + '>Training</option>' +
+      '<option value="service_project"' + (isSvc ? ' selected' : '') + '>Service Project</option>' +
+      '</select></label>'
+    : '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind" onchange="lmKindSwitch()">' +
     Object.keys(LM_KINDS).map(function(k){ return '<option value="'+k+'"'+(kind===k?' selected':'')+'>'+LM_KINDS[k]+'</option>'; }).join('') +
     '</select></label>';
   document.getElementById('sections-container').innerHTML = ecTrailCrumb(isTraining ? (id ? 'Edit training' : 'Log training') : (id ? 'Edit rank / badge / award' : 'Log rank / badge / award')) + '<div class="ec-form">' +
     kindSel +
-    '<div id="lm-title-wrap">' + (_tCat ? lmTrainingField(_tCat, p.title) : lmTitleField(isTraining, (!isTraining && kind === 'rank' && lmIsCadet), p.title)) + '</div>' +
+    '<div id="lm-title-wrap"' + (isSvc ? ' style="display:none"' : '') + '>' +
+      (isTraining
+        ? (_tCat ? lmTrainingField(_tCat, isSvc ? '' : p.title) : lmTitleField(true, false, isSvc ? '' : p.title))
+        : (LM_CTX.ranks && kind === 'rank' ? lmOrgRankField(LM_CTX.ranks, p.title, LM_CTX.rankLabel)
+          : LM_CTX.badges && kind === 'merit_badge' ? lmBadgeField(LM_CTX.badges, p.title)
+          : lmTitleField(false, (kind === 'rank' && lmIsCadet), p.title))) + '</div>' +
+    (isTraining
+      ? '<div id="lm-svc-wrap" style="' + (isSvc ? '' : 'display:none') + '">' +
+        perfField('lm-svc-name', 'Service project name *', isSvc ? p.title : '') +
+        perfField('lm-svc-hours', 'Total service hours *', svcHours, 'number') + '</div>'
+      : '') +
     '<span id="lm-cadet-flag" style="display:none">' + (lmIsCadet ? '1' : '') + '</span>' +
     (isTraining
       ? '<div class="ec-two">' + perfField('lm-date', 'Start date *', p.event_date, 'date') +
@@ -3213,13 +3315,14 @@ async function lmEdit(id, presetKind) {
 async function lmSave(id, fixedKind) {
   if (!ENTRY_VIEW) return;
   const v = function(k){ const el = document.getElementById(k); return el ? (el.value || '').trim() : ''; };
+  const _svc = fixedKind === 'training' && v('lm-entry') === 'service_project';  // v260
   const item = {
     event_type: 'leadership_milestone',
-    title: lmTitleValue(), event_date: v('lm-date'),
+    title: _svc ? v('lm-svc-name') : lmTitleValue(), event_date: v('lm-date'),
     event_end_date: v('lm-end') || null,
     media_ids: mediaWidgetCollect('lm-media'),
     location_parts: document.getElementById('lmloc-zip_postal_code') ? Object.assign(readAddr('lmloc'), { venue: v('lm-location') || '' }) : null,
-    milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
+    milestone_kind: fixedKind === 'training' ? (_svc ? 'service_project' : 'training') : (v('lm-kind') || 'rank'),
     location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
     skills_gained: readSkillsFromForm(),
@@ -3227,11 +3330,18 @@ async function lmSave(id, fixedKind) {
     related_affiliation_id: ENTRY_VIEW.id
   };
   if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
+  if (_svc) {  // v260: service projects require total hours
+    var _h = parseFloat(v('lm-svc-hours'));
+    if (!(_h > 0)) { showToast('Total service hours is required for a service project', 'error'); return; }
+    item.location_parts = item.location_parts || {};
+    item.location_parts.service_hours = _h;
+  }
   if (id) item.id = id;
   try {
     await ecSessionPost(item);
     showToast('Saved', 'success');
     CADET_TRAINING_CATALOG = null;  // v241: re-fetch so a just-learned training appears immediately
+    if (LM_CTX.org) delete ORG_TRAIN_CACHE[LM_CTX.org];  // v260
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
     renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
@@ -9470,6 +9580,72 @@ document.addEventListener('DOMContentLoaded', function () {
     harden(c);
   });
 })();
+
+/* ============ v261: org member profile (Scout Profile pattern) ============
+   The Sea Cadets Unit Information card, generalized. Whitelisted per-org
+   identity keys live in affiliations.details (backend v0.12.153 org-profile
+   endpoint); the affiliations GET already returns details, so display needs
+   no read changes. Current rank comes from the rank log; leadership role is
+   the affiliation's own role field. */
+var ORG_PROFILE_DEFS = {
+  bsa:   { title: 'Scout Profile', fields: [
+    ['bsa_troop', 'Troop number'], ['bsa_patrol', 'Patrol name'],
+    ['bsa_member_id', 'BSA ID number'], ['bsa_council', 'Council'], ['bsa_district', 'District'] ] },
+  gsa:   { title: 'Girl Scout Profile', fields: [
+    ['gsa_troop', 'Troop number'], ['gsa_member_id', 'Member ID'], ['gsa_council', 'Council'] ] },
+  cap:   { title: 'Cadet Profile', fields: [
+    ['cap_squadron', 'Squadron'], ['cap_wing', 'Wing'], ['cap_cap_id', 'CAP ID'] ] },
+  jrotc: { title: 'Cadet Profile', fields: [
+    ['jrotc_branch', 'Branch (Army / Navy / Air Force / Marine Corps / Space Force / Coast Guard)'],
+    ['jrotc_unit', 'Unit / school'], ['jrotc_company', 'Company / flight / platoon'] ] }
+};
+function orgProfileCard(a, org, latestRank) {
+  var def = ORG_PROFILE_DEFS[org]; if (!def) return '';
+  var d = (a.details && typeof a.details === 'object') ? a.details : {};
+  var rows = def.fields.map(function(f){
+    return { label: f[1].split(' (')[0], val: d[f[0]] };
+  });
+  rows.unshift({ label: 'Current rank', val: latestRank ? latestRank.title : '' });
+  if (a.role) rows.push({ label: 'Leadership role', val: a.role });
+  var body = rows.filter(function(r){ return r.val; }).map(function(r){
+    return '<div style="display:flex;gap:8px;padding:2px 0"><span class="ec-meta" style="min-width:170px;margin-top:0">' +
+      escapeHTML(r.label) + '</span><span class="ec-title" style="font-weight:400">' + escapeHTML(String(r.val)) + '</span></div>';
+  }).join('') || '<div class="ec-notes">Nothing recorded yet.</div>';
+  return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:20px">' +
+    '<div class="ec-bar" style="align-items:center;margin-bottom:8px">' +
+    '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">' + escapeHTML(def.title) + '</span>' +
+    '<button class="save-btn save-btn-ghost" onclick="orgProfileEdit(\'' + a.id + '\',\'' + org + '\')">Edit</button></div>' +
+    body + '</div>';
+}
+function orgProfileEdit(affilId, org) {
+  var def = ORG_PROFILE_DEFS[org]; if (!def || !ENTRY_VIEW) return;
+  var a = (EC_DATA || []).find(function(x){ return x.id === affilId; }) || {};
+  var d = (a.details && typeof a.details === 'object') ? a.details : {};
+  var back = "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')";
+  document.getElementById('sections-container').innerHTML =
+    ecTrailCrumb('Edit ' + def.title.toLowerCase()) + '<div class="ec-form">' +
+    def.fields.map(function(f){
+      return '<label class="ec-lbl">' + escapeHTML(f[1]) +
+        '<input class="ec-in" id="orgp-' + f[0] + '" type="text" value="' + escapeHTML(d[f[0]] || '') + '"></label>';
+    }).join('') +
+    '<div class="ec-bar"><button class="save-btn" onclick="orgProfileSave(\'' + affilId + '\',\'' + org + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+}
+async function orgProfileSave(affilId, org) {
+  var def = ORG_PROFILE_DEFS[org]; if (!def || !ENTRY_VIEW) return;
+  var fields = {};
+  def.fields.forEach(function(f){
+    var el = document.getElementById('orgp-' + f[0]);
+    if (el) fields[f[0]] = (el.value || '').trim();
+  });
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/affiliations/' + affilId + '/org-profile', { fields: fields });
+    showToast('Saved', 'success');
+    var dd = await apiGet('/focms/v1/student/' + STUDENT_ID + '/affiliations');
+    EC_DATA = dd.affiliations || [];
+    renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+  } catch (e) { showToast(e.message, 'error'); }
+}
 
 /* ============ v259: EC section student photo ============
    Each Extracurricular category (Mainstream Sports & Athletics, Arts, ...)
