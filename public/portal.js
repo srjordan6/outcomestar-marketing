@@ -9470,3 +9470,104 @@ document.addEventListener('DOMContentLoaded', function () {
     harden(c);
   });
 })();
+
+/* ============ v259: EC section student photo ============
+   Each Extracurricular category (Mainstream Sports & Athletics, Arts, ...)
+   shows a photo of the student at the top right of the view, level with the
+   "\u2190 All pillars" / breadcrumb header. Persistence: the photo IS media -
+   uploaded with purpose kind 'ui_photo:ec:<catCode>'; newest wins (replace =
+   upload again). Lookup via GET /student/{id}/media-by-kind (v0.12.150).
+   Appended module: wires in by wrapping the EC view renderers so no existing
+   code is touched. */
+var EC_PHOTO_CACHE = {}; // kind -> {id,url} | null (known-empty)
+
+function ecPhotoKind(catCode) { return 'ui_photo:ec:' + catCode; }
+
+function ecPhotoRemoveBox() {
+  var b = document.getElementById('ec-photo-box'); if (b) b.remove();
+  var hdr = document.querySelector('.pillar-view-header');
+  if (hdr) { hdr.style.display = ''; hdr.style.justifyContent = ''; hdr.style.alignItems = ''; hdr.style.gap = ''; }
+}
+
+async function ecPhotoShow(catCode) {
+  var hdr = document.querySelector('.pillar-view-header'); if (!hdr || !catCode) return;
+  hdr.style.display = 'flex'; hdr.style.justifyContent = 'space-between';
+  hdr.style.alignItems = 'flex-start'; hdr.style.gap = '16px';
+  var box = document.getElementById('ec-photo-box');
+  if (!box) { box = document.createElement('div'); box.id = 'ec-photo-box'; hdr.appendChild(box); }
+  box.style.cssText = 'flex:0 0 auto';
+  box.innerHTML = '<label title="Student photo for this section" style="cursor:pointer;display:inline-block">' +
+    '<div id="ec-photo-slot" style="width:84px;height:84px;border:2px dashed #D6DAE0;border-radius:12px;' +
+    'display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#7A8A9E;' +
+    'font-family:Poppins,sans-serif;overflow:hidden;background:#fff">+ Student photo</div>' +
+    '<input type="file" accept="image/*" style="display:none" onchange="ecPhotoUpload(this,\'' + catCode + '\')"></label>';
+  var kind = ecPhotoKind(catCode);
+  var cached = EC_PHOTO_CACHE[kind];
+  if (cached === null) return;                       // known: no photo yet
+  if (cached && cached.url) { ecPhotoPaint(cached.url); return; }
+  try {
+    var d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/media-by-kind?kind=' + encodeURIComponent(kind));
+    if (d && d.id) {
+      var r = await fetch(API_BASE + '/focms/v1/media/' + d.id,
+        { headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Tenant-Id': TENANT_ID } });
+      if (r.ok) {
+        var url = URL.createObjectURL(await r.blob());
+        EC_PHOTO_CACHE[kind] = { id: d.id, url: url };
+        ecPhotoPaint(url);
+        return;
+      }
+    }
+    EC_PHOTO_CACHE[kind] = null;
+  } catch (e) { /* pre-v0.12.150 backend: box stays as upload target */ }
+}
+
+function ecPhotoPaint(url) {
+  var s = document.getElementById('ec-photo-slot');
+  if (!s) return;
+  s.style.border = 'none';
+  s.innerHTML = '<img src="' + url + '" alt="Student photo" title="Click to replace" ' +
+    'style="width:84px;height:84px;object-fit:cover;object-position:center 20%;border-radius:12px;display:block">';
+}
+
+async function ecPhotoUpload(inputEl, catCode) {
+  var f = inputEl.files && inputEl.files[0]; if (!f) return;
+  if ((f.type || '').indexOf('image/') !== 0) { showToast('Pick an image file', 'error'); inputEl.value = ''; return; }
+  showToast('Uploading ' + f.name + '\u2026', 'success');
+  try {
+    var b64 = await new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { res(String(r.result).split(',')[1]); };
+      r.onerror = function () { rej(new Error('could not read file')); };
+      r.readAsDataURL(f);
+    });
+    var resp = await apiUpload({ filename: f.name, mime_type: f.type, content_base64: b64,
+      kind: ecPhotoKind(catCode), visibility: 'unlisted', student_id: STUDENT_ID });
+    var mid = resp.id || resp.media_id;
+    var url = URL.createObjectURL(f);   // paint from the local file, no round trip
+    EC_PHOTO_CACHE[ecPhotoKind(catCode)] = { id: mid || null, url: url };
+    ecPhotoPaint(url);
+    showToast('Photo set for this section', 'success');
+  } catch (e) {
+    if (String(e.message).indexOf('402') < 0) showToast('Upload failed: ' + e.message, 'error');
+  }
+  inputEl.value = '';
+}
+
+/* v259 wiring: wrap the EC renderers so the photo box appears on category /
+   program / entry views, and clears on the EC landing + other pillars. */
+(function () {
+  function wrap(name, after) {
+    var orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function () {
+      var out = orig.apply(this, arguments);
+      try { after.apply(this, arguments); } catch (e) { }
+      return out;
+    };
+  }
+  wrap('renderCategoryList', function (catCode) { ecPhotoShow(catCode); });
+  wrap('renderProgramEntries', function (catCode) { ecPhotoShow(catCode); });
+  wrap('renderEntryDetail', function (catCode) { ecPhotoShow(catCode); });
+  wrap('renderEcSections', function () { ecPhotoRemoveBox(); });
+  wrap('ecClearCrumb', function () { ecPhotoRemoveBox(); });
+})();
