@@ -2110,7 +2110,7 @@ function ecSwimContext() {
   var onw = document.getElementById('ec-orgname-wrap');
   if (onw && progSel) onw.style.display = LM_ORGS[progSel.value] ? 'none' : '';
   var sel = document.getElementById('sk-add');
-  if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : EC_POOL_OPTS);
+  if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : (isBsa ? bsaSkillOpts() : EC_POOL_OPTS));
   return isSwim;
 }
 function renderFormSkillChips() {
@@ -2129,7 +2129,7 @@ function removeFormSkill(code) {
   FORM_SKILLS = FORM_SKILLS.filter(function(x){ return x !== code; });
   renderFormSkillChips();
 }
-function skillsGainedField(current, catName, swimOnly) {
+function skillsGainedField(current, catName, swimOnly, bsaOnly) {
   FORM_SKILLS = (current || []).filter(Boolean).slice();
   const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
   const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
@@ -2137,7 +2137,7 @@ function skillsGainedField(current, catName, swimOnly) {
     '<option value="' + (sk.code || '') + '">' +
     escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
     '</option>').join('');
-  const opts = swimOnly ? swimSkillOpts() : EC_POOL_OPTS;
+  const opts = swimOnly ? swimSkillOpts() : (bsaOnly ? bsaSkillOpts() : EC_POOL_OPTS);
   const chips = FORM_SKILLS.length
     ? FORM_SKILLS.map(function(code){ return '<span class="ec-chip">' + escapeHTML(skillTitle(code)) + ' <span class="art-x" onclick="removeFormSkill(\'' + code.replace(/'/g, "\\'") + '\')">\u00d7</span></span>'; }).join(' ')
     : '<span class="cr-waiting" style="padding:0">No skills on this record yet.</span>';
@@ -2342,7 +2342,8 @@ function applyTrainingSkillOptions(title) {
       opts.map(function(t){ return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>'; }).join('');
     if (cus) { cus.value = ''; cus.style.display = 'none'; }
   } else {
-    sel.innerHTML = '<option value="">-- add a skill --</option>' + EC_POOL_OPTS;
+    sel.innerHTML = '<option value="">-- add a skill --</option>' +
+      ((typeof LM_CTX !== 'undefined' && LM_CTX.org === 'bsa') ? bsaSkillOpts() : EC_POOL_OPTS);
     if (cus) cus.style.display = '';
   }
 }
@@ -3327,7 +3328,7 @@ async function lmEdit(id, presetKind) {
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('lmloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
-    skillsGainedField(p.skills_gained, CAT_FILTER) +
+    skillsGainedField(p.skills_gained, CAT_FILTER, false, LM_CTX.org === 'bsa') +
     mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
@@ -3786,7 +3787,7 @@ function ecEdit(id, presetProgCode) {
       ecField('coach_email', 'Coach email', a.coach_email) : '') +
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
-    skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil) +
+    skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil, isBsaAffil) +
     mediaWidgetHtml('ec-media', 'Photos, videos & documents', normalizeMediaIds(a)) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
@@ -9638,6 +9639,30 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 })();
 
+/* v267: the 100-skill Eagle Scout blueprint - the skills dropdown on every
+   BSA data-entry form (Edit entry, rank/badge/award, training/service,
+   campout, position). Grouped optgroups; values are the skill names. */
+var BSA_SKILLS_G = [
+  ['Wilderness Survival & Fieldcraft', ["Fire Building by Match", "Wet-Weather Fire Building", "Primitive Fire Starters", "Tinder Identification", "Axe and Hatchet Safety", "Pocketknife Safety & Maintenance", "Bow Saw Operation", "Edible Wild Plant Identification", "Wildlife Tracking", "Emergency Shelter Construction", "Leave No Trace Ethics", "Bear Security", "Water Purification", "Foraging Safety"]],
+  ['Navigation & Pioneering', ["Topographic Map Reading", "Orienteering", "Declination Adjustment", "Pacing", "Lost-Procedure Execution (STOP)", "Tying Essential Knots", "Rope Splicing & Whipping", "Square Lashing", "Diagonal Lashing", "Shear Lashing", "Bridge & Tower Construction"]],
+  ['Aquatics & Safety', ["The BSA Swimmer Standard", "Safe Swim Defense", "Safety Afloat", "Canoe J-Stroke", "Kayak Self-Rescue", "Capsized Boat Rescue", "Line Throwing"]],
+  ['First Aid & Emergency Response', ["Triage Assessment", "CPR & AED Operation", "Choking Intervention", "Arterial Bleeding Control", "Shock Management", "Splinting Fractures", "Spine and Neck Stabilization", "Heat Stroke vs. Exhaustion Treatment", "Hypothermia Mitigation", "Snakebite and Insect Management", "Burn Categorization & Care", "Poisoning Response"]],
+  ['Cooking & Camp Management', ["Menu Planning & Nutrition", "Dutch Oven Cooking", "Backpacking Stove Operation", "Camp Kitchen Sanitation", "Perishable Food Logistics", "Camp Layout Design", "Safe Tool Storage"]],
+  ['Environmental Science & Citizenship', ["Ecosystem Observation", "Pollution Testing", "Conservation Project Execution", "Local Government Navigation", "National Civic Awareness", "International Relations Analysis", "Diversity and Inclusion Evaluation"]],
+  ['Communication & Public Speaking', ["Active Listening", "Formal Public Presentations", "Instructional Design", "Technical Writing", "Digital Communication Etiquette", "Structured Interviewing"]],
+  ['Personal Management & Executive Function', ["Time Tracking", "Expense Budgeting", "Goal Setting (SMART Framework)", "Compound Interest Calculation", "Investment Strategy Comparison", "Insurance Mechanics", "Family Budget Management", "Physical Fitness Baseline Assessment", "Fitness Regimen Design"]],
+  ['High-Adventure & Physical Resilience', ["Backpack Fitting & Packing", "Footwear Selection & Care", "Layering Clothing Systems", "Hydration & Electrolyte Management", "Long-Distance Trekking", "Weather Interpretation", "Cold-Weather Camping", "Low-Impact Travel"]],
+  ['Advanced Leadership & Project Execution', ["Democratic Delegation", "Conflict Resolution", "Scoutmaster Conference Preparation", "Board of Review Defense", "Meeting Management (PLC)", "Peer Mentorship", "Operational Safety Analysis", "Emergency Drill Coordination", "Project Scope Management", "Material Logistics", "Fundraising Coordination", "Volunteer Management", "Risk Assessment", "Change Management", "Supply Chain Management", "Final Project Reporting"]],
+  ['Character & Life Philosophy', ["Ethical Decision Making", "Mental Resilience", "Lifelong Servanthood"]]
+];
+function bsaSkillOpts() {
+  return BSA_SKILLS_G.map(function(g){
+    return '<optgroup label="' + escapeHTML(g[0]) + '">' + g[1].map(function(t){
+      return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>';
+    }).join('') + '</optgroup>';
+  }).join('');
+}
+
 /* ============ v265: Leadership Positions logger (BSA) ============
    Positions of responsibility as leadership_milestone events with
    milestone_kind='leadership_position'. title = position, event_date = start,
@@ -9691,7 +9716,7 @@ function posEdit(id) {
     perfField('pos-end', 'End date (blank = currently serving)', p.event_end_date, 'date') + '</div>' +
     '<div class="ec-notes" id="pos-months" style="margin-top:2px"></div>' +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pos-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
-    skillsGainedField(p.skills_gained, CAT_FILTER) +
+    skillsGainedField(p.skills_gained, CAT_FILTER, false, ENTRY_VIEW.code === 'bsa') +
     mediaWidgetHtml('pos-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="pos-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="posSave(\'' + (id || '') + '\')">Save</button>' +
@@ -9772,7 +9797,7 @@ function campEdit(id) {
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('cploc', lp) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="cp-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
-    skillsGainedField(p.skills_gained, CAT_FILTER) +
+    skillsGainedField(p.skills_gained, CAT_FILTER, false, ENTRY_VIEW.code === 'bsa') +
     mediaWidgetHtml('cp-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="cp-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="campSave(\'' + (id || '') + '\')">Save</button>' +
