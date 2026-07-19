@@ -1,0 +1,59 @@
+# robots.txt — outcomestar.app (marketing site)
+# Strategy: maximum discoverability. Marketing pages are the SEO/AEO funnel;
+# search engines AND AI assistants are welcome — being cited in AI answers
+# is a customer-acquisition channel for outcomestar.
+# Private surfaces are excluded. Student showcase sites live on
+# app.outcomestar.app and enforce their own no-index protections for minors.
+
+User-agent: *
+Allow: /
+Disallow: /portal
+Disallow: /reset-password
+
+# --- AI assistants & answer engines: explicitly welcome ---
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+# Machine-readable site overview for AI assistants
+# https://outcomestar.app/llms.txt
+
+Sitemap: https://outcomestar.app/sitemap.xml
