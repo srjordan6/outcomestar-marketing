@@ -148,6 +148,39 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
+  // v258 (2026-07-16): Age gate UI for college applications + essays (pairs with backend v0.12.149, operator decision: creation opens at age 17). New heAge17() fetches/caches personal-details date_of_birth and computes age. Under 17: the Add application / Add essay buttons are replaced with an explanatory banner (the record keeps building; applications and essays unlock at 17); existing rows still display. Backend enforces the same rule server-side (403 age_restricted), so the UI gate is presentation, not the security boundary.
+  // v257 (2026-07-16): AI resume price disclosure + payment handling (pairs with backend v0.12.148). The Enhance with AI label now states the $1.00 + tax charge to the card on file, applicable on every plan including free and cohort signups. When the backend returns 402 (declined / no card on file), the portal shows the payment message and falls back to the FREE standard structured resume; on other tailoring failures the existing fallback message stands (backend auto-refunds any successful charge when its own LLM step fails).
+  // v256 (2026-07-16): AI resume enhancement always available. The grounded /resume-tailor endpoint (never-invent rules, ATS formatting, JSON-validated, Claude via _llm_complete) previously only ran when a target was filled in. The resume modal now has an 'Enhance with AI' checkbox (default ON, both resume kinds): with no target, the endpoint is called in general-purpose mode ('produce the strongest general resume'); with a target, behavior unchanged. Unchecking yields the raw structured resume. Backend unchanged. AI output remains fully editable/removable in the editor before Generate.
+  // v255 (2026-07-16): Academic Resume rebuilt to the standard academic-CV structure, reverse chronological, drawing on the FULL record (user confirmed multiple schools + teachers were being left out). Sections: CONTACT (name/city-state/email/phone - lean header, replaces the full STUDENT dossier for this form only); EDUCATION (ALL school profiles, reverse-chron by start_date, with city/state, grades attended, and attendance dates - previously only the current school appeared); RELEVANT COURSEWORK (grouped per school, reverse-chron, each course shows year/grade level, AP/Honors/IB/Dual-credit rigor tags, grade received, and TEACHER); HONORS & AWARDS (achieved milestones + course completion awards); STANDARDIZED TESTS; ACADEMIC & LEADERSHIP EXPERIENCE (affiliations with roles/dates); SKILLS (acquired skills from the skills record); LANGUAGES (language at home). GPA emitted under EDUCATION when the academics record has one. Research/publications sections appear only when the record has content (nothing fabricated). Extracurricular checkbox from v253 still appends the EC sections after these.
+  // v254 (2026-07-16): resume/UCA editor cleanup after v253 feedback. (1) LAYOUT FIX: .ec-lbl is display:flex column - v253's inline display:block broke field stretching (tiny floating textareas). Rows now render a flex header line (label text + x Remove button right-aligned) above the full-width textarea, no label style overrides. (2) Editor bar: Save renamed Generate; Print/PDF/Delete removed from the editor - Generate lands on the saved library where Print / PDF / Edit / Delete already exist per item. ucaEditorOut removed; ucaPrintX/ucaPdfX retained (library uses them via ucaPrint/ucaPdfOut).
+  // v253 (2026-07-16): Academic Resume upgrades. (1) Target modal gains an 'Include Extracurricular information' checkbox (default ON, academic resume only) - when checked the generated resume also pulls the extracurricular record: every logger session grouped by kind (service, summer, leadership, competition, STEM, music performance) plus swim best times, via new ucaEcSections(). (2) The resume editor gains per-row Remove (x) toggles - every prefilled row defaults to KEEP; edit the text to change it, or click x to drop it from the saved/printed document (undoable before save). Removed rows are excluded on save; emptied sections vanish. (3) Editor action bar gains Print / PDF / Delete: Print and PDF render the CURRENT editor content (deletions and edits applied, no save required) via new ucaPrintX/ucaPdfX object variants that back the existing id-based ucaPrint/ucaPdfOut; Delete appears only when editing a saved instance.
+  // v252 (2026-07-16): Edit button removed from the Rank, Badges & Awards card header. Current rate / PT rows remain display-only; rank progression is captured through Log rank / badge / award. cadetSecEdit/cadetSecSave retained but unreferenced (promo path) - candidate for removal in a future cleanup.
+  // v251 (2026-07-16): venue gets its own slot. v240 composed venue + address into the single location string AND the venue field read that whole string back, so on edit the venue input showed 'Schreiner University, 2100 Memorial Blvd., Kerrville, TX 78028' with an empty address block. Now: location_parts carries a 'venue' key; the venue input prefills from location_parts.venue when stored (falls back to the raw location string only for legacy rows); the composed location column is unchanged for display. lmEdit/perfEdit/sessionEdit + their saves. Backend needs no change (location_parts is an opaque dict). Pre-v245 rows are repaired server-side via MCP (location decomposed into venue + parts).
+  // v250 (2026-07-16): Promotions card renamed to 'Rank, Badges & Awards'; the redundant inner 'Rank, merit badges & awards' subheader removed (bar keeps just the Log button next to the rate rows). Pairs with v248's Training card cleanup - the two cadet cards are now Training (log only) and Rank, Badges & Awards (rate + PT + log). The generic (non-cadet) leadership section header renamed to match.
+  // v249 (2026-07-16): per-training skill options. Training catalog is now cached as objects [{title, skill_options}] (backend v0.12.147); when the selected training has skill_options, the skills dropdown offers ONLY those titles and the custom free-text input is hidden - e.g. Navy League Orientation offers exactly its 13 defined skills. Switching to a training without options restores the full skill pool + custom input. Applied on dropdown change AND on edit-form open for an existing record. Options save as custom skill titles (deduped by v0.12.143).
+  // v248 (2026-07-16): Sea Cadet Training card simplified - the Recruit Training / NLO date + Other trainings / notes fields and the card's Edit button are removed; every training (including Recruit Training) lives in the Log training flow with dates, skills, media, and location. cadetSecEdit/cadetSecSave keep only the promo branch. Stored usnscc_rt_completed / usnscc_training_notes preserved (keys never sent, never overwritten).
+  // v247 (2026-07-16): three fixes. (1) MEDIA OPEN: mediaWidgetView used fetch+blob, which dies on CORS when /media/{id} 302s to R2/CDN ('failed to fetch'); now plain window.open of the API URL - the browser follows the 302 natively. (2) DUPLICATE ADDRESS on Sea Cadet entries: the generic Organization location block (ecorg) duplicated the Unit Information drill address; ecorg block + wiring omitted on cadet affiliations (drill block is the address of record); stored org_* details preserved untouched. (3) LATENT v240 BUG: the ecorg save-read was nested inside the cadet-only branch, so NON-cadet organizations rendered the block but never saved it; the read now runs whenever the block is present, independent of the cadet branch.
+  // v246 (2026-07-16): media widget UX. (1) POSITION: widget moved to the bottom of every data-entry form, directly AFTER the skills field and before the showcase toggle - ecEdit, lmEdit, perfEdit, sessionEdit. (2) THUMBNAILS: chips replaced by 72px image thumbnails (img src=/focms/v1/media/{id}; 302-follows to R2/CDN); non-image files (PDF/video/docs) fall back to the paperclip chip via onerror. Click opens full file; x removes. Same renderer everywhere the widget appears.
+  // v245 (2026-07-16): logger address blocks STAY FILLED on re-edit. v240 composed the block into the single location string (undecomposable), so the block reopened empty. Saves now also send location_parts (readAddr output) stored in events.details.location_parts (backend v0.12.146); lmEdit/perfEdit/sessionEdit prefill addrFields from record.location_parts. Home-default unchanged (only when block empty AND record new). ecSessionPost degradation guard extended to strip location_parts alongside media_ids on 422 against an older backend.
+  // v244 (2026-07-16): graceful degradation for media on logger saves. Render pipeline minutes exhausted mid-rollout, so live backend may be v0.12.144 (no media_ids on EcSessionItem -> 422). New ecSessionPost(item): tries the save as-is; on a 422/media_ids rejection strips media_ids and retries once, warning that attachments will save after the backend update. lmSave/perfSave/sessionSave all use it. Harmless once v0.12.145 deploys - first attempt just succeeds.
+  // v243 (2026-07-16): universal media widget on ALL EC logger forms - Log training / rank / badge / award (lmEdit, widget id lm-media), performance (perfEdit, pf-media), and session (sessionEdit, sess-media). Chips prefill from record media_ids; saves send media_ids on the ec-sessions payload (backend v0.12.145 stores in events.details.media_ids). STANDING RULE reaffirmed: every data-entry form carries the media widget. Requires backend v0.12.145 FIRST (extra=forbid).
+  // v242 (2026-07-16): Advanced-training checkboxes REMOVED from the Training card editor (and the Advanced-trainings row from the detail card) - trainings are now entered exclusively through Log training, whose dropdown is fed by the self-learning cadet_training_catalog. Editor keeps Recruit Training / NLO date + notes, with a hint pointing at Log training. Stored usnscc_trainings values preserved (key no longer sent, never overwritten). Dead USNSCC_TRAININGS/_ct consts dropped from ecEdit.
+  // v241 (2026-07-16): Cadet training logger upgrades. (1) Training name on Sea Cadet entries is a dropdown fed by the shared cadet_training_catalog (GET /catalogs/cadet-trainings, cached in CADET_TRAINING_CATALOG) - every new training any cadet enters is auto-learned server-side and appears for the next cadet; 'Other (type below)' option reveals a free-text input that feeds the catalog on save. (2) Two separate date pickers: Start date * (event_date) + End date (event_end_date, new in backend v0.12.144). Training rows show 'start \u2192 end'. Requires backend v0.12.144 deployed FIRST (extra=forbid).
+  // v240 (2026-07-16): SITE-WIDE STANDARD LOCATION BLOCK. New stdLocWire(pfx, defaultToHome) + stdLocString(pfx) helpers. The Personal-pillar address component now backs every location entry: EC entry organization location (block 'ecorg'; city/state to real columns, street/line2/county/zip/country to details.org_*), Sea Cadet drill block (home-default on new), session logger, rank/badge/award logger, performance logger (blocks sessloc/lmloc/pfloc composed into the single location string alongside the venue name). New forms default to the child's PHYSICAL home address, correctable in-form; existing records never auto-overwritten (default only applies when the block is empty AND the record is new). Swim meet form keeps its established ZIP-trio + home-default (paste-driven schema).
+  // v239 (2026-07-16): Drill location in Unit Information upgraded to the FULL standard address block from the Personal pillar (addrFields prefix 'drill'): Postal/ZIP (auto-fill), Country (datalist), Address line 1, Address line 2, City/Town, County (US reveal), State/Province select via onCountryChange. Wired with onCountryChange+zipAttach on form render; saved via readAddr to details drill_* keys incl. line2/county/country.
+  // v238 (2026-07-16): (1) Rank logger on Sea Cadet entries - when Type=Rank the name field becomes the NLCC/NSCC rate-ladder dropdown (badge/award keep free text; live-switches with Type); non-cadet entries unchanged. (2) Promotions card: Naval-coursework field removed everywhere (editor, save patch, detail row); PT-benchmarks checkbox on its own row.
+  // v237 (2026-07-16): Training and Promotions REMOVED from the entry edit form (the form now carries Unit Information only). Each detail card gains its own Edit button opening an inline editor inside the card, saving just that section's keys via the affiliations endpoint (details merge). Entry form _cKeys trimmed to unit + drill keys.
+  // v236 (2026-07-16): Drill location is now a standard address block - Drill street address + ZIP (auto-fills city/state via attachZipTrio) + City + State, saved as drill_street/drill_zip/drill_city/drill_state in details. Detail card composes the full address; legacy drill_location string still displays as fallback.
+  // v235 (2026-07-16): USNSCC sections now render as the portal-standard white .section cards (white bg, #E5E7EB border, 14px radius) on BOTH the edit form and the detail view, so Training and Promotions content is unmistakably contained in its own card. Removed the Date-of-last-promotion field (form, save keys, detail row).
+  // v234 (2026-07-16): Unit Information gains Unit ID (e.g. 084BCS), Commanding Officer, Unit phone, Unit email, Member type (NLCC/NSCC dropdown) - on the edit form, the save keys, and the detail card.
+  // v233 (2026-07-16): USNSCC cards restyled to the portal-standard flat row look (matching every other card in the app): no gray boxes - flat sections with hairline #F6F6F3 dividers, Lora navy section titles, ec-meta gray field rows. Applied to both the detail-view cards and the edit-form section cards.
+  // v232 (2026-07-16): Sea Cadet EDIT form sections wrapped in card containers (matching the detail-view cards) - Unit Information / Training / Promotions each render as a bordered card with its fields inside, instead of flat header dividers.
+  // v231 (2026-07-16): Sea Cadet detail - rank/badge/award log now lives INSIDE the Promotions card and the training log INSIDE the Training card; the three cards stack full-width. Generic Leadership log sections suppressed for sea-cadet entries (still render for BSA/CAP/etc).
+  // v230 (2026-07-16): Sea Cadet entry detail renders three read-only cards - Unit Information, Training, Promotions - from details JSONB, above the rank/training logs. Cards deep-link to Edit.
+  // v229 (2026-07-16): Sea Cadet block reorganized into three sections - Unit Information (area/region/unit/drills), Training (Recruit Training date + advanced-training checkboxes from USNSCC curricula + notes), Promotions (NLCC/NSCC rate ladder dropdown, promotion date, PT-benchmarks-current, coursework). Training checkboxes collected to details.usnscc_trainings array.
+  // v228 (2026-07-16): USNSCC structure block on Sea Cadet affiliations - Field Area dropdown (six official areas per seacadets.org), Region free-text, Unit name/code, drill location + schedule. Detects sea-cadet programs live like the USA Swimming block; keys stored in details JSONB (usnscc_area/usnscc_region/usnscc_unit/usnscc_unit_code/drill_location/drill_schedule).
+  // v227 (2026-07-16): Best Times grouped by stroke (Freestyle, Backstroke, Breaststroke, Butterfly, IM) with LCM then SCY sub-bands under each stroke; navy stroke header rows, lavender course subheader rows.
+  // v226 (2026-07-16): universal media widget on every Extracurricular entry (Swim and Dive Club and every other program). Parents can attach photos, videos, and documents on any EC form. Widget renders in ecEdit, chip count on ecRow, chip grid on renderEntryDetail. IDs stored on affiliation.media_ids (JSONB passthrough) and re-hydrated on read.
   // v213 (2026-07-16): race log restyled to the Best Times look (compact single-line rows, meet ellipsized w/ tooltip); Best Times Meet column now populated server-side (v0.12.137 race-match).
   // v211 (2026-07-16): breadcrumbs moved to the standard top slot (under "All pillars") on every Extracurricular page.
   // v210 (2026-07-16): full race log (every swim race, newest first) on the swim program page below the metrics strip.
@@ -1431,6 +1464,44 @@ function readAddr(pfx) {
            zip_postal_code: v('zip_postal_code'),
            country: countryCodeFromName(v('country')) || v('country') };
 }
+// v240: site-wide standard location block helpers
+async function stdLocWire(pfx, defaultToHome) {
+  if (!document.getElementById(pfx + '-zip_postal_code')) return;
+  onCountryChange(pfx); zipAttach(pfx);
+  if (typeof acAttach === 'function') acAttach(pfx);
+  if (typeof countryAttach === 'function') countryAttach(pfx);
+  if (defaultToHome) {
+    var st = document.getElementById(pfx + '-street_address');
+    var zp = document.getElementById(pfx + '-zip_postal_code');
+    var ct = document.getElementById(pfx + '-city_town');
+    if (st && zp && ct && !st.value.trim() && !zp.value.trim() && !ct.value.trim()) {
+      var h = await studentHomeAddr();
+      var set = function(k, v){ var el = document.getElementById(pfx + '-' + k); if (el && v) el.value = v; };
+      set('street_address', h.street_address); set('street_address_line_2', h.street_address_line_2);
+      set('city_town', h.city_town); set('county', h.county); set('zip_postal_code', h.zip_postal_code);
+      var cEl = document.getElementById(pfx + '-country');
+      if (cEl && h.country) cEl.value = countryName(h.country);
+      await onCountryChange(pfx);
+      var sEl = document.getElementById(pfx + '-state_province');
+      if (sEl && h.state_province) sEl.value = h.state_province;
+    }
+  }
+}
+// v251: venue prefill - stored venue wins; legacy rows fall back to the composed location string
+function venuePrefill(rec) {
+  var lp = rec && rec.location_parts;
+  if (lp && typeof lp === 'object' && lp.venue !== undefined && lp.venue !== null) return lp.venue;
+  return (rec && rec.location) || '';
+}
+function stdLocString(pfx) {
+  if (!document.getElementById(pfx + '-zip_postal_code')) return '';
+  var a = readAddr(pfx);
+  if (!a.street_address && !a.city_town) return '';
+  var st = (a.state_province || '').split('-').pop();
+  return [a.street_address, a.street_address_line_2, a.city_town,
+          [st, a.zip_postal_code].filter(Boolean).join(' '),
+          (a.country && a.country !== 'US') ? a.country : ''].filter(Boolean).join(', ');
+}
 async function saveAddresses() {
   var st = document.getElementById('adr-status');
   st.textContent = 'Saving\u2026'; st.className = 'save-status';
@@ -2003,182 +2074,6 @@ const EC_CAT_SKILL_DOMAINS = {
   'Community, Inclusivity & Lifestyle': ['Leadership, Civics & Community Engagement','Social Dynamics, Leadership & Peer Skills','Social, Emotional & Autonomy','Identity, Boundaries & Emotional Maturity']
 };
 let FORM_SKILLS = [];
-
-/* ============ v226: per-record media attachments ============
-   Photos, video, and documents attach to the record being edited. Files
-   upload immediately via POST /focms/v1/media (R2 + quota); the record
-   stores the media UUIDs in details->'media_ids' on Save. Generic module:
-   any entry form gains attachments by calling mediaFieldHtml(record.media_ids)
-   in its markup and copying FORM_MEDIA into the save payload. */
-let FORM_MEDIA = [];        // media UUIDs currently on the open form
-let FORM_MEDIA_HAD = false; // form opened with attachments (send [] to clear)
-let MEDIA_META = {};        // id -> {filename, mime_type, kind}
-
-function mediaKindFromMime(m) {
-  m = m || '';
-  if (m.indexOf('image/') === 0) return 'image';
-  if (m.indexOf('video/') === 0) return 'video';
-  return 'document';
-}
-function mediaKindLabel(k) { return k === 'video' ? 'Video' : k === 'document' ? 'Document' : 'Image'; }
-function mediaFieldHtml(ids) {
-  FORM_MEDIA = (ids || []).slice();
-  FORM_MEDIA_HAD = FORM_MEDIA.length > 0;
-  if (FORM_MEDIA.length) mediaFetchMeta(FORM_MEDIA);
-  return '<div class="ec-lbl" style="font-weight:600;margin-top:8px">Photos, video &amp; documents</div>' +
-    '<div id="media-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0"></div>' +
-    '<label class="annot-file" style="display:inline-block;margin-top:2px">+ Add media' +
-    '<input type="file" multiple style="display:none" ' +
-    'accept="image/*,video/*,.pdf,.doc,.docx,.heic,.txt,.csv,.xlsx,.pptx" ' +
-    'onchange="mediaAttachUpload(this)"></label>';
-}
-function mediaRenderChips() {
-  const w = document.getElementById('media-chips'); if (!w) return;
-  w.innerHTML = FORM_MEDIA.map(function (id) {
-    const m = MEDIA_META[id] || {};
-    const label = m.filename || (mediaKindLabel(m.kind) + ' attachment');
-    return '<span class="art-chip" title="Click name to view">' +
-      '<span style="cursor:pointer" onclick="mediaView(\'' + id + '\')">' + escapeHTML(label) + '</span>' +
-      '<span class="art-x" onclick="mediaRemove(\'' + id + '\')">\u00d7</span></span>';
-  }).join('') || '<span style="font-size:12px;color:#7A8A9E">No attachments yet.</span>';
-}
-async function mediaFetchMeta(ids) {
-  try {
-    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/media-meta?ids=' + ids.join(','));
-    (d.media || []).forEach(function (m) { MEDIA_META[m.id] = m; });
-    mediaRenderChips();
-  } catch (e) { /* pre-v0.12.142 backend: chips fall back to generic labels */ }
-}
-async function mediaAttachUpload(inputEl) {
-  const files = Array.prototype.slice.call(inputEl.files || []);
-  if (!files.length) return;
-  for (const file of files) {
-    showToast('Uploading ' + file.name + '\u2026', 'success');
-    try {
-      const b64 = await new Promise(function (res, rej) {
-        const r = new FileReader();
-        r.onload = function () { res(String(r.result).split(',')[1]); };
-        r.onerror = function () { rej(new Error('could not read file')); };
-        r.readAsDataURL(file);
-      });
-      const resp = await apiUpload({ filename: file.name, mime_type: file.type || 'application/octet-stream',
-        content_base64: b64, kind: mediaKindFromMime(file.type), visibility: 'unlisted', student_id: STUDENT_ID });
-      const mid = resp.id || resp.media_id || resp.artifact_id;
-      if (mid) {
-        FORM_MEDIA.push(mid);
-        MEDIA_META[mid] = { id: mid, filename: file.name, mime_type: file.type, kind: mediaKindFromMime(file.type) };
-        mediaRenderChips();
-        showToast('Attached ' + file.name + ' \u2014 press Save to keep it', 'success');
-      }
-    } catch (e) {
-      if (String(e.message).indexOf('402') < 0) showToast('Upload failed: ' + e.message, 'error');
-    }
-  }
-  inputEl.value = '';
-}
-function mediaRemove(id) {
-  FORM_MEDIA = FORM_MEDIA.filter(function (x) { return x !== id; });
-  mediaRenderChips();
-}
-function mediaView(id) {
-  // open synchronously so popup blockers see the user gesture, then point it
-  const w = window.open('', '_blank');
-  mediaViewInto(w, id);
-}
-async function mediaViewInto(w, id) {
-  try {
-    const r = await fetch(API_BASE + '/focms/v1/media/' + id,
-      { headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Tenant-Id': TENANT_ID } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    if (w) w.location = url; else window.open(url, '_blank');
-    setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
-  } catch (e) {
-    if (w) try { w.close(); } catch (_) { }
-    showToast('Could not open attachment: ' + e.message, 'error');
-  }
-}
-
-/* ============ v227: EC section student photo ============
-   Each Extracurricular category (Mainstream Sports & Athletics, Arts, ...)
-   can show a photo of the student at the top right of the view, level with
-   the "\u2190 All pillars" / breadcrumb header. Persistence: the photo IS media -
-   uploaded with purpose kind 'ui_photo:ec:<catCode>'; newest wins (replace =
-   upload again). Lookup via GET /student/{id}/media-by-kind (v0.12.143). */
-let EC_PHOTO_CACHE = {}; // kind -> {id,url} | null (known-empty)
-
-function ecPhotoKind(catCode) { return 'ui_photo:ec:' + catCode; }
-
-function ecPhotoRemoveBox() {
-  var b = document.getElementById('ec-photo-box'); if (b) b.remove();
-  var hdr = document.querySelector('.pillar-view-header');
-  if (hdr) { hdr.style.display = ''; hdr.style.justifyContent = ''; hdr.style.alignItems = ''; hdr.style.gap = ''; }
-}
-
-async function ecPhotoShow(catCode) {
-  var hdr = document.querySelector('.pillar-view-header'); if (!hdr || !catCode) return;
-  hdr.style.display = 'flex'; hdr.style.justifyContent = 'space-between';
-  hdr.style.alignItems = 'flex-start'; hdr.style.gap = '16px';
-  var box = document.getElementById('ec-photo-box');
-  if (!box) { box = document.createElement('div'); box.id = 'ec-photo-box'; hdr.appendChild(box); }
-  box.style.cssText = 'flex:0 0 auto';
-  box.innerHTML = '<label title="Student photo for this section" style="cursor:pointer;display:inline-block">' +
-    '<div id="ec-photo-slot" style="width:84px;height:84px;border:2px dashed #D6DAE0;border-radius:12px;' +
-    'display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#7A8A9E;' +
-    'font-family:Poppins,sans-serif;overflow:hidden;background:#fff">+ Student photo</div>' +
-    '<input type="file" accept="image/*" style="display:none" onchange="ecPhotoUpload(this,\'' + catCode + '\')"></label>';
-  var kind = ecPhotoKind(catCode);
-  var cached = EC_PHOTO_CACHE[kind];
-  if (cached === null) return;                       // known: no photo yet
-  if (cached && cached.url) { ecPhotoPaint(cached.url); return; }
-  try {
-    var d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/media-by-kind?kind=' + encodeURIComponent(kind));
-    if (d && d.id) {
-      var r = await fetch(API_BASE + '/focms/v1/media/' + d.id,
-        { headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Tenant-Id': TENANT_ID } });
-      if (r.ok) {
-        var url = URL.createObjectURL(await r.blob());
-        EC_PHOTO_CACHE[kind] = { id: d.id, url: url };
-        ecPhotoPaint(url);
-        return;
-      }
-    }
-    EC_PHOTO_CACHE[kind] = null;
-  } catch (e) { /* pre-v0.12.143 backend: box stays as upload target */ }
-}
-
-function ecPhotoPaint(url) {
-  var s = document.getElementById('ec-photo-slot');
-  if (!s) return;
-  s.style.border = 'none';
-  s.innerHTML = '<img src="' + url + '" alt="Student photo" title="Click to replace" ' +
-    'style="width:84px;height:84px;object-fit:cover;object-position:center 20%;border-radius:12px;display:block">';
-}
-
-async function ecPhotoUpload(inputEl, catCode) {
-  var f = inputEl.files && inputEl.files[0]; if (!f) return;
-  if ((f.type || '').indexOf('image/') !== 0) { showToast('Pick an image file', 'error'); inputEl.value = ''; return; }
-  showToast('Uploading ' + f.name + '\u2026', 'success');
-  try {
-    var b64 = await new Promise(function (res, rej) {
-      var r = new FileReader();
-      r.onload = function () { res(String(r.result).split(',')[1]); };
-      r.onerror = function () { rej(new Error('could not read file')); };
-      r.readAsDataURL(f);
-    });
-    var resp = await apiUpload({ filename: f.name, mime_type: f.type, content_base64: b64,
-      kind: ecPhotoKind(catCode), visibility: 'unlisted', student_id: STUDENT_ID });
-    var mid = resp.id || resp.media_id;
-    var url = URL.createObjectURL(f);   // paint from the local file, no round trip
-    EC_PHOTO_CACHE[ecPhotoKind(catCode)] = { id: mid || null, url: url };
-    ecPhotoPaint(url);
-    showToast('Photo set for this section', 'success');
-  } catch (e) {
-    if (String(e.message).indexOf('402') < 0) showToast('Upload failed: ' + e.message, 'error');
-  }
-  inputEl.value = '';
-}
 /* v222: swim records offer ONLY the four technical/physical swim skills.
    The five swim META-skills (micro-feedback loop, delayed gratification,
    stress regulation, autonomous accountability, lactic resilience) are NEVER
@@ -2203,6 +2098,10 @@ function ecSwimContext() {
   var isSwim = /swim/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var wrap = document.getElementById('usa-sw-wrap');
   if (wrap) wrap.style.display = isSwim ? '' : 'none';
+  // v228: same live-detect for Sea Cadets
+  var isCadet = /sea cadet|usnscc|naval sea/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var cwrap = document.getElementById('usnscc-wrap');
+  if (cwrap) cwrap.style.display = isCadet ? '' : 'none';
   var sel = document.getElementById('sk-add');
   if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : EC_POOL_OPTS);
   return isSwim;
@@ -2341,7 +2240,7 @@ function ecCrumbHtml(parts) {
   if (slot) { slot.innerHTML = h; return ''; }
   return h; // fallback if the slot is missing (stale portal.html)
 }
-function ecClearCrumb() { var el = document.getElementById('pillar-crumbtrail'); if (el) el.innerHTML = ''; if (typeof ecPhotoRemoveBox === 'function') ecPhotoRemoveBox(); }
+function ecClearCrumb() { var el = document.getElementById('pillar-crumbtrail'); if (el) el.innerHTML = ''; }
 function ecTrailCrumb(leaf) {
   const parts = [{ label: 'Extracurricular', go: 'renderEcSections()' }];
   const view = ENTRY_VIEW || PROG_VIEW;
@@ -2368,6 +2267,55 @@ function readSkillsFromForm() {
   return Array.from(new Set(out));
 }
 const LM_KINDS = { rank: 'Rank', merit_badge: 'Merit badge', award: 'Award' };
+// v244: save ec-session items; degrade gracefully if live backend predates media_ids
+async function ecSessionPost(item) {
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+  } catch (e) {
+    var msg = (e && e.message) || '';
+    if ((item.media_ids !== undefined || item.location_parts !== undefined) && /media_ids|location_parts|422|unprocessable/i.test(msg)) {
+      delete item.media_ids; delete item.location_parts;
+      await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+      showToast('Saved. Media attachments will start saving after the next backend update.', 'info');
+      return;
+    }
+    throw e;
+  }
+}
+var CADET_TRAINING_CATALOG = null;  // v241: shared cross-tenant training list (titles)
+var CADET_TRAINING_ITEMS = null;    // v249: [{title, skill_options}]
+async function loadCadetTrainings() {
+  if (CADET_TRAINING_CATALOG) return CADET_TRAINING_CATALOG;
+  try {
+    const d = await apiGet('/focms/v1/catalogs/cadet-trainings');
+    CADET_TRAINING_ITEMS = d.items || (d.trainings || []).map(function(t){ return { title: t, skill_options: null }; });
+    CADET_TRAINING_CATALOG = CADET_TRAINING_ITEMS.map(function(i){ return i.title; });
+  }
+  catch (e) {
+    CADET_TRAINING_CATALOG = (typeof CADET_TRAININGS !== 'undefined' ? CADET_TRAININGS.slice() : []);
+    CADET_TRAINING_ITEMS = CADET_TRAINING_CATALOG.map(function(t){ return { title: t, skill_options: null }; });
+  }
+  return CADET_TRAINING_CATALOG;
+}
+function trainingSkillOptions(title) {
+  var it = (CADET_TRAINING_ITEMS || []).find(function(i){ return i.title === title; });
+  return (it && Array.isArray(it.skill_options) && it.skill_options.length) ? it.skill_options : null;
+}
+// v249: restrict or restore the skills dropdown based on the selected training
+function applyTrainingSkillOptions(title) {
+  var sel = document.getElementById('sk-add');
+  var cus = document.querySelector('.ec-in.ec-skills-custom');
+  if (!sel) return;
+  var opts = title ? trainingSkillOptions(title) : null;
+  if (opts) {
+    sel.innerHTML = '<option value="">-- add a skill --</option>' +
+      opts.map(function(t){ return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>'; }).join('');
+    if (cus) { cus.value = ''; cus.style.display = 'none'; }
+  } else {
+    sel.innerHTML = '<option value="">-- add a skill --</option>' + EC_POOL_OPTS;
+    if (cus) cus.style.display = '';
+  }
+}
 function latestMilestone(affilId) {
   const ms = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId && (s.milestone_kind || 'rank') !== 'training');
   ms.sort(function(a, b){ return (b.event_date || '').localeCompare(a.event_date || ''); });
@@ -2375,7 +2323,6 @@ function latestMilestone(affilId) {
 }
 
 function renderEcSections() {
-  ecPhotoRemoveBox(); // v227: landing has no category context
   const counts = { awards: EC_AWARDS.length, sessions: EC_SESSIONS.length, camps: 0, coaches: 0 };
   for (const k of Object.keys(CAT_MAP)) counts[k] = 0;
   const catToCode = {};
@@ -2748,15 +2695,16 @@ let BT_DATA = null;
 let BT_CRUMB = '';
 const BT_STROKE_ORDER = ['Free','Back','Breast','Fly','IM'];
 
+function btStrokeOf(k) { const p = k.split(' '); return p.slice(1, -1).join(' '); }
+function btCourseOf(k) { return k.slice(-3); }
 function btSortKeys(bests) {
+  // v227: stroke > course (LCM then SCY) > distance
   return Object.keys(bests).sort((a, b) => {
-    const pa = a.split(' '), pb = b.split(' ');
-    const sa = pa.slice(1, -1).join(' '), sb = pb.slice(1, -1).join(' ');
-    const so = BT_STROKE_ORDER.indexOf(sa) - BT_STROKE_ORDER.indexOf(sb);
+    const so = BT_STROKE_ORDER.indexOf(btStrokeOf(a)) - BT_STROKE_ORDER.indexOf(btStrokeOf(b));
     if (so) return so;
-    const dd = parseInt(pa[0], 10) - parseInt(pb[0], 10);
-    if (dd) return dd;
-    return a.slice(-3) === 'LCM' ? -1 : 1;
+    const ca = btCourseOf(a), cb = btCourseOf(b);
+    if (ca !== cb) return ca === 'LCM' ? -1 : 1;
+    return parseInt(a, 10) - parseInt(b, 10);
   });
 }
 
@@ -2776,11 +2724,26 @@ function btCell(v, suffix) { return (v == null || v === '') ? '\u2014' : (escape
 
 function btRenderTable() {
   const keys = btSortKeys(BT_DATA);
-  const rows = keys.map(k => {
+  // v227: group rows by stroke; within each stroke a header row, then an LCM
+  // sub-band followed by an SCY sub-band. Sort already delivers this order.
+  const STROKE_LABELS = { Free: 'Freestyle', Back: 'Backstroke', Breast: 'Breaststroke', Fly: 'Butterfly', IM: 'Individual Medley' };
+  let rows = '', lastStroke = null, lastCourse = null;
+  keys.forEach(k => {
+    const stroke = btStrokeOf(k), course = btCourseOf(k);
+    if (stroke !== lastStroke) {
+      rows += '<tr class="bt-stroke-hdr"><td colspan="11" style="background:var(--navy);color:#fff;font-family:Lora,serif;font-weight:600;font-size:14.5px;padding:8px 10px">' +
+        escapeHTML(STROKE_LABELS[stroke] || stroke) + '</td></tr>';
+      lastStroke = stroke; lastCourse = null;
+    }
+    if (course !== lastCourse) {
+      rows += '<tr class="bt-course-hdr"><td colspan="11" style="background:#EEEDF7;color:var(--navy);font-weight:600;font-size:12px;letter-spacing:.06em;padding:5px 10px">' +
+        (course === 'LCM' ? 'LONG COURSE METERS (LCM)' : 'SHORT COURSE YARDS (SCY)') + '</td></tr>';
+      lastCourse = course;
+    }
     const b = BT_DATA[k];
     const editable = !!(b.source_system && b.source_id);
-    return '<tr data-k="' + escapeAttr(k) + '">' +
-      '<td style="white-space:nowrap"><strong>' + escapeHTML(k) + '</strong></td>' +
+    rows += '<tr data-k="' + escapeAttr(k) + '">' +
+      '<td style="white-space:nowrap;padding-left:18px"><strong>' + escapeHTML(k) + '</strong></td>' +
       '<td class="bt-best">' + btCell(b.time) + '</td>' +
       '<td class="bt-pts">' + btCell(b.power_points) + '</td>' +
       '<td>' + btCell(b.usa_standard) + '</td>' +
@@ -2792,7 +2755,7 @@ function btRenderTable() {
       '<td class="bt-meet">' + btCell(b.meet) + '</td>' +
       '<td>' + (editable ? '<button class="ec-btn-sm" onclick="btEditRow(this)">Edit</button>' : '<span title="No source key \u2014 not editable">\u2014</span>') + '</td>' +
       '</tr>';
-  }).join('');
+  });
   document.getElementById('sections-container').innerHTML =
     BT_CRUMB +
     '<div style="overflow-x:auto"><table class="swm-table bt-table" style="width:100%;border-collapse:collapse;min-width:860px">' +
@@ -2898,7 +2861,6 @@ function renderCategoryList(catCode) {
   else html += '<div class="ec-grid">' + cards + '</div>';
   ecSetHeader(t ? t.label : catName, t ? t.desc : '');
   document.getElementById('sections-container').innerHTML = html;
-  ecPhotoShow(catCode); // v227
 }
 
 function renderProgramEntries(catCode, progCode) {
@@ -2938,7 +2900,6 @@ function renderProgramEntries(catCode, progCode) {
   if (isSwimProg) html += '<div id="swim-race-log" style="margin:14px 0"></div>';
   ecSetHeader(prog ? prog.title : 'Program', t ? t.label : '');
   document.getElementById('sections-container').innerHTML = html;
-  ecPhotoShow(catCode); // v227
   if (isSwimProg) { loadSwimMetricsStrip(); loadSwimRaceLog(); }
 }
 
@@ -2995,6 +2956,58 @@ function renderEntryDetail(catCode, progCode, affilId) {
     (/swim/i.test((prog && prog.title) || (a.organization_name || '')) ? '<button class="save-btn" onclick="renderSwimMeetForm()">Enter swim meet results</button><button class="save-btn" onclick="renderBestTimes()">Best times</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderProgramEntries(\''+catCode+'\',\''+progCode+'\')">Back to ' + escapeHTML(prog ? prog.title : 'program') + '</button></div>';
   html += ecRow(a);
+  // v226: read-only media chip grid on entry detail (widget rendered inside ecEdit is the editable one)
+  const _dmids = normalizeMediaIds(a);
+  if (_dmids.length) {
+    html += '<div style="padding:14px 0;border-bottom:1px solid #F6F6F3">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px;margin-bottom:8px">Attached media <span style="font-weight:400;color:#7A8A9E;font-size:12px">(' + _dmids.length + ')</span></div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+      _dmids.map(function(mid){
+        var msrc = API_BASE + '/focms/v1/media/' + mid;
+        return '<span style="display:inline-block"><img src="' + msrc + '" alt="" loading="lazy" ' +
+          'style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;cursor:pointer;display:block;background:#EEEDF7" ' +
+          'onclick="mediaWidgetView(\'' + mid + '\')" ' +
+          'onerror="this.outerHTML=\'<span class=&quot;art-chip&quot; style=&quot;background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;cursor:pointer&quot; onclick=&quot;mediaWidgetView(\\\'' + mid + '\\\')&quot;>\ud83d\udcce ' + mid.slice(0, 8) + '</span>\'"></span>';
+      }).join('') + '</div></div>';
+  }
+  // v231: three stacked USNSCC cards; Training and Promotions embed their logs
+  const isCadetEntry = /sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((prog && prog.title) || ''));
+  if (isCadetEntry) {
+    const dd0 = (a.details && typeof a.details === 'object') ? a.details : {};
+    const _all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
+      .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
+    const _ranks = _all.filter(s => (s.milestone_kind || 'rank') !== 'training');
+    const _trainings = _all.filter(s => s.milestone_kind === 'training');
+    function _cRows(rows) {
+      return rows.filter(function(r){ return r[1]; }).map(function(r){
+        return '<div style="display:flex;gap:8px;padding:2px 0"><span class="ec-meta" style="min-width:170px;margin-top:0">' + r[0] + '</span><span class="ec-title" style="font-weight:400">' + escapeHTML(String(r[1])) + '</span></div>';
+      }).join('') || '<div class="ec-notes">Nothing recorded yet \u2014 use Edit above to fill this in.</div>';
+    }
+    function _cShell(title, inner) {
+      return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
+        '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:8px">' + title + '</div>' + inner + '</div>';
+    }
+    html += _cShell('Unit Information', _cRows([
+      ['Field Area', dd0.usnscc_area], ['Region', dd0.usnscc_region],
+      ['Unit', dd0.usnscc_unit], ['Unit code', dd0.usnscc_unit_code],
+      ['Unit ID', dd0.usnscc_unit_id], ['Member type', dd0.usnscc_member_type],
+      ['Commanding Officer', dd0.usnscc_co],
+      ['Unit phone', dd0.usnscc_unit_phone], ['Unit email', dd0.usnscc_unit_email],
+      ['Drill location', [dd0.drill_street, dd0.drill_line2, dd0.drill_city, dd0.drill_county, [dd0.drill_state, dd0.drill_zip].filter(Boolean).join(' '), (dd0.drill_country && dd0.drill_country !== 'US') ? dd0.drill_country : ''].filter(Boolean).join(', ') || dd0.drill_location],
+      ['Drill schedule', dd0.drill_schedule]]));
+    html += _cShell('Training',
+      '<div class="ec-bar" style="align-items:center">' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">Training log</span>' +
+      '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training</button></div>' +
+      (_trainings.length ? _trainings.map(lmRow).join('') : '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>'));
+    html += _cShell('Rank, Badges &amp; Awards',
+      '<div id="cadet-sec-promo">' + _cRows([
+        ['Current rate', dd0.usnscc_rank],
+        ['PT benchmarks', dd0.usnscc_pt_current ? 'Current' : '']]) + '</div>' +
+      '<div class="ec-bar" style="margin-top:14px;align-items:center">' +
+      '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>' +
+      (_ranks.length ? _ranks.map(lmRow).join('') : '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>'));
+  }
   if (prog && prog.category === 'Creative, Visual & Performing Arts') {
     const perfs = (EC_SESSIONS || []).filter(s => s.event_type === 'music_performance' && s.related_affiliation_id === affilId)
       .sort((x, y) => (y.event_date || '').localeCompare(x.event_date || ''));
@@ -3004,7 +3017,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     if (!perfs.length) html += '<div class="cr-waiting">No performances logged yet. Track each concert: date, instrument, music played, composer.</div>';
     else html += perfs.map(perfRow).join('');
   }
-  if (prog && prog.category === 'Leadership, Civic & Career Prep') {
+  if (prog && prog.category === 'Leadership, Civic & Career Prep' && !isCadetEntry) {
     const all = (EC_SESSIONS || []).filter(s => s.event_type === 'leadership_milestone' && s.related_affiliation_id === affilId)
       .sort(function(x, y){ return (y.event_date || '').localeCompare(x.event_date || ''); });
     const ranks = all.filter(s => (s.milestone_kind || 'rank') !== 'training');
@@ -3012,7 +3025,7 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const lm = ranks[0] || null;
     if (lm) html += '<div class="ac-est" style="margin-top:20px">Latest ' + escapeHTML((LM_KINDS[lm.milestone_kind || 'rank'] || 'Rank').toLowerCase()) + ': <b>' + escapeHTML(lm.title) + '</b>' + (lm.event_date ? ' \u00b7 ' + escapeHTML(lm.event_date) : '') + '</div>';
     html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
-      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, merit badges &amp; awards</span>' +
+      '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Rank, Badges &amp; Awards</span>' +
       '<button class="save-btn" onclick="lmEdit(null,\'rank\')">Log rank / badge / award</button></div>';
     if (!ranks.length) html += '<div class="cr-waiting">Nothing logged yet. Record each rank, merit badge, or award with its date.</div>';
     else html += ranks.map(lmRow).join('');
@@ -3024,7 +3037,45 @@ function renderEntryDetail(catCode, progCode, affilId) {
   }
   ecSetHeader(a.organization_name + (a.role ? ' \u2014 ' + a.role : ''), prog ? prog.title : '');
   document.getElementById('sections-container').innerHTML = html;
-  ecPhotoShow(catCode); // v227
+}
+
+// v237: inline editors for the Training / Promotions cards on the Sea Cadet detail
+const CADET_RATES = [
+  ['NLCC (Navy League Cadets, ages 10-13)', ['Cadet Recruit', 'Cadet Apprentice', 'Able Cadet', 'Cadet Petty Officer 3rd Class', 'Cadet Petty Officer 2nd Class', 'Cadet Petty Officer 1st Class', 'Cadet Chief Petty Officer']],
+  ['NSCC (Sea Cadets, ages 13-18)', ['Seaman Recruit (E-1)', 'Seaman Apprentice (E-2)', 'Seaman (E-3)', 'Petty Officer 3rd Class (E-4)', 'Petty Officer 2nd Class (E-5)', 'Petty Officer 1st Class (E-6)', 'Chief Petty Officer (E-7)']]
+];
+const CADET_TRAININGS = ['SeaPerch Underwater Robotics', 'Aviation Ground School', 'Cybersecurity', 'Marine Engineering', 'Field Medical (First Aid / CPR)', 'Seamanship & Navigation', 'Firefighting', 'Wilderness Survival'];
+function cadetSecEdit(kind) {
+  const a = EC_DATA.find(x => x.id === ENTRY_VIEW.id); if (!a) return;
+  const dd = (a.details && typeof a.details === 'object') ? a.details : {};
+  const box = document.getElementById('cadet-sec-' + kind); if (!box) return;
+  let f = '';
+  {
+    f = '<label class="ec-lbl">Current rate / rank<select class="ec-in" id="cs-rank"><option value=""></option>' +
+      CADET_RATES.map(function(g){
+        return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
+          return '<option' + (dd.usnscc_rank === r ? ' selected' : '') + '>' + r + '</option>';
+        }).join('') + '</optgroup>';
+      }).join('') + '</select></label>' +
+      '<label class="ec-check" style="margin-top:10px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cs-pt"' + (dd.usnscc_pt_current ? ' checked' : '') + '> PT benchmarks current (biannual)</label>';
+  }
+  box.innerHTML = f + '<div class="ec-bar" style="margin-top:10px">' +
+    '<button class="save-btn" onclick="cadetSecSave(\'' + kind + '\')">Save</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')">Cancel</button></div>';
+}
+async function cadetSecSave(kind) {
+  const a = EC_DATA.find(x => x.id === ENTRY_VIEW.id); if (!a) return;
+  const patch = {};
+  patch.usnscc_rank = (document.getElementById('cs-rank') || {}).value || '';
+  patch.usnscc_pt_current = !!(document.getElementById('cs-pt') || {}).checked;
+  try {
+    await apiPost('/focms/v1/student/' + STUDENT_ID + '/affiliations', { items: [{
+      id: a.id, affiliation_type: a.affiliation_type || 'program',
+      organization_name: a.organization_name, details: patch }] });
+    a.details = Object.assign({}, a.details || {}, patch);
+    showToast('Saved');
+    renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
+  } catch (e) { showToast('Save failed: ' + (e.message || e), 'error'); }
 }
 
 function perfRow(p) {
@@ -3041,7 +3092,7 @@ function perfRow(p) {
 function lmRow(p) {
   const kind = LM_KINDS[p.milestone_kind || 'rank'] || (p.milestone_kind === 'training' ? 'Training' : 'Rank');
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || kind) +
-    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) : '') + '</div>' +
+    (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) + (p.event_end_date ? ' \u2192 ' + escapeHTML(p.event_end_date) : '') : '') + '</div>' +
     '<div class="ec-meta">' + escapeHTML(p.milestone_kind === 'training' ? 'Training' : kind) + (p.location ? ' \u00b7 ' + escapeHTML(p.location) : '') + '</div>' +
     renderRowSkillsAndBadge(p) +
     (p.notes ? '<div class="ec-notes">' + escapeHTML(p.notes) + '</div>' : '') + '</div>' +
@@ -3065,35 +3116,98 @@ function perfEdit(id) {
     perfField('pf-instrument', 'Instrument', p.instrument) +
     perfField('pf-music', 'Music played (piece or program)', p.music_played) +
     perfField('pf-composer', 'Composer(s)', p.composer) +
-    perfField('pf-location', 'Venue / location', p.location) +
+    perfField('pf-location', 'Venue / place name', venuePrefill(p)) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('pfloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pf-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
+    mediaWidgetHtml('pf-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="pf-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="perfSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+  stdLocWire('pfloc', !id);
+  mediaWidgetRenderChips('pf-media');
 }
 
-function lmEdit(id, presetKind) {
+function lmTrainingField(catalog, val) {
+  var inList = val && catalog.indexOf(val) !== -1;
+  var other = val && !inList;
+  return '<label class="ec-lbl">Training *<select class="ec-in" id="lm-title-sel" onchange="lmTrainingSwitch()">' +
+    '<option value=""></option>' +
+    catalog.map(function(t){ return '<option' + (t === val ? ' selected' : '') + '>' + escapeHTML(t) + '</option>'; }).join('') +
+    '<option value="__other__"' + (other ? ' selected' : '') + '>Other (type below)</option>' +
+    '</select></label>' +
+    '<label class="ec-lbl" id="lm-title-other-wrap" style="' + (other ? '' : 'display:none') + '">New training name *' +
+    '<input class="ec-in" id="lm-title-other" type="text" value="' + escapeHTML(other ? val : '') + '" placeholder="Will be added to the list for the next cadet"></label>';
+}
+function lmTrainingSwitch() {
+  var sel = document.getElementById('lm-title-sel');
+  var w = document.getElementById('lm-title-other-wrap');
+  if (sel && w) w.style.display = sel.value === '__other__' ? '' : 'none';
+  // v249: a training with defined skill_options restricts the skills dropdown
+  if (sel) applyTrainingSkillOptions(sel.value === '__other__' ? '' : sel.value);
+}
+function lmTitleValue() {
+  var sel = document.getElementById('lm-title-sel');
+  if (sel) {
+    if (sel.value === '__other__') { var o = document.getElementById('lm-title-other'); return o ? o.value.trim() : ''; }
+    return sel.value;
+  }
+  var t = document.getElementById('lm-title'); return t ? (t.value || '').trim() : '';
+}
+function lmTitleField(isTraining, rankDropdown, val) {
+  if (rankDropdown) {
+    return '<label class="ec-lbl">Rank / rate *<select class="ec-in" id="lm-title"><option value=""></option>' +
+      CADET_RATES.map(function(g){
+        return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
+          return '<option' + (val === r ? ' selected' : '') + '>' + r + '</option>';
+        }).join('') + '</optgroup>';
+      }).join('') + '</select></label>';
+  }
+  return perfField('lm-title', (isTraining ? 'Training name *' : 'Rank / badge / award name *'), val);
+}
+function lmKindSwitch() {
+  const wrap = document.getElementById('lm-title-wrap'); if (!wrap) return;
+  const isCadet = !!(document.getElementById('lm-cadet-flag') || {}).textContent;
+  const k = (document.getElementById('lm-kind') || {}).value || 'rank';
+  const cur = (document.getElementById('lm-title') || {}).value || '';
+  wrap.innerHTML = lmTitleField(false, k === 'rank' && isCadet, cur);
+}
+async function lmEdit(id, presetKind) {
   if (!ENTRY_VIEW) return;
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10), milestone_kind: presetKind || 'rank' };
   if (!p) return;
   const kind = p.milestone_kind || 'rank';
   const isTraining = kind === 'training';
   const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
+  const _a = (EC_DATA || []).find(x => x.id === ENTRY_VIEW.id) || {};
+  const _prog = (EC_PROGRAMS || []).find(pp => pp.code === ENTRY_VIEW.code) || {};
+  const lmIsCadet = /sea cadet|usnscc|naval sea/i.test((_a.organization_name || '') + ' ' + (_prog.title || ''));
+  const _tCat = (isTraining && lmIsCadet) ? await loadCadetTrainings() : null;
   const kindSel = isTraining ? '' :
-    '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind">' +
+    '<label class="ec-lbl">Type *<select class="ec-in" id="lm-kind" onchange="lmKindSwitch()">' +
     Object.keys(LM_KINDS).map(function(k){ return '<option value="'+k+'"'+(kind===k?' selected':'')+'>'+LM_KINDS[k]+'</option>'; }).join('') +
     '</select></label>';
   document.getElementById('sections-container').innerHTML = ecTrailCrumb(isTraining ? (id ? 'Edit training' : 'Log training') : (id ? 'Edit rank / badge / award' : 'Log rank / badge / award')) + '<div class="ec-form">' +
     kindSel +
-    perfField('lm-title', (isTraining ? 'Training name *' : 'Rank / badge / award name *'), p.title) +
-    perfField('lm-date', (isTraining ? 'Training date *' : 'Date attained *'), p.event_date, 'date') +
-    perfField('lm-location', 'Location', p.location) +
+    '<div id="lm-title-wrap">' + (_tCat ? lmTrainingField(_tCat, p.title) : lmTitleField(isTraining, (!isTraining && kind === 'rank' && lmIsCadet), p.title)) + '</div>' +
+    '<span id="lm-cadet-flag" style="display:none">' + (lmIsCadet ? '1' : '') + '</span>' +
+    (isTraining
+      ? '<div class="ec-two">' + perfField('lm-date', 'Start date *', p.event_date, 'date') +
+        perfField('lm-end', 'End date', p.event_end_date, 'date') + '</div>'
+      : perfField('lm-date', 'Date attained *', p.event_date, 'date')) +
+    perfField('lm-location', 'Venue / place name', venuePrefill(p)) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('lmloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER) +
+    mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
+  stdLocWire('lmloc', !id);
+  if (_tCat) applyTrainingSkillOptions((p.title && _tCat.indexOf(p.title) !== -1) ? p.title : '');  // v249
+  mediaWidgetRenderChips('lm-media');
 }
 
 async function lmSave(id, fixedKind) {
@@ -3101,9 +3215,12 @@ async function lmSave(id, fixedKind) {
   const v = function(k){ const el = document.getElementById(k); return el ? (el.value || '').trim() : ''; };
   const item = {
     event_type: 'leadership_milestone',
-    title: v('lm-title'), event_date: v('lm-date'),
+    title: lmTitleValue(), event_date: v('lm-date'),
+    event_end_date: v('lm-end') || null,
+    media_ids: mediaWidgetCollect('lm-media'),
+    location_parts: document.getElementById('lmloc-zip_postal_code') ? Object.assign(readAddr('lmloc'), { venue: v('lm-location') || '' }) : null,
     milestone_kind: fixedKind === 'training' ? 'training' : (v('lm-kind') || 'rank'),
-    location: v('lm-location') || null,
+    location: [v('lm-location'), stdLocString('lmloc')].filter(Boolean).join(', ') || null,
     notes: v('lm-notes') || null,
     skills_gained: readSkillsFromForm(),
     show_on_showcase: document.getElementById('lm-showcase').checked,
@@ -3112,8 +3229,9 @@ async function lmSave(id, fixedKind) {
   if (!item.title || !item.event_date) { showToast('Name and date are required', 'error'); return; }
   if (id) item.id = id;
   try {
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    await ecSessionPost(item);
     showToast('Saved', 'success');
+    CADET_TRAINING_CATALOG = null;  // v241: re-fetch so a just-learned training appears immediately
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
     renderEntryDetail(ENTRY_VIEW.cat, ENTRY_VIEW.code, ENTRY_VIEW.id);
@@ -3127,7 +3245,10 @@ async function perfSave(id) {
     event_type: 'music_performance',
     title: v('pf-title'), event_date: v('pf-date'),
     instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
-    composer: v('pf-composer') || null, location: v('pf-location') || null,
+    composer: v('pf-composer') || null,
+    media_ids: mediaWidgetCollect('pf-media'),
+    location_parts: document.getElementById('pfloc-zip_postal_code') ? Object.assign(readAddr('pfloc'), { venue: v('pf-location') || '' }) : null,
+    location: [v('pf-location'), stdLocString('pfloc')].filter(Boolean).join(', ') || null,
     notes: v('pf-notes') || null,
     show_on_showcase: document.getElementById('pf-showcase').checked
   };
@@ -3136,7 +3257,7 @@ async function perfSave(id) {
   if (id) item.id = id;
   item.related_affiliation_id = ENTRY_VIEW.id;
   try {
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    await ecSessionPost(item);
     showToast('Saved', 'success');
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
@@ -3274,12 +3395,13 @@ function ecRow(a) {
   const period = (a.role_start_date || '') + (a.role_end_date ? ' \u2192 ' + a.role_end_date : (a.role_start_date ? ' \u2192 present' : ''));
   const hrs = a.weekly_hours ? a.weekly_hours + ' hrs/wk' : (a.total_hours ? a.total_hours + ' total hrs' : '');
   const coach = a.coach_name ? ' \u00b7 ' + escapeHTML(a.coach_name) + (a.coach_role ? ' (' + escapeHTML(a.coach_role) + ')' : '') : '';
+  const mCount = normalizeMediaIds(a).length; // v226
+  const mBadge = mCount ? ' \u00b7 \ud83d\udcce ' + mCount + (mCount === 1 ? ' file' : ' files') : '';
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(a.organization_name) +
     (a.role ? ' \u2014 ' + escapeHTML(a.role) : '') + '</div>' +
-    '<div class="ec-meta">' + escapeHTML(period) + (hrs ? ' \u00b7 ' + hrs : '') + coach + '</div>' +
+    '<div class="ec-meta">' + escapeHTML(period) + (hrs ? ' \u00b7 ' + hrs : '') + coach + mBadge + '</div>' +
     ((a.usa_zone || a.usa_lsc || a.usa_club_code) ?
       '<div class="ec-meta">USA Swimming: ' + [a.usa_zone ? escapeHTML(a.usa_zone) + ' Zone' : null, a.usa_lsc ? escapeHTML(a.usa_lsc) : null, a.usa_club_code ? escapeHTML(a.usa_club_code) : null].filter(Boolean).join(' \u203a ') + '</div>' : '') +
-    ((a.media_ids && a.media_ids.length) ? '<div class="ec-meta">' + a.media_ids.length + ' attachment' + (a.media_ids.length === 1 ? '' : 's') + '</div>' : '') +
     renderRowSkillsAndBadge(a) +
     (a.notes ? '<div class="ec-notes">' + escapeHTML(a.notes) + '</div>' : '') + '</div>' +
     '<div class="ec-actions">' +
@@ -3287,6 +3409,142 @@ function ecRow(a) {
       askRecBtn(a.coach_email, a.coach_name || a.organization_name, 'teacher') + addLetterBtn('', a.coach_name || a.organization_name) : '') +
     '<button onclick="ecEdit(\'' + a.id + '\')">Edit</button>' +
     '<button onclick="ecDelete(\'' + a.id + '\')">Delete</button></div></div>';
+}
+
+/* ============ v226: universal media widget ============
+   Reusable across every data-entry form. Accepts images, video, PDFs, docs.
+   Attach via file input; multi-file, multi-attach. IDs are stored as JSON on
+   the container's data-mids attribute and collected on save.
+   Public API:
+     mediaWidgetHtml(id, label, initialIds)      -> HTML string (self-contained)
+     mediaWidgetCollect(id)                      -> [uuid, ...]
+     mediaWidgetOnPick(inputEl)                  -> upload handler (used inline)
+     mediaWidgetRenderChips(id)                  -> re-renders chips from data-mids
+     mediaWidgetRemove(el, uuid)                 -> chip X handler
+     mediaWidgetView(uuid)                       -> open media in a new tab
+   Kind detection is by MIME family so callers do not have to know.
+*/
+function mediaKindFromMime(m) {
+  m = String(m || '').toLowerCase();
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (m === 'application/pdf' || m.startsWith('text/') ||
+      m.indexOf('word') >= 0 || m.indexOf('excel') >= 0 || m.indexOf('sheet') >= 0 ||
+      m.indexOf('powerpoint') >= 0 || m.indexOf('presentation') >= 0 ||
+      m.indexOf('opendocument') >= 0) return 'document';
+  return 'other';
+}
+function mediaKindIcon(k) {
+  return k === 'image' ? '\ud83d\uddbc\ufe0f'
+       : k === 'video' ? '\ud83c\udfa5'
+       : k === 'document' ? '\ud83d\udcc4'
+       : '\ud83d\udcce';
+}
+function mediaWidgetHtml(id, label, initialIds) {
+  const arr = Array.isArray(initialIds) ? initialIds.filter(Boolean) : [];
+  const attr = escapeAttr(JSON.stringify(arr));
+  return '<div class="ec-media-widget" id="' + id + '" data-mids="' + attr + '" style="margin:10px 0 14px;padding:12px 0;border-top:1px solid #F6F6F3;border-bottom:1px solid #F6F6F3">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14.5px">' + escapeHTML(label || 'Photos, videos & documents') +
+    ' <span style="font-weight:400;color:#7A8A9E;font-size:12px">(optional, multi-attach)</span></div>' +
+    '<label class="annot-file" style="cursor:pointer;background:var(--orange);color:#fff;padding:6px 12px;border-radius:6px;font-size:12.5px;font-weight:600">+ Add media' +
+    '<input type="file" multiple accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.odt,.ods,.odp,.heic,.webp" style="display:none" onchange="mediaWidgetOnPick(this)"></label>' +
+    '</div>' +
+    '<div class="ec-media-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>' +
+    '<div style="font-size:11.5px;color:#7A8A9E;margin-top:6px">Photos and PDFs on any plan. Video needs a paid storage plan. Files are private to your family unless the entry is set to publish.</div>' +
+    '</div>';
+}
+function mediaWidgetContainer(inputEl) {
+  return inputEl.closest ? inputEl.closest('.ec-media-widget') : null;
+}
+function mediaWidgetIds(container) {
+  if (!container) return [];
+  try { return JSON.parse(container.dataset.mids || '[]'); } catch (e) { return []; }
+}
+function mediaWidgetSetIds(container, ids) {
+  if (container) container.dataset.mids = JSON.stringify(ids || []);
+}
+function mediaWidgetCollect(id) {
+  const c = document.getElementById(id);
+  return mediaWidgetIds(c);
+}
+function mediaThumbHtml(mid) {
+  // v246: image thumbnail with paperclip-chip fallback for non-image files
+  var src = API_BASE + '/focms/v1/media/' + mid;
+  return '<span class="ec-media-thumb" data-mid="' + mid + '" style="position:relative;display:inline-block">' +
+    '<img src="' + src + '" alt="" loading="lazy" ' +
+    'style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid #E5E7EB;cursor:pointer;display:block;background:#EEEDF7" ' +
+    'onclick="mediaWidgetView(\'' + mid + '\')" ' +
+    'onerror="mediaThumbFallback(this,\'' + mid + '\')">' +
+    '<span class="art-x" style="position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid #E5E7EB;border-radius:50%;width:18px;height:18px;line-height:16px;text-align:center;cursor:pointer;color:#B93A2F;font-weight:700;font-size:12px" ' +
+    'onclick="mediaWidgetRemove(this,\'' + mid + '\')">\u00d7</span></span>';
+}
+function mediaThumbFallback(imgEl, mid) {
+  var holder = imgEl.parentElement; if (!holder) return;
+  holder.innerHTML = '<span class="art-chip" style="background:#EEEDF7;color:var(--navy);padding:5px 9px;border-radius:14px;font-size:12px;display:inline-flex;align-items:center;gap:6px;height:72px;box-sizing:border-box" title="Click to open">' +
+    '<span onclick="mediaWidgetView(\'' + mid + '\')" style="cursor:pointer">\ud83d\udcce ' + mid.slice(0, 8) + '</span>' +
+    '<span class="art-x" style="cursor:pointer;color:#B93A2F;font-weight:700" onclick="mediaWidgetRemove(this,\'' + mid + '\')">\u00d7</span></span>';
+}
+function mediaWidgetRenderChips(id) {
+  const c = document.getElementById(id); if (!c) return;
+  const wrap = c.querySelector('.ec-media-chips'); if (!wrap) return;
+  const ids = mediaWidgetIds(c);
+  if (!ids.length) { wrap.innerHTML = '<span style="font-size:12px;color:#7A8A9E">No media attached yet.</span>'; return; }
+  wrap.innerHTML = ids.map(mediaThumbHtml).join('');
+}
+async function mediaWidgetOnPick(inputEl) {
+  const container = mediaWidgetContainer(inputEl);
+  const files = Array.from(inputEl.files || []);
+  if (!container || !files.length) return;
+  for (const f of files) {
+    if (f.size > 200 * 1024 * 1024) { showToast(f.name + ' exceeds 200 MB - skipped', 'error'); continue; }
+    const kind = mediaKindFromMime(f.type);
+    showToast('Uploading ' + f.name + '\u2026', 'success');
+    try {
+      const b64 = await new Promise(function(res, rej){
+        const r = new FileReader();
+        r.onload = function(){ res(String(r.result).split(',')[1]); };
+        r.onerror = rej; r.readAsDataURL(f);
+      });
+      const res = await apiUpload({
+        filename: f.name,
+        mime_type: f.type || 'application/octet-stream',
+        content_base64: b64,
+        kind: kind,
+        visibility: 'unlisted',
+        student_id: STUDENT_ID
+      });
+      const mid = res.id || res.media_id || res.artifact_id;
+      if (mid) {
+        const ids = mediaWidgetIds(container);
+        ids.push(mid);
+        mediaWidgetSetIds(container, ids);
+        mediaWidgetRenderChips(container.id);
+        showToast('Attached ' + f.name, 'success');
+      }
+    } catch (e) {
+      showToast('Upload failed (' + f.name + '): ' + e.message, 'error');
+    }
+  }
+  inputEl.value = '';
+}
+function mediaWidgetRemove(el, mid) {
+  const container = el.closest('.ec-media-widget'); if (!container) return;
+  const ids = mediaWidgetIds(container).filter(function(x){ return x !== mid; });
+  mediaWidgetSetIds(container, ids);
+  mediaWidgetRenderChips(container.id);
+}
+function mediaWidgetView(mid) {
+  // v247: open the API URL directly; the browser follows the 302 to R2/CDN.
+  // fetch+blob broke on CORS for r2-backed media ('failed to fetch').
+  window.open(API_BASE + '/focms/v1/media/' + mid, '_blank', 'noopener');
+}
+function normalizeMediaIds(a) {
+  // v226: accept ids on top-level media_ids OR nested in details.media_ids
+  const top = Array.isArray(a && a.media_ids) ? a.media_ids : [];
+  const det = a && a.details && Array.isArray(a.details.media_ids) ? a.details.media_ids : [];
+  const merged = top.concat(det).filter(Boolean);
+  return Array.from(new Set(merged));
 }
 
 function ecEdit(id, presetProgCode) {
@@ -3312,18 +3570,60 @@ function ecEdit(id, presetProgCode) {
     ecRowTwo(usaLscSelect(a.usa_lsc),
              ecField('usa_club_code', 'Club code (e.g. IRON-NT)', a.usa_club_code)) +
     '</div></div>';
+  // v228: USNSCC structure (Field Area > Region > Unit) on Sea Cadet affiliations.
+  // Six official Field Areas per seacadets.org (2026): the regional level the
+  // user sees; Region numbers are unit-specific so they stay free-text.
+  const USNSCC_AREAS = ['Northeast', 'Southeast', 'North Central', 'South Central', 'Northwest', 'Pacific Southwest'];
+  const isCadetAffil = /sea cadet|usnscc|naval sea/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const dd = (a.details && typeof a.details === 'object') ? a.details : {};
+  const NLCC_NSCC_RATES = [
+    ['NLCC (Navy League Cadets, ages 10-13)', ['Cadet Recruit', 'Cadet Apprentice', 'Able Cadet', 'Cadet Petty Officer 3rd Class', 'Cadet Petty Officer 2nd Class', 'Cadet Petty Officer 1st Class', 'Cadet Chief Petty Officer']],
+    ['NSCC (Sea Cadets, ages 13-18)', ['Seaman Recruit (E-1)', 'Seaman Apprentice (E-2)', 'Seaman (E-3)', 'Petty Officer 3rd Class (E-4)', 'Petty Officer 2nd Class (E-5)', 'Petty Officer 1st Class (E-6)', 'Chief Petty Officer (E-7)']]
+  ];
+  function _cadetFormCard(t, sub, inner) {
+    return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin:10px 0;display:flex;flex-direction:column;gap:10px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">' + t +
+      (sub ? ' <span class="ec-meta" style="margin-top:0;display:inline">' + sub + '</span>' : '') + '</div>' + inner + '</div>';
+  }
+  const cadetBlock =
+    '<div id="usnscc-wrap" style="' + (isCadetAffil ? '' : 'display:none') + '">' +
+    _cadetFormCard('Unit Information', 'Field Area \u203a Region \u203a Unit',
+    ecRowTwo(
+      '<label class="ec-lbl">Field Area<select class="ec-in" data-k="usnscc_area"><option value=""></option>' +
+      USNSCC_AREAS.map(function(z){ return '<option' + ((a.usnscc_area || dd.usnscc_area) === z ? ' selected' : '') + '>' + z + '</option>'; }).join('') +
+      '</select></label>',
+      ecField('usnscc_region', 'Region (e.g. 8-3)', a.usnscc_region || dd.usnscc_region)) +
+    ecRowTwo(ecField('usnscc_unit', 'Unit name', a.usnscc_unit || dd.usnscc_unit),
+             ecField('usnscc_unit_code', 'Unit code (e.g. BLACK CAT SQ)', a.usnscc_unit_code || dd.usnscc_unit_code)) +
+    ecRowTwo(ecField('usnscc_unit_id', 'Unit ID (e.g. 084BCS)', dd.usnscc_unit_id),
+      '<label class="ec-lbl">Member type<select class="ec-in" data-k="usnscc_member_type"><option value=""></option>' +
+      ['NLCC (League Cadet, ages 10-13)', 'NSCC (Sea Cadet, ages 13-18)'].map(function(m){
+        return '<option' + (dd.usnscc_member_type === m ? ' selected' : '') + '>' + m + '</option>';
+      }).join('') + '</select></label>') +
+    ecField('usnscc_co', 'Commanding Officer', dd.usnscc_co) +
+    ecRowTwo(ecField('usnscc_unit_phone', 'Unit phone', dd.usnscc_unit_phone),
+             ecField('usnscc_unit_email', 'Unit email', dd.usnscc_unit_email)) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Drill location</div>' +
+    addrFields('drill', { street_address: dd.drill_street || dd.drill_location, street_address_line_2: dd.drill_line2,
+      city_town: dd.drill_city, county: dd.drill_county, state_province: dd.drill_state,
+      zip_postal_code: dd.drill_zip, country: dd.drill_country || 'US' }) +
+    ecField('drill_schedule', 'Drill schedule', a.drill_schedule || dd.drill_schedule)) +
+'</div>';
   const c = document.getElementById('sections-container');
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
+    cadetBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
     ecRowTwo(ecField('weekly_hours', 'Hours per week', a.weekly_hours, false, 'number'),
              ecField('total_hours', 'Total hours', a.total_hours, false, 'number')) +
-    ecRowTwo('<label class="ec-lbl">ZIP code<input id="ec-org-zip" class="rec-i" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state"></label>',
-             ecRowTwo(ecField('organization_city', 'City', a.organization_city),
-                      ecField('organization_state', 'State', a.organization_state))) +
+    (isCadetAffil ? '' :
+      '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Organization location</div>' +
+      addrFields('ecorg', { street_address: dd.org_street, street_address_line_2: dd.org_line2,
+        city_town: a.organization_city, county: dd.org_county, state_province: a.organization_state,
+        zip_postal_code: dd.org_zip, country: dd.org_country || 'US' })) +
     ecField('organization_url', 'Website', a.organization_url) +
     (EC_FILTER === 'coach_relationship' || a.coach_name ?
       ecRowTwo(ecField('coach_name', 'Coach/mentor name', a.coach_name),
@@ -3332,12 +3632,13 @@ function ecEdit(id, presetProgCode) {
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
     skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil) +
-    mediaFieldHtml(a.media_ids) +
+    mediaWidgetHtml('ec-media', 'Photos, videos & documents', normalizeMediaIds(a)) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
-  attachZipTrio(document.getElementById('ec-org-zip'), byKey('organization_city'), byKey('organization_state'), !id);
-  mediaRenderChips(); // v226
+  if (!isCadetAffil) stdLocWire('ecorg', !id);
+  stdLocWire('drill', !id);
+  mediaWidgetRenderChips('ec-media'); // v226
 }
 
 function ecProgramPicker(a) {
@@ -3368,10 +3669,48 @@ async function ecSave(id) {
   if (!_usaWrap || _usaWrap.style.display === 'none') {
     delete item.usa_member; delete item.usa_zone; delete item.usa_lsc; delete item.usa_club_code;
   }
+  // v228: USNSCC keys live in details JSONB; drop them when the block is hidden
+  var _cWrap = document.getElementById('usnscc-wrap');
+  var _cKeys = ['usnscc_area', 'usnscc_region', 'usnscc_unit', 'usnscc_unit_code', 'drill_schedule',
+                'usnscc_unit_id', 'usnscc_member_type', 'usnscc_co', 'usnscc_unit_phone', 'usnscc_unit_email'];
+  if (!_cWrap || _cWrap.style.display === 'none') {
+    _cKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _cd = {};
+    _cKeys.forEach(function(k){ if (item[k]) _cd[k] = item[k]; delete item[k]; });
+    // v239: drill address via the standard block
+    if (document.getElementById('drill-zip_postal_code')) {
+      var _da = readAddr('drill');
+      _cd.drill_street = _da.street_address || '';
+      _cd.drill_line2 = _da.street_address_line_2 || '';
+      _cd.drill_city = _da.city_town || '';
+      _cd.drill_county = _da.county || '';
+      _cd.drill_state = _da.state_province || '';
+      _cd.drill_zip = _da.zip_postal_code || '';
+      _cd.drill_country = _da.country || 'US';
+    }
+    item.details = Object.assign({}, item.details || {}, _cd);
+  }
+  // v247: organization location via the standard block - runs whenever the
+  // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
+  // Was nested in the cadet-only branch since v240, so non-cadet orgs never saved it.
+  if (document.getElementById('ecorg-zip_postal_code')) {
+    var _oa = readAddr('ecorg');
+    item.organization_city = _oa.city_town || '';
+    item.organization_state = (_oa.state_province || '').split('-').pop();
+    item.details = Object.assign({}, item.details || {}, {
+      org_street: _oa.street_address || '',
+      org_line2: _oa.street_address_line_2 || '',
+      org_county: _oa.county || '',
+      org_zip: _oa.zip_postal_code || '',
+      org_country: _oa.country || 'US'
+    });
+  }
   item.skills_gained = readSkillsFromForm();
-  // v226: attachments - only include the key when the record has/had media so
-  // saves against a pre-v0.12.142 backend (extra=forbid) never 422.
-  if (FORM_MEDIA.length || FORM_MEDIA_HAD) item.media_ids = FORM_MEDIA.slice();
+  // v226: media widget - top-level + JSONB details fallback so older APIs still store it
+  const _mids = mediaWidgetCollect('ec-media');
+  item.media_ids = _mids;
+  item.details = Object.assign({}, item.details || {}, { media_ids: _mids });
   const other = document.querySelector('.ec-in[data-k="organization_name_other"]');
   if (other && other.value.trim()) item.organization_name = other.value.trim();
   delete item.organization_name_other;
@@ -6495,11 +6834,49 @@ async function ucaBuildSections(code, APP, d){
     var ar = d.acts.filter(function(a){ return /orchestra|music|art|theat|band|cello|choir/i.test((a.organization_name||'')+(a.role||'')); });
     secs.push(S('ARTS ACTIVITIES', ar.slice(0,10).map(function(a){ return [a.organization_name, [a.role, a.role_start_date, a.coach_name].filter(Boolean).join(' \u00b7 ')]; })));
   } else if (code === 'resume_academic') {
-    secs.push(S('EDUCATION', [[cur.school_name || 'Current school', [cur.city_town, cur.state_province, cur.school_ceeb_code?('CEEB '+cur.school_ceeb_code):''].filter(Boolean).join(', ')]]));
-    secs.push(S('COURSEWORK', d.courses.slice(0,20).map(function(c){ return [c.course_name, ['Grade '+(c.grade_level!=null?c.grade_level:''), c.grade_received?('Grade: '+c.grade_received):'', c.course_code].filter(Boolean).join(' \u00b7 ')]; })));
-    secs.push(S('STANDARDIZED TESTS', d.tests.slice(0,10).map(function(t){ return [t.test_name || 'Test', [t.test_date, t.total_score||t.score].filter(Boolean).join(' \u00b7 ')]; })));
-    secs.push(S('ACTIVITIES & LEADERSHIP', d.acts.slice(0,12).map(function(a){ return [a.organization_name || 'Activity', [a.role, a.role_start_date, a.weekly_hours?(a.weekly_hours+' hrs/wk'):''].filter(Boolean).join(' \u00b7 ')]; })));
+    // v255: standard academic-CV structure, reverse chronological, full record.
+    secs.length = 0;
+    async function g2(pth){ try { return await apiGet('/focms/v1/student/' + STUDENT_ID + pth); } catch(e){ return {}; } }
+    const [mil2, acad2, sk2] = await Promise.all([ g2('/milestones'), g2('/academics'), g2('/skills') ]);
+    secs.push(S('CONTACT', [
+      ['Name', full],
+      ['Location', [cur.city_town, cur.state_province].filter(Boolean).join(', ')],
+      ['Email', p.email_primary], ['Phone', p.phone_primary]
+    ]));
+    var schools = (d.sch || []).slice().sort(function(a,b){ return String(b.start_date||'').localeCompare(String(a.start_date||'')); });
+    var a2 = acad2 || {};
+    var gpaU = a2.unweighted_gpa_value || a2.gpa_value || (a2.gpa && a2.gpa.unweighted_gpa_value);
+    secs.push(S('EDUCATION', schools.map(function(s2, i2){
+      var span = [s2.start_date, s2.is_current_school ? 'present' : s2.end_date].filter(Boolean).join(' \u2013 ');
+      var bits = [[s2.city_town, s2.state_province].filter(Boolean).join(', '),
+                  (s2.grade_levels_attended && s2.grade_levels_attended.length) ? ('Grades ' + s2.grade_levels_attended.join(', ')) : '',
+                  span, (i2===0 && gpaU) ? ('GPA: ' + gpaU) : ''];
+      return [s2.school_name || 'School', bits.filter(Boolean).join(' \u00b7 ')];
+    })));
+    var bySch = {};
+    (d.courses || []).forEach(function(c){ var k = c.school_name || 'Coursework'; (bySch[k] = bySch[k] || []).push(c); });
+    Object.keys(bySch).sort(function(ka,kb){
+      function mx(k3){ return Math.max.apply(null, bySch[k3].map(function(c){ return c.grade_level||0; })); }
+      return mx(kb) - mx(ka);
+    }).forEach(function(k){
+      var list = bySch[k].slice().sort(function(a,b){ return (b.grade_level||0) - (a.grade_level||0) || String(b.school_year||'').localeCompare(String(a.school_year||'')); });
+      secs.push(S('RELEVANT COURSEWORK \u2014 ' + k.toUpperCase(), list.map(function(c){
+        var rig = [c.is_ap?'AP':'', c.is_ib?'IB':'', c.is_honors?'Honors':'', c.is_dual_credit?'Dual credit':''].filter(Boolean).join('/');
+        return [c.course_name, [c.school_year || (c.grade_level!=null?('Grade '+c.grade_level):''), rig,
+                c.grade_received?('Grade: '+c.grade_received):'', c.teacher_name?('Teacher: '+c.teacher_name):''].filter(Boolean).join(' \u00b7 ')];
+      })));
+    });
+    var ml2 = ((mil2 && mil2.custom) || []).concat(((mil2 && mil2.milestones) || []).filter(function(m){ return m.achieved || m.achieved_date; }));
+    var honors = ml2.map(function(m){ return [m.title || m.milestone_title || m.code, m.achieved_date || m.date || (m.achieved ? 'achieved' : '')]; });
+    (d.courses || []).forEach(function(c){ if (c.completion_award) honors.push([c.completion_award, [c.course_name, c.school_year].filter(Boolean).join(' \u00b7 ')]); });
+    secs.push(S('HONORS & AWARDS', honors));
+    secs.push(S('STANDARDIZED TESTS', d.tests.slice().sort(function(a,b){ return String(b.test_date||'').localeCompare(String(a.test_date||'')); }).map(function(t){ return [t.test_name || 'Test', [t.test_date, t.total_score||t.score].filter(Boolean).join(' \u00b7 ')]; })));
+    secs.push(S('ACADEMIC & LEADERSHIP EXPERIENCE', d.acts.slice().sort(function(a,b){ return String(b.role_start_date||'').localeCompare(String(a.role_start_date||'')); }).map(function(a3){ return [a3.organization_name || 'Activity', [a3.role, [a3.role_start_date, a3.role_end_date || (a3.is_current?'present':'')].filter(Boolean).join(' \u2013 '), a3.weekly_hours?(a3.weekly_hours+' hrs/wk'):''].filter(Boolean).join(' \u00b7 ')]; })));
     secs.push(S('EXPERIENCE', d.jobs.slice(0,6).map(function(j){ return [j.company_name || 'Job', [j.job_title, j.start_date, j.is_current?'current':''].filter(Boolean).join(' \u00b7 ')]; })));
+    var skl2 = (sk2 && (sk2.skills || [])) || [];
+    var att2 = skl2.filter(function(s3){ return s3.acquired || s3.proficiency; });
+    secs.push(S('SKILLS', att2.slice(0,40).map(function(s3){ return [s3.title || s3.skill_title || s3.custom_title || skillTitle(s3.skill_code), [s3.proficiency, s3.acquired_date].filter(Boolean).join(' \u00b7 ') || 'Acquired']; })));
+    secs.push(S('LANGUAGES', [['Language at home', p.language_spoken_at_home]]));
   } else if (code === 'resume_career') {
     secs.push(S('EXPERIENCE', d.jobs.slice(0,10).map(function(j){ return [j.company_name || 'Job', [j.job_title, [j.start_date, j.is_current?'present':j.end_date].filter(Boolean).join(' \u2013 ')].filter(Boolean).join(' \u00b7 ')]; })));
     secs.push(S('EDUCATION', [[cur.school_name || 'Current school', [cur.city_town, cur.state_province].filter(Boolean).join(', ')]]));
@@ -6641,6 +7018,33 @@ function ucaReportCreate(code){
     };
   })();
 }
+async function ucaEcSections(){
+  async function g(p){ try { return await apiGet('/focms/v1/student/' + STUDENT_ID + p); } catch(e){ return {}; } }
+  const [es, sb] = await Promise.all([ g('/ec-sessions'), g('/computed/swim-bests') ]);
+  var rows = es.sessions || [];
+  function S(t, rs){ return { title: t, rows: rs.filter(function(r){ return r[1] != null && r[1] !== ''; }) }; }
+  function venueOf(x){
+    var lp = x.location_parts;
+    if (lp && typeof lp === 'object' && lp.venue) return lp.venue;
+    return x.location || '';
+  }
+  var secs = [];
+  EC_EVENT_TYPES.forEach(function(t){
+    var list = rows.filter(function(x){ return x.event_type === t.code; });
+    if (!list.length) return;
+    secs.push(S(t.label.toUpperCase() + 'S', list.map(function(x){
+      return [x.title || t.label, [x.event_date, venueOf(x)].filter(Boolean).join(' \u00b7 ')];
+    })));
+  });
+  var bestsRaw = (sb && sb.bests) || {}, bestRows = [];
+  if (Array.isArray(bestsRaw)) {
+    bestRows = bestsRaw.map(function(b){ return [String(b.title||b.event||''), [b.time||b.swim_time, b.usa_standard||b.time_standard, b.date].filter(Boolean).join(' \u00b7 ')]; });
+  } else {
+    bestRows = Object.keys(bestsRaw).map(function(k){ var b=bestsRaw[k]||{}; return [k, [b.time, b.usa_standard, b.date].filter(Boolean).join(' \u00b7 ')]; });
+  }
+  if (bestRows.length) secs.push(S('SWIMMING \u2014 BEST TIMES', bestRows));
+  return secs.filter(function(x){ return x.rows.length; });
+}
 function ucaResumeCreate(code){
   var acad = (code==='resume_academic');
   function fld(id,label,ph,half){ return '<label class="ec-lbl" style="'+(half?'width:48%;display:inline-block;margin-right:2%':'')+'">'+label+'<input class="rec-i" id="'+id+'" placeholder="'+(ph||'')+'"></label>'; }
@@ -6654,6 +7058,8 @@ function ucaResumeCreate(code){
       : fld('uc-org','Employer / company name','e.g. Iron Horse Aquatics',1) + fld('uc-pos','Position title','e.g. Assistant Age-Group Coach',1)
         + fld('uc-loc','Employer location (city, state)','',1) + fld('uc-ct','Hiring manager / contact (if known)','',1)
         + fld('uc-phone','Employer telephone (if known)','',1) + fld('uc-type','Hours / status','e.g. Part time, weekends',1))
+    + (acad ? '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ec" checked style="width:auto;margin-right:8px;vertical-align:middle">Include Extracurricular information</label>' : '')
+    + '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ai" checked style="width:auto;margin-right:8px;vertical-align:middle">Enhance with AI \u2014 selects, orders, and words your records professionally (facts only, never invented). <b>$1.00 + tax</b>, charged to your card on file \u2014 applies on every plan.</label>'
     +'<label class="ec-lbl">Paste the '+(acad?'program, scholarship, or opportunity description':'job posting / description')+' (optional)'
     +'<textarea class="rec-i" id="uc-jd" rows="7"></textarea></label>'
     +'<div class="rec-bar"><button class="save-btn" id="uc-jd-go">Continue</button>'
@@ -6663,9 +7069,12 @@ function ucaResumeCreate(code){
     function gv(id){ var el=document.getElementById(id); return el?el.value.trim():''; }
     var org=gv('uc-org'), pos=gv('uc-pos'), loc=gv('uc-loc'), ct=gv('uc-ct'),
         phone=gv('uc-phone'), htype=gv('uc-type'), fld2=gv('uc-fld'), dead=gv('uc-dead'), jd=gv('uc-jd');
+    var incEc = acad && (function(){ var el=document.getElementById('uc-ec'); return el ? el.checked : false; })();
+    var useAi2 = (function(){ var el=document.getElementById('uc-ai'); return el ? el.checked : false; })();
     ov.remove();
     const d = await appData();
     var secs = await ucaBuildSections(code, null, d);
+    if (incEc) secs = secs.concat(await ucaEcSections());
     var title = ucaFormName(code);
     var parts = [];
     if (org)   parts.push((acad?'Institution/Organization: ':'Employer: ')+org);
@@ -6677,8 +7086,9 @@ function ucaResumeCreate(code){
     if (htype) parts.push('Hours/status: '+htype);
     if (dead)  parts.push('Deadline: '+dead);
     if (jd)    parts.push('Description:\n'+jd);
-    if (parts.length) {
-      showToast('Tailoring resume\u2026','success');
+    if (!parts.length && useAi2) parts.push('No specific target \u2014 produce the strongest general-purpose ' + (acad ? 'academic resume for admissions and scholarship review' : 'resume') + ' from this record.');
+    if (parts.length && useAi2) {
+      showToast('Enhancing resume with AI\u2026','success');
       try {
         const r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/resume-tailor',
           { resume_kind: code, job_description: parts.join('\n'), sections: secs.filter(function(s){return s.title!=='STUDENT';}) });
@@ -6692,7 +7102,14 @@ function ucaResumeCreate(code){
           secs = (stu?[stu]:[]).concat(tgt.rows.length?[tgt]:[], r.sections);
           title += ' \u2014 ' + (pos||org||'tailored') + (pos&&org?(', '+org):'');
         }
-      } catch(e){ showToast('Tailoring unavailable \u2014 using standard resume','error'); }
+      } catch(e){
+        var pm = String(e.message||'');
+        if (/payment_failed|payment_required|payment_unavailable/.test(pm)) {
+          showToast('Card charge failed \u2014 AI enhancement skipped. ' + pm.replace(/^.*?:\s*/,'') + ' Showing the free standard resume.','error');
+        } else {
+          showToast('AI enhancement unavailable \u2014 using the free standard resume (no charge)','error');
+        }
+      }
     }
     ucaEditorWith(code, null, null, secs, title);
   };
@@ -6715,14 +7132,16 @@ async function ucaEditor(code, appId, instanceId){
     title = ucaFormName(code) + (APP ? (' \u2014 ' + (APP.common_name||APP.university_name)) : '');
   }
   window.__UCAED = { code: code, appId: appId, instanceId: instanceId };
-  var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">Save</button>'
+  var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">Generate</button>'
     + '<button class="save-btn save-btn-ghost" onclick="renderUcaTopic(\'' + code + '\')">Cancel</button></div>'
     + '<div class="ec-form" style="max-width:820px">'
     + '<label class="ec-lbl">Title<input class="ec-in" id="uca-title" value="' + escapeHTML(title||'') + '"></label>';
   secs.forEach(function(sec, si){
     html += '<h3 style="font-family:Lora,serif;color:var(--navy);background:#EEEDF7;padding:6px 10px;border-radius:6px;margin:14px 0 4px">' + escapeHTML(sec.title) + '</h3>';
     sec.rows.forEach(function(r, ri){
-      html += '<label class="ec-lbl">' + escapeHTML(r[0])
+      html += '<label class="ec-lbl">'
+        + '<span style="display:flex;justify-content:space-between;align-items:center">' + escapeHTML(r[0])
+        + '<button type="button" class="uca-x" data-s="'+si+'" data-r="'+ri+'" onclick="ucaRowDel(this)" title="Remove from this document" style="border:1px solid #E3E7ED;background:#fff;color:var(--navy);border-radius:6px;padding:0 8px;font-size:12px;line-height:1.7;cursor:pointer">\u2715</button></span>'
         + '<textarea class="ec-in uca-f" data-s="'+si+'" data-r="'+ri+'" rows="' + (String(r[1]).length>120?4:1) + '">' + escapeHTML(String(r[1])) + '</textarea></label>';
     });
   });
@@ -6731,11 +7150,29 @@ async function ucaEditor(code, appId, instanceId){
   document.getElementById('sections-container').innerHTML = html;
   window.scrollTo({top:0});
 }
-async function ucaSaveInstance(){
+function ucaRowDel(btn){
+  var ta = document.querySelector('.uca-f[data-s="'+btn.dataset.s+'"][data-r="'+btn.dataset.r+'"]');
+  if (!ta) return;
+  var del = ta.dataset.del === '1';
+  ta.dataset.del = del ? '' : '1';
+  ta.disabled = !del;
+  ta.style.textDecoration = del ? '' : 'line-through';
+  ta.style.opacity = del ? '' : '0.45';
+  btn.textContent = del ? '\u2715' : '\u21a9';
+  btn.title = del ? 'Remove from this document' : 'Restore';
+}
+function ucaCollectSecs(){
   var secs = JSON.parse(JSON.stringify(window.__UCASECS||[]));
   document.querySelectorAll('.uca-f').forEach(function(el){
-    secs[parseInt(el.dataset.s,10)].rows[parseInt(el.dataset.r,10)][1] = el.value;
+    var row = secs[parseInt(el.dataset.s,10)].rows[parseInt(el.dataset.r,10)];
+    row[1] = el.value;
+    if (el.dataset.del === '1') row[2] = '__DEL__';
   });
+  secs.forEach(function(s){ s.rows = s.rows.filter(function(r){ return r[2] !== '__DEL__'; }); });
+  return secs.filter(function(s){ return s.rows.length; });
+}
+async function ucaSaveInstance(){
+  var secs = ucaCollectSecs();
   var e = window.__UCAED;
   var item = { form_code: e.code, application_id: e.appId, title: document.getElementById('uca-title').value.trim(), data: { sections: secs } };
   if (e.instanceId) item.id = e.instanceId;
@@ -7148,6 +7585,9 @@ function ucaFullDoc(x){
 }
 function ucaPrint(id){
   var x = UCA_SAVED.find(function(v){return v.id===id;}); if(!x) return;
+  ucaPrintX(x);
+}
+function ucaPrintX(x){
   var w=window.open('','_blank');
   w.document.write('<!DOCTYPE html><html><head><title>'+ucaEsc(x.title)+'</title>'
     +'<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">'
@@ -7158,6 +7598,9 @@ function ucaPrint(id){
 }
 function ucaPdfOut(id){
   var x = UCA_SAVED.find(function(v){return v.id===id;}); if(!x) return;
+  ucaPdfX(x);
+}
+function ucaPdfX(x){
   function run(){
     var host=document.createElement('div');
     host.style.cssText='position:absolute;left:-10000px;top:0;width:816px;background:#fff';
@@ -7833,8 +8276,10 @@ function openHeSection(code) {
 let HE_ESSAYS = [], HE_RECS = [], HE_FINAID = [], HE_TESTS = [];
 
 /* ---- Essays ---- */
-function renderEssaysList() {
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="essayEdit(null)">Add essay</button><button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
+async function renderEssaysList() {
+  var ok17e = await heAge17();
+  let html = '<div class="ec-bar">' + (ok17e ? '<button class="save-btn" onclick="essayEdit(null)">Add essay</button>' : '') + '<button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
+  if (!ok17e) html += heAgeBanner('College essays');
   if (!HE_ESSAYS.length) html += '<div class="cr-waiting">No essays yet. Add the personal statement or a supplemental prompt.</div>';
   else html += HE_ESSAYS.map(e => {
     const wc = e.word_count ? e.word_count + (e.word_limit ? '/' + e.word_limit : '') + ' words' : '';
@@ -8427,11 +8872,32 @@ async function heLoadCip() {
   return CIP_CATALOG;
 }
 
-function renderAppsList() {
+var __HE_AGE = null;
+async function heAge17() {
+  if (__HE_AGE !== null) return __HE_AGE >= 17;
+  try {
+    const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/personal-details');
+    var dob = d && d.personal && d.personal.date_of_birth;
+    if (dob) {
+      var b = new Date(dob), n = new Date();
+      var a = n.getFullYear() - b.getFullYear();
+      if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) a--;
+      __HE_AGE = a;
+    } else { __HE_AGE = -1; }
+  } catch (e) { __HE_AGE = -1; }
+  return __HE_AGE >= 17;
+}
+function heAgeBanner(what) {
+  return '<div class="cr-waiting" style="border-left:3px solid var(--orange);padding-left:14px;text-align:left">' +
+    what + ' open at age 17. Until then, keep building the record \u2014 every course, activity, award, and best time logged now is what fills the ' + what.toLowerCase() + ' automatically later.</div>';
+}
+async function renderAppsList() {
   const rows = HE_APPS;
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="appEdit(null)">Add application</button>' +
+  var ok17 = await heAge17();
+  let html = '<div class="ec-bar">' + (ok17 ? '<button class="save-btn" onclick="appEdit(null)">Add application</button>' : '') +
     '<button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
-  if (!rows.length) html += '<div class="cr-waiting">No applications yet. Add one when you decide where to apply.</div>';
+  if (!ok17) html += heAgeBanner('College applications');
+  if (!rows.length) { if (ok17) html += '<div class="cr-waiting">No applications yet. Add one when you decide where to apply.</div>'; }
   else html += rows.map(appRow).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
@@ -8933,21 +9399,30 @@ function sessionEdit(id) {
     ecField('title','What was it? (title)',s.title,true) +
     ecRowTwo(ecField('event_date','Date',s.event_date,true,'date'),
              ecField('duration_hours','Hours',s.duration_hours,false,'number')) +
-    ecField('location','Location',s.location) +
+    ecField('location','Venue / place name',venuePrefill(s)) +
+    '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
+    addrFields('sessloc', s.location_parts || {}) +
     '<label class="ec-lbl">Link to affiliation<select class="ec-in" data-k="related_affiliation_id">'+affilOpts+'</select></label>' +
     ecArea('notes','Notes',s.notes) +
     skillsGainedField(s.skills_gained) +
+    mediaWidgetHtml('sess-media', 'Photos, videos & documents', normalizeMediaIds(s)) +
     showcaseField(s.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="sessionSave(\''+(id||'')+'\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="SESSIONS_FILTER ? openSessionKind(SESSIONS_FILTER) : renderSessionKinds()">Cancel</button></div></div>';
+  stdLocWire('sessloc', !id);
+  mediaWidgetRenderChips('sess-media');
 }
 async function sessionSave(id) {
   const item = {};
   if (id) item.id = id;
   collectEcForm(item);
+  item.media_ids = mediaWidgetCollect('sess-media');
+  item.location_parts = document.getElementById('sessloc-zip_postal_code') ? Object.assign(readAddr('sessloc'), { venue: item.location || '' }) : null;
+  var _sl = stdLocString('sessloc');
+  if (_sl) item.location = [item.location, _sl].filter(Boolean).join(', ');
   if (!item.title || !item.event_date || !item.event_type) { showToast('Type, title, and date required','error'); return; }
   try {
-    await apiPost('/focms/v1/student/' + STUDENT_ID + '/ec-sessions', { items: [item] });
+    await ecSessionPost(item);
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/ec-sessions');
     EC_SESSIONS = d.sessions || [];
     if (SESSIONS_FILTER) openSessionKind(SESSIONS_FILTER); else renderSessionKinds(); showToast('Saved','success');
