@@ -119,7 +119,7 @@ async function billingShowInner() {
   document.getElementById('view-pillar').style.display = '';
   var pc = document.getElementById('pillar-crumbtrail'); if (pc) pc.innerHTML = '';
   window.scrollTo(0, 0);
-  ecSetHeader('Billing & Plan', 'Subscription, storage add-ons, and receipts');
+  ecSetHeader('Storage & Billing', 'Subscription, storage add-ons, payment method, and receipts');
   c.innerHTML = '<div class="cr-waiting">Loading billing\u2026</div>';
   var d;
   try { d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/status'); }
@@ -130,9 +130,8 @@ async function billingShowInner() {
     '<div class="ec-title">' + escapeHTML(cp.title || 'Free plan') + '</div>' +
     '<div class="ec-meta">Status: ' + escapeHTML(cp.status || 'active') +
     (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') + '</div>' +
-    ((d.subscriptions || []).some(function(s){ return s.status === 'active' || s.status === 'trialing'; })
-      ? '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Manage billing / invoices</button></div>'
-      : '') + '</div>';
+    '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Update payment method \u00b7 invoices \u00b7 cancel</button></div>' +
+    '</div>';
   if (!d.configured) {
     html += '<div class="cr-waiting" style="margin-top:12px">Online payments are being set up. Plans shown below will be purchasable shortly.</div>';
   }
@@ -151,7 +150,7 @@ async function billingShowInner() {
   }
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Plans</div>' + core.map(planCard).join('');
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Storage add-ons</div>' + addons.map(planCard).join('');
-  html += '<div class="ec-notes" style="margin-top:14px">Kindergarten\u2013Grade 5 stays free (1 GB). Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted, and you can export everything as a ZIP free, any time. Payment-method management appears here after your first purchase.</div>';
+  html += '<div class="ec-notes" style="margin-top:14px">Kindergarten\u2013Grade 5 stays free (1 GB). Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted, and you can export everything as a ZIP free, any time. Update your card any time with the button above.</div>';
   c.innerHTML = html;
 }
 async function billingCheckout(planCode) {
@@ -164,7 +163,7 @@ async function billingCheckout(planCode) {
 }
 async function billingPortal() {
   try {
-    var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/portal-session', {});
+    var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/portal-session-v2', {});
     if (d.url) location.href = d.url;
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -258,17 +257,9 @@ async function doLogin() {
 window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) document.getElementById('token-gate').classList.add('hidden');
   if (getToken()) { var nh = document.getElementById('nav-help'); if (nh) nh.style.display = ''; }
-  // v276: Billing & Plan nav entry (cloned styling from the Help link)
+  // v280: top nav entry removed (operator directive) - the Storage & Billing
+  // pillar card is the single entrance. Checkout return toasts remain.
   if (getToken()) {
-    var nhb = document.getElementById('nav-help');
-    if (nhb && !document.getElementById('nav-billing')) {
-      var bl = document.createElement(nhb.tagName || 'a');
-      bl.id = 'nav-billing'; bl.className = nhb.className;
-      bl.textContent = 'Billing & Plan'; bl.href = 'javascript:void(0)';
-      bl.addEventListener('click', function (e) { e.preventDefault(); billingShow(); });
-      nhb.parentNode.insertBefore(bl, nhb);
-    }
-    // checkout return toasts
     try {
       var bp = new URLSearchParams(location.search).get('billing');
       if (bp === 'success') { showToast('Payment complete - your plan is active', 'success'); history.replaceState(null, '', location.pathname); }
