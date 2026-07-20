@@ -5,6 +5,52 @@ Reverse-chronological. Companion records live in Postgres `archive_entries`
 
 ---
 
+## 2026-07-19 (late) — Four live signup failures fixed (backend v0.11.19)
+
+Operator ran a real paid signup and hit four failures. All root-caused from
+source, fixed, deployed, and verified the same session. Archive:
+`signup_four_failures_fixed_v0_11_19`.
+
+1. **No verification email — ever.** `_send_verification_email` and
+   `_send_reset_email` referenced an undefined `html` variable →
+   `NameError` on every call, silently swallowed by the non-fatal wrappers.
+   Since their introduction, no verification or password-reset email was
+   ever sent. Both now build branded HTML bodies.
+2. **Paid but never reached the portal.** Provisioning is webhook-only and
+   the token went only into the welcome email; Stripe returned the payer to
+   a static page. Now: `success_url` carries `sid={CHECKOUT_SESSION_ID}`,
+   and new anonymous `POST /auth/claim-signup` (single-use via
+   `pending_signups.claimed_at`, 30-min window, `pending` while the webhook
+   runs) mints a fresh portal token. signup.html polls it and lands the
+   parent authenticated — the setup wizard finally opens after payment.
+3. **False age accepted.** Birth certificate was only required ≤10; ages
+   11–17 were self-attested while driving pricing, COPPA handling, and
+   student access. Now required for **all minors under 18** (backend gate +
+   signup page block/copy). The $3 automated-review charge stays 0–10 only.
+4. **Lied-age case now durable.** A failed AI cert check writes
+   `tenant_settings.feature_flags.age_verification = {status: failed,
+   dob_on_document, dob_entered, reasons}` — queryable, not email-only;
+   cleared by a passing re-upload through the portal.
+
+Remaining: one real end-to-end paid signup test (email delivery + wizard).
+
+### v0.11.19a — the 500 behind it all (same session)
+
+The operator's paid signup had actually returned HTTP 500 on every Stripe
+webhook delivery: `student_identity_documents`' RLS policy was the only one
+in the provisioning chain without the platform (`current_tenant_id() IS
+NULL`) allowance, so any signup carrying a birth certificate poisoned the
+transaction and rolled back all provisioning. Policy fixed live via MCP —
+Stripe Resend returned 200, the account provisioned fully
+(`comet-delta-2a5771`), and the welcome + verification emails **arrived**,
+proving the email fix end-to-end. v0.11.19a also wraps the webhook's three
+`tenant_settings` writes in `SET LOCAL` tenant context (table owned by
+`focms_user`; same policy gap, unfixable via MCP) and removes the raw portal
+token from the welcome email — sign-in with password covers all paths.
+Archive: `webhook_500_rls_root_cause_v0_11_19a`.
+
+---
+
 ## 2026-07-19 — Six-org parity, age-tiered access, live billing, security hardening
 
 Single working session. Portal v259→v281, backend v0.12.150→v0.12.158,

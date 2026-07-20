@@ -273,7 +273,8 @@ document.getElementById('f-go').onclick = async function(){
     if(!BC_DATA){ err.textContent='Upload the student\u2019s birth certificate \u2014 we verify the birth date because it sets pricing, privacy protections, and student access.'; err.style.display='block'; return; }
     body.birth_certificate_b64=BC_DATA.b64; body.birth_certificate_mime=BC_DATA.mime; body.birth_certificate_filename=BC_DATA.name;
   }
-  var btn=this; btn.disabled=true; btn.textContent='Creating your account\u2026';
+  var btn=this; btn.disabled=true;
+  btn.textContent=(_age<18)?'Verifying birth certificate\u2026 (can take up to a minute)':'Creating your account\u2026';
   try{
     var r=await fetch('https://focms-api.onrender.com/focms/v1/auth/cohort-signup',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
