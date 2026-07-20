@@ -98,9 +98,22 @@ function signOut() { sessionStorage.clear(); location.reload(); }
    webhook - this UI only reflects it. */
 function billingFmt(cents) { return '$' + (cents / 100).toFixed(2).replace(/\.00$/, ''); }
 async function billingShow() {
+  try { return await billingShowInner(); }
+  catch (e) {
+    // v277: any failure becomes a visible on-page panel, never a silent no-op
+    try {
+      var cc = document.getElementById('sections-container');
+      if (cc) cc.innerHTML = '<div class="cr-waiting">Billing page error: ' + escapeHTML((e && e.message) || String(e)) + '</div>';
+      if (typeof showToast === 'function') showToast('Billing error: ' + ((e && e.message) || e), 'error');
+    } catch (e2) {}
+  }
+}
+async function billingShowInner() {
   var c = document.getElementById('sections-container'); if (!c) return;
   document.getElementById('view-pillars').style.display = 'none';
   document.getElementById('view-pillar').style.display = '';
+  var pc = document.getElementById('pillar-crumbtrail'); if (pc) pc.innerHTML = '';
+  window.scrollTo(0, 0);
   ecSetHeader('Billing & Plan', 'Subscription, storage add-ons, and receipts');
   c.innerHTML = '<div class="cr-waiting">Loading billing\u2026</div>';
   var d;
