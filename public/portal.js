@@ -2118,6 +2118,10 @@ function ecSwimContext() {
   var isJrotc = /jrotc|junior rotc|junior reserve officer/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var jwrap = document.getElementById('jrotc-wrap');
   if (jwrap) jwrap.style.display = isJrotc ? '' : 'none';
+  // v274: Young Marines live-detect
+  var isYm = /young marine/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var ymw = document.getElementById('ym-wrap');
+  if (ymw) ymw.style.display = isYm ? '' : 'none';
   // v266: org programs always use the program name - hide the duplicate field
   var onw = document.getElementById('ec-orgname-wrap');
   if (onw && progSel) onw.style.display = LM_ORGS[progSel.value] ? 'none' : '';
@@ -2321,7 +2325,7 @@ async function loadCadetTrainings() {
    and (bsa) the full 141-badge Merit Badge roster. LM_CTX carries the loaded
    org data for the open logger form so lmKindSwitch can rebuild fields. */
 var ORG_TRAIN_CACHE = {}; var ORG_RANK_CACHE = {};
-var LM_ORGS = { usnscc: 1, bsa: 1, gsa: 1, cap: 1, jrotc: 1 };
+var LM_ORGS = { usnscc: 1, bsa: 1, gsa: 1, cap: 1, jrotc: 1, ym: 1 };
 var LM_CTX = { org: null, ranks: null, badges: null };
 async function loadOrgTrainings(prog) {
   if (ORG_TRAIN_CACHE[prog] !== undefined) return ORG_TRAIN_CACHE[prog];
@@ -3339,7 +3343,7 @@ async function lmEdit(id, presetKind) {
   }
   if (!isTraining && lmOrg && lmOrg !== 'usnscc') {
     LM_CTX.ranks = await loadOrgRanks(lmOrg);
-    LM_CTX.rankLabel = lmOrg === 'bsa' ? 'The 7 BSA Ranks' : (lmOrg === 'gsa' ? 'The 6 Girl Scout Levels' : (_prog.title || 'Ranks'));
+    LM_CTX.rankLabel = lmOrg === 'bsa' ? 'The 7 BSA Ranks' : (lmOrg === 'gsa' ? 'The 6 Girl Scout Levels' : (lmOrg === 'ym' ? 'Young Marines Ranks' : (_prog.title || 'Ranks')));
     if (lmOrg === 'gsa') LM_CTX.awards = GSA_AWARDS_G;  // v271
     if (lmOrg === 'jrotc') LM_CTX.jrotcRanks = true;    // v273: per-branch optgroups
     if (lmOrg === 'bsa') {
@@ -3986,6 +3990,28 @@ function ecEdit(id, presetProgCode) {
       ecRowTwo(ecField('jrotc_unit_phone', 'Unit phone', dd.jrotc_unit_phone),
                ecField('jrotc_unit_email', 'Unit email', dd.jrotc_unit_email))) +
     '</div>';
+  // v274: Young Marines organized like Sea Cadets. National HQ > Division (6)
+  // > Regiment > Battalion > Unit; unit contacts mirror the USNSCC CO block.
+  const isYmAffil = /young marine/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const YM_DIVISIONS = ['Division 1 (Northeast)', 'Division 2 (Southeast)', 'Division 3 (Great Lakes / Midwest)', 'Division 4 (Gulf Coast / South Central)', 'Division 5 (Southwest / Pacific)', 'Division 6 (Northwest / Mountain)'];
+  const ymBlock =
+    '<div id="ym-wrap" style="' + (isYmAffil ? '' : 'display:none') + '">' +
+    _cadetFormCard('Young Marines Unit Information', 'National \u203a Division \u203a Regiment \u203a Battalion \u203a Unit',
+      '<label class="ec-lbl">Division<select class="ec-in" data-k="ym_division"><option value=""></option>' +
+      YM_DIVISIONS.map(function(t){ return '<option' + (dd.ym_division === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecRowTwo(ecField('ym_regiment', 'Regiment', dd.ym_regiment),
+               ecField('ym_battalion', 'Battalion', dd.ym_battalion)) +
+      ecRowTwo(ecField('ym_unit', 'Unit name', dd.ym_unit),
+               ecField('ym_member_id', 'Young Marines member ID', dd.ym_member_id)) +
+      ecField('ym_drill_schedule', 'Drill schedule', dd.ym_drill_schedule) +
+      '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Unit contacts</div>' +
+      ecRowTwo(ecField('ym_unit_commander', 'Unit Commander', dd.ym_unit_commander),
+               ecField('ym_commander_phone', 'Commander phone', dd.ym_commander_phone)) +
+      ecField('ym_commander_email', 'Commander email', dd.ym_commander_email) +
+      ecRowTwo(ecField('ym_unit_phone', 'Unit phone', dd.ym_unit_phone),
+               ecField('ym_unit_email', 'Unit email', dd.ym_unit_email))) +
+    '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
@@ -3994,6 +4020,7 @@ function ecEdit(id, presetProgCode) {
     gsaBlock +
     capBlock +
     jrotcBlock +
+    ymBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -4118,6 +4145,18 @@ async function ecSave(id) {
     var _jd = {};
     _jKeys.forEach(function(k){ if (item[k] !== undefined) _jd[k] = item[k] || ''; delete item[k]; });
     item.details = Object.assign({}, item.details || {}, _jd);
+  }
+  // v274: Young Marines keys live in details JSONB; drop when hidden
+  var _ymWrap = document.getElementById('ym-wrap');
+  var _ymKeys = ['ym_division', 'ym_regiment', 'ym_battalion', 'ym_unit', 'ym_member_id',
+                 'ym_drill_schedule', 'ym_unit_commander', 'ym_commander_phone',
+                 'ym_commander_email', 'ym_unit_phone', 'ym_unit_email'];
+  if (!_ymWrap || _ymWrap.style.display === 'none') {
+    _ymKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _ymd = {};
+    _ymKeys.forEach(function(k){ if (item[k] !== undefined) _ymd[k] = item[k] || ''; delete item[k]; });
+    item.details = Object.assign({}, item.details || {}, _ymd);
   }
   // v247: organization location via the standard block - runs whenever the
   // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
@@ -10152,7 +10191,13 @@ var ORG_PROFILE_DEFS = {
     ['jrotc_company', 'Company / flight / platoon'], ['jrotc_period', 'Class period / drill schedule'],
     ['jrotc_instructor', 'Senior Instructor'], ['jrotc_instructor_phone', 'Instructor phone'],
     ['jrotc_instructor_email', 'Instructor email'], ['jrotc_unit_phone', 'Unit phone'],
-    ['jrotc_unit_email', 'Unit email'] ] }
+    ['jrotc_unit_email', 'Unit email'] ] },
+  ym:    { title: 'Young Marine Profile', fields: [
+    ['ym_division', 'Division'], ['ym_regiment', 'Regiment'], ['ym_battalion', 'Battalion'],
+    ['ym_unit', 'Unit'], ['ym_member_id', 'Member ID'], ['ym_drill_schedule', 'Drill schedule'],
+    ['ym_unit_commander', 'Unit Commander'], ['ym_commander_phone', 'Commander phone'],
+    ['ym_commander_email', 'Commander email'], ['ym_unit_phone', 'Unit phone'],
+    ['ym_unit_email', 'Unit email'] ] }
 };
 function orgProfileCard(a, org, latestRank) {
   // v264: display-only, sourced from the entry's details (edited via the main
