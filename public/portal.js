@@ -151,7 +151,7 @@ async function billingShowInner() {
   }
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Plans</div>' + core.map(planCard).join('');
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Storage add-ons</div>' + addons.map(planCard).join('');
-  html += '<div class="ec-notes" style="margin-top:14px">Kindergarten\u2013Grade 5 stays free (1 GB). Cards are processed by Stripe; card numbers never touch outcomestar.app.</div>';
+  html += '<div class="ec-notes" style="margin-top:14px">Kindergarten\u2013Grade 5 stays free (1 GB). Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted, and you can export everything as a ZIP free, any time. Payment-method management appears here after your first purchase.</div>';
   c.innerHTML = html;
 }
 async function billingCheckout(planCode) {
@@ -7118,38 +7118,15 @@ async function renderResumesList(){
   document.getElementById('sections-container').innerHTML = html;
 }
 async function openBillingPillar(){
-  if (!getToken()) { showToast('Set your API token first','error'); return; }
-  currentPillar='billing';
-  document.getElementById('view-pillars').classList.add('hidden');
-  document.getElementById('view-pillar').classList.remove('hidden');
-  document.getElementById('pillar-view-title').textContent='Storage & Billing';
-  document.getElementById('pillar-view-desc').textContent='Records are free forever. Storage plans cover the files you attach.';
-  var c=document.getElementById('sections-container');
-  c.innerHTML='<div class="loading"><div class="spinner"></div><div>Loading plans\u2026</div></div>';
-  window.scrollTo({top:0});
-  var p;
-  try { p = await apiGet('/focms/v1/auth/pricing'); }
-  catch(e){ c.innerHTML='<div class="cr-waiting">'+escapeHTML(e.message)+'</div>'; return; }
-  var fmt=function(cents){ return cents===0?'$0':'$'+(cents/100).toFixed(0); };
-  var html='<div class="ec-form" style="max-width:860px">';
-  html+='<div style="background:#FFF4E8;border:1px solid #F0C89E;border-radius:10px;padding:13px 16px;font-size:13px;color:#7A4A12;margin-bottom:16px">'+escapeHTML(p.deletion_notice)+'</div>';
-  html+='<div class="ec-grid">'+ (p.plans||[]).map(function(t){
-    var per = t.stackable?' per block':'/yr';
-    var priceLine = t.price_usd_cents===0 ? 'Free' : fmt(t.price_usd_cents)+per;
-    return '<div class="ec-card" style="cursor:default"><div>'
-      +'<div class="ec-name">'+escapeHTML(t.display_name)+'</div>'
-      +'<div class="ec-desc">'+t.storage_gb+' GB \u00b7 '+(t.video_allowed?'photos, videos, documents':'photos and PDFs only \u2014 no video')+'</div>'
-      +'<div style="font-family:Lora,serif;color:var(--navy);font-size:22px;margin-top:6px">'+priceLine+'</div></div>'
-      +(t.price_usd_cents>0?'<button class="save-btn" style="margin-top:10px" onclick="startCheckout(\''+t.plan_key+'\','+(t.stackable?1:0)+')">'+(t.stackable?'Add 10 GB':'Choose '+escapeHTML(t.display_name))+'</button>':'<div style="font-size:11.5px;color:#7A8A9E;margin-top:10px">Included with every verified account</div>')
-      +'</div>';
-  }).join('')+'</div>';
-  html+='<div style="font-size:12px;color:#7A8A9E;margin-top:14px">Plans renew annually. 90-day grace period after lapse before any file deletion. Export everything as a ZIP free, any time. Purchases are processed by Stripe; a storage purchase also serves as verified parental consent for students under 13.</div>';
-  html+='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #E5E2D9">'
-    +'<button class="save-btn save-btn-ghost" onclick="openBillingPortal()">Manage plan \u00b7 payment method \u00b7 cancel</button>'
-    +'<div style="font-size:12px;color:#7A8A9E;margin-top:8px">Opens your secure Stripe billing portal: change or cancel a plan, update the card, download invoices. Cancelling stops renewals \u2014 your records are never deleted.</div>'
-    +'</div>';
-  html+='</div>';
-  c.innerHTML=html;
+  // v279 consolidation: the portal briefly had two billing systems - this
+  // "Storage & Billing" page (auth/billing-session, its own plan keys and
+  // pricing) and the Billing & Plan page (billing_plans catalog, canonical
+  // confirmed pricing, live Stripe products, signature-verified webhook,
+  // quota sync). One customer-facing surface only: this pillar now delegates.
+  // startCheckout/openBillingPortal below are retained but unreferenced;
+  // the auth/billing-* backend endpoints remain live but unlinked pending a
+  // coordinated backend consolidation.
+  return billingShow();
 }
 async function startCheckout(planKey, stackable){
   try {
