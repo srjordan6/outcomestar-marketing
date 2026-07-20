@@ -1,0 +1,29 @@
+# Security response headers for outcomestar.app (Cloudflare Workers static assets).
+# Added 2026-07-19 after the full-stack security audit: the site previously
+# served no hardening headers, leaving it iframe-embeddable (clickjacking) and
+# without HSTS/CSP.
+#
+# The CSP allowlist is built from an actual inventory of every external origin
+# the site loads:
+#   challenges.cloudflare.com  Turnstile (signup/login bot check)
+#   cdnjs.cloudflare.com       intl-tel-input js + css
+#   app.chatwoot.com           support chat SDK, iframe and websocket
+#   fonts.googleapis.com       Lora / Poppins stylesheets
+#   fonts.gstatic.com          font files
+#   focms-api.onrender.com     the FOCMS API (all data + media blobs)
+#   educationdata.urban.org    school directory lookup (portal.js)
+#   *.stripe.com               checkout + billing portal redirects
+#
+# 'unsafe-inline' is required for script-src because the portal uses inline
+# onclick handlers throughout, and for style-src because pages carry inline
+# <style> blocks. The origin allowlist is still the meaningful control: it
+# blocks script injection from any host not listed above.
+
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self)
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://cdnjs.cloudflare.com https://app.chatwoot.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://focms-api.onrender.com https://app.chatwoot.com wss://app.chatwoot.com https://challenges.cloudflare.com https://educationdata.urban.org; frame-src https://challenges.cloudflare.com https://app.chatwoot.com https://js.stripe.com https://checkout.stripe.com https://billing.stripe.com; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; upgrade-insecure-requests
