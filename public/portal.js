@@ -10,10 +10,11 @@
  *        certificate verifies (backend v0.11.20 pre-checkout gate), the parent
  *        email AND the student email (required at signup from age 13) must be
  *        verified before the portal opens. Blocking overlay lists every address
- *        with live status and per-address Resend (auth/request-email-
- *        verification); "check again" reloads; fail-open on endpoint/network
- *        errors. Wizard fires only after the gate passes. Pairs with backend
- *        GET auth/email-verification-status.
+ *        with live status, per-address Resend, and "Wrong address? Change it"
+ *        (verify-then-swap via auth/request-email-change: the old address stays
+ *        active until the new one is verified). window.changeEmail(role) is the
+ *        global change entry point for any surface. Fail-open on endpoint
+ *        errors; wizard fires only after the gate passes.
  * v281 · Documentation: this header block added (the file previously carried
  *        only inline // vNNN comments and no changelog).
  * v280 · Billing entrance consolidated to ONE surface: top-nav "Billing & Plan"
@@ -418,8 +419,10 @@ async function emailVerificationGate(){
       : '<span style="color:#b42318;font-weight:600">Not verified</span>' +
         (e.expired ? ' <span style="color:#7A8A9E">(link expired)</span>' : '');
     var resend = e.verified ? '' :
+      '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
       '<button class="save-btn save-btn-ghost" style="padding:6px 14px;font-size:13px" ' +
-      'onclick="evgResend(this,\'' + encodeURIComponent(e.email) + '\',\'' + (e.role || 'parent') + '\')">Resend email</button>';
+      'onclick="evgResend(this,\'' + encodeURIComponent(e.email) + '\',\'' + (e.role || 'parent') + '\')">Resend email</button>' +
+      '<a href="#" style="color:#7A8A9E;font-size:12px" onclick="changeEmail(\'' + (e.role || 'parent') + '\');return false">Wrong address? Change it</a></div>';
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;' +
       'background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:12px 16px;margin-top:10px">' +
       '<div><div style="font-weight:600;color:#201868">' + (roleLabel[e.role] || e.role) + '</div>' +
@@ -455,6 +458,25 @@ async function evgResend(btn, encEmail, role){
     if (!r.ok) btn.disabled = false;
   } catch(e){ btn.textContent = 'Try again'; btn.disabled = false; }
 }
+/* v282: verify-then-swap email change (backend v0.11.20). The current email
+   keeps working everywhere until the new address is verified by its link. */
+window.changeEmail = async function(role){
+  role = role || 'parent';
+  var ne = prompt('New ' + role + ' email address:');
+  if (!ne) return;
+  ne = ne.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ne)) { showToast('That does not look like an email address', 'error'); return; }
+  try {
+    var r = await fetch(API_BASE + '/focms/v1/auth/request-email-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ subject_role: role, new_email: ne })
+    });
+    var d = await r.json().catch(function(){ return {}; });
+    if (!r.ok) { showToast((d.detail && d.detail.message) || 'Could not start the email change', 'error'); return; }
+    showToast('Verification sent to ' + ne + '. The current email keeps working until the new one is verified.', 'success');
+  } catch(e){ showToast('Network error - try again', 'error'); }
+};
 
 /* ===== v140 onboarding wizard ===== */
 function openWizard(step){

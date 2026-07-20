@@ -69,6 +69,16 @@ listing every address with live status and per-address Resend, fail-open on
 endpoint errors, and only fires the onboarding wizard once every address is
 confirmed.
 
+**Email changes are verify-then-swap** (backend v0.11.20 + portal v282):
+any email entered or changed — at signup or in the portal — requires
+verification. `POST auth/request-email-change` emails the NEW address a
+link; the OLD address stays the address of record everywhere (login, tenant
+primary email, student primary email) until the link is clicked, at which
+point `verify-email` applies the swap (`purpose='email_change'` +
+`applied_at` columns, MCP-added). The gate overlay carries a "Wrong
+address? Change it" link per address — also the rescue path for a typo'd
+signup email. In-flight changes never re-lock the portal.
+
 ---
 
 ## 2026-07-19 — Six-org parity, age-tiered access, live billing, security hardening
