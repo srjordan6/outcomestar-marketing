@@ -92,6 +92,43 @@ function saveToken() {
   document.getElementById('token-gate').classList.add('hidden');
 }
 function signOut() { sessionStorage.clear(); location.reload(); }
+/* v275: 30-minute inactivity timeout. Any interaction (mouse, keys, touch,
+   scroll) refreshes the clock; a 60-second sweep signs out an idle session
+   and reloads to the login screen with a notice. The timestamp also persists
+   to sessionStorage so a reopened tab in the same session honors the clock. */
+var IDLE_LIMIT_MS = 30 * 60 * 1000;
+var LAST_ACTIVITY = Date.now();
+(function idleGuard() {
+  try {
+    var stored = parseInt(sessionStorage.getItem('focms_last_activity') || '0', 10);
+    if (stored) LAST_ACTIVITY = stored;
+  } catch (e) {}
+  var bump = function () {
+    LAST_ACTIVITY = Date.now();
+    try { sessionStorage.setItem('focms_last_activity', String(LAST_ACTIVITY)); } catch (e) {}
+  };
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (ev) {
+    window.addEventListener(ev, bump, { passive: true });
+  });
+  bump();
+  setInterval(function () {
+    if (!getToken()) return;                       // not signed in - nothing to expire
+    if (Date.now() - LAST_ACTIVITY < IDLE_LIMIT_MS) return;
+    try {
+      sessionStorage.clear();
+      sessionStorage.setItem('focms_idle_signout', '1');
+    } catch (e) {}
+    location.reload();
+  }, 60 * 1000);
+  // login-screen notice after an idle sign-out
+  document.addEventListener('DOMContentLoaded', function () {
+    try {
+      if (sessionStorage.getItem('focms_idle_signout') !== '1') return;
+      sessionStorage.removeItem('focms_idle_signout');
+      if (typeof showToast === 'function') showToast('Signed out after 30 minutes of inactivity', 'info');
+    } catch (e) {}
+  });
+})();
 /* v140: re-run the tour any time */
 window.startTour = function(){ openWizard(1); };
 (function(){ // v139: adopt token handed off from signup via URL hash (#t=...)
