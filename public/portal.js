@@ -92,6 +92,64 @@ function saveToken() {
   document.getElementById('token-gate').classList.add('hidden');
 }
 function signOut() { sessionStorage.clear(); location.reload(); }
+/* v276: Billing & Plan (backend v0.12.155). Reads /billing/status, starts
+   Stripe Checkout for plan/add-on choices, opens the Stripe customer portal
+   for existing subscribers. Entitlement truth lives server-side via the
+   webhook - this UI only reflects it. */
+function billingFmt(cents) { return '$' + (cents / 100).toFixed(2).replace(/\.00$/, ''); }
+async function billingShow() {
+  var c = document.getElementById('sections-container'); if (!c) return;
+  document.getElementById('view-pillars').style.display = 'none';
+  document.getElementById('view-pillar').style.display = '';
+  ecSetHeader('Billing & Plan', 'Subscription, storage add-ons, and receipts');
+  c.innerHTML = '<div class="cr-waiting">Loading billing\u2026</div>';
+  var d;
+  try { d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/status'); }
+  catch (e) { c.innerHTML = '<div class="cr-waiting">Billing is unavailable right now: ' + escapeHTML(e.message) + '</div>'; return; }
+  var cp = d.current_plan || {};
+  var html = '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Current plan</div>' +
+    '<div class="ec-title">' + escapeHTML(cp.title || 'Free plan') + '</div>' +
+    '<div class="ec-meta">Status: ' + escapeHTML(cp.status || 'active') +
+    (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') + '</div>' +
+    ((d.subscriptions || []).some(function(s){ return s.status === 'active' || s.status === 'trialing'; })
+      ? '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Manage billing / invoices</button></div>'
+      : '') + '</div>';
+  if (!d.configured) {
+    html += '<div class="cr-waiting" style="margin-top:12px">Online payments are being set up. Plans shown below will be purchasable shortly.</div>';
+  }
+  var plans = (d.available_plans || []).filter(function(p){ return p.kind === 'subscription'; });
+  var core = plans.filter(function(p){ return p.plan_code.indexOf('addon_') !== 0; });
+  var addons = plans.filter(function(p){ return p.plan_code.indexOf('addon_') === 0; });
+  function planCard(p) {
+    var isCur = cp.plan_code === p.plan_code;
+    return '<div style="background:#fff;border:1px solid ' + (isCur ? 'var(--orange)' : '#E5E7EB') + ';border-radius:14px;padding:14px 16px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">' +
+      '<div><div class="ec-title">' + escapeHTML(p.title) + '</div>' +
+      '<div class="ec-meta">' + billingFmt(p.amount_cents) + ' / ' + escapeHTML(p.billing_interval || 'year') +
+      (p.storage_gb ? ' \u00b7 ' + p.storage_gb + ' GB storage' : '') + '</div></div>' +
+      (isCur ? '<span class="ec-meta" style="margin-top:0">Current</span>'
+             : '<button class="save-btn" onclick="billingCheckout(\'' + p.plan_code + '\')">' +
+               (cp.plan_code && cp.plan_code !== 'k5_free' ? 'Switch' : 'Choose') + '</button>') + '</div>';
+  }
+  html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Plans</div>' + core.map(planCard).join('');
+  html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Storage add-ons</div>' + addons.map(planCard).join('');
+  html += '<div class="ec-notes" style="margin-top:14px">Kindergarten\u2013Grade 5 stays free (1 GB). Cards are processed by Stripe; card numbers never touch outcomestar.app.</div>';
+  c.innerHTML = html;
+}
+async function billingCheckout(planCode) {
+  try {
+    var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/checkout-session', { plan_code: planCode });
+    if (d.free) { showToast('The free plan needs no checkout', 'info'); return; }
+    if (d.url) { location.href = d.url; return; }
+    showToast('Checkout could not start', 'error');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+async function billingPortal() {
+  try {
+    var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/portal-session', {});
+    if (d.url) location.href = d.url;
+  } catch (e) { showToast(e.message, 'error'); }
+}
 /* v275: 30-minute inactivity timeout. Any interaction (mouse, keys, touch,
    scroll) refreshes the clock; a 60-second sweep signs out an idle session
    and reloads to the login screen with a notice. The timestamp also persists
@@ -182,6 +240,23 @@ async function doLogin() {
 window.addEventListener('DOMContentLoaded', async () => {
   if (getToken()) document.getElementById('token-gate').classList.add('hidden');
   if (getToken()) { var nh = document.getElementById('nav-help'); if (nh) nh.style.display = ''; }
+  // v276: Billing & Plan nav entry (cloned styling from the Help link)
+  if (getToken()) {
+    var nhb = document.getElementById('nav-help');
+    if (nhb && !document.getElementById('nav-billing')) {
+      var bl = document.createElement(nhb.tagName || 'a');
+      bl.id = 'nav-billing'; bl.className = nhb.className;
+      bl.textContent = 'Billing & Plan'; bl.href = 'javascript:void(0)';
+      bl.addEventListener('click', function (e) { e.preventDefault(); billingShow(); });
+      nhb.parentNode.insertBefore(bl, nhb);
+    }
+    // checkout return toasts
+    try {
+      var bp = new URLSearchParams(location.search).get('billing');
+      if (bp === 'success') { showToast('Payment complete - your plan is active', 'success'); history.replaceState(null, '', location.pathname); }
+      else if (bp === 'cancelled') { showToast('Checkout cancelled', 'info'); history.replaceState(null, '', location.pathname); }
+    } catch (e) {}
+  }
   if (getToken()) await resolveContext();
   renderPillars();
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
