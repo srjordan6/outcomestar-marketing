@@ -2110,6 +2110,10 @@ function ecSwimContext() {
   var isGsa = /girl scout|gsusa/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var gwrap = document.getElementById('gsa-wrap');
   if (gwrap) gwrap.style.display = isGsa ? '' : 'none';
+  // v272: Civil Air Patrol live-detect
+  var isCap = /civil air patrol|\(cap\)/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var capw = document.getElementById('cap-wrap');
+  if (capw) capw.style.display = isCap ? '' : 'none';
   // v266: org programs always use the program name - hide the duplicate field
   var onw = document.getElementById('ec-orgname-wrap');
   if (onw && progSel) onw.style.display = LM_ORGS[progSel.value] ? 'none' : '';
@@ -3912,12 +3916,36 @@ function ecEdit(id, presetProgCode) {
                ecField('gsa_troop_email', 'Troop email', dd.gsa_troop_email)) +
       ecField('gsa_troop_website', 'Troop website', dd.gsa_troop_website)) +
     '</div>';
+  // v272: Civil Air Patrol field organization - National > Region (8) >
+  // Wing (52: one per state + National Capital + Puerto Rico) > Group >
+  // Squadron (cadet / senior / composite), per the CAP chain of command.
+  const isCapAffil = /civil air patrol|\(cap\)/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const CAP_REGIONS = ['Northeast Region', 'Middle East Region', 'Great Lakes Region', 'Southeast Region', 'North Central Region', 'Southwest Region', 'Rocky Mountain Region', 'Pacific Region'];
+  const CAP_WINGS = ['Alabama Wing', 'Alaska Wing', 'Arizona Wing', 'Arkansas Wing', 'California Wing', 'Colorado Wing', 'Connecticut Wing', 'Delaware Wing', 'Florida Wing', 'Georgia Wing', 'Hawaii Wing', 'Idaho Wing', 'Illinois Wing', 'Indiana Wing', 'Iowa Wing', 'Kansas Wing', 'Kentucky Wing', 'Louisiana Wing', 'Maine Wing', 'Maryland Wing', 'Massachusetts Wing', 'Michigan Wing', 'Minnesota Wing', 'Mississippi Wing', 'Missouri Wing', 'Montana Wing', 'Nebraska Wing', 'Nevada Wing', 'New Hampshire Wing', 'New Jersey Wing', 'New Mexico Wing', 'New York Wing', 'North Carolina Wing', 'North Dakota Wing', 'Ohio Wing', 'Oklahoma Wing', 'Oregon Wing', 'Pennsylvania Wing', 'Rhode Island Wing', 'South Carolina Wing', 'South Dakota Wing', 'Tennessee Wing', 'Texas Wing', 'Utah Wing', 'Vermont Wing', 'Virginia Wing', 'Washington Wing', 'West Virginia Wing', 'Wisconsin Wing', 'Wyoming Wing', 'National Capital Wing (Washington, D.C.)', 'Puerto Rico Wing'];
+  const CAP_SQ_TYPES = ['Cadet Squadron', 'Senior Squadron', 'Composite Squadron (cadets + seniors)'];
+  const capBlock =
+    '<div id="cap-wrap" style="' + (isCapAffil ? '' : 'display:none') + '">' +
+    _cadetFormCard('Civil Air Patrol structure', 'National \u203a Region \u203a Wing \u203a Group \u203a Squadron',
+      '<label class="ec-lbl">Region (8 US regions)<select class="ec-in" data-k="cap_region"><option value=""></option>' +
+      CAP_REGIONS.map(function(t){ return '<option' + (dd.cap_region === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      '<label class="ec-lbl">Wing (52: states + D.C. + Puerto Rico)<select class="ec-in" data-k="cap_wing"><option value=""></option>' +
+      CAP_WINGS.map(function(t){ return '<option' + (dd.cap_wing === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecRowTwo(ecField('cap_group', 'Group (span-of-control subdivision)', dd.cap_group),
+               ecField('cap_squadron', 'Squadron (local unit)', dd.cap_squadron)) +
+      '<label class="ec-lbl">Squadron type<select class="ec-in" data-k="cap_squadron_type"><option value=""></option>' +
+      CAP_SQ_TYPES.map(function(t){ return '<option' + (dd.cap_squadron_type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecField('cap_cap_id', 'CAP ID number', dd.cap_cap_id)) +
+    '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
     cadetBlock +
     bsaBlock +
     gsaBlock +
+    capBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -4020,6 +4048,16 @@ async function ecSave(id) {
     var _gd = {};
     _gKeys.forEach(function(k){ if (item[k] !== undefined) _gd[k] = item[k] || ''; delete item[k]; });
     item.details = Object.assign({}, item.details || {}, _gd);
+  }
+  // v272: CAP keys live in details JSONB; drop them when the block is hidden
+  var _capWrap = document.getElementById('cap-wrap');
+  var _capKeys = ['cap_region', 'cap_wing', 'cap_group', 'cap_squadron', 'cap_squadron_type', 'cap_cap_id'];
+  if (!_capWrap || _capWrap.style.display === 'none') {
+    _capKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _capd = {};
+    _capKeys.forEach(function(k){ if (item[k] !== undefined) _capd[k] = item[k] || ''; delete item[k]; });
+    item.details = Object.assign({}, item.details || {}, _capd);
   }
   // v247: organization location via the standard block - runs whenever the
   // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
@@ -10047,7 +10085,8 @@ var ORG_PROFILE_DEFS = {
     ['gsa_leader_email', 'Troop Leader email'], ['gsa_troop_phone', 'Troop phone'],
     ['gsa_troop_email', 'Troop email'], ['gsa_troop_website', 'Troop website'] ] },
   cap:   { title: 'Cadet Profile', fields: [
-    ['cap_squadron', 'Squadron'], ['cap_wing', 'Wing'], ['cap_cap_id', 'CAP ID'] ] },
+    ['cap_region', 'Region'], ['cap_wing', 'Wing'], ['cap_group', 'Group'],
+    ['cap_squadron', 'Squadron'], ['cap_squadron_type', 'Squadron type'], ['cap_cap_id', 'CAP ID'] ] },
   jrotc: { title: 'Cadet Profile', fields: [
     ['jrotc_branch', 'Branch (Army / Navy / Air Force / Marine Corps / Space Force / Coast Guard)'],
     ['jrotc_unit', 'Unit / school'], ['jrotc_company', 'Company / flight / platoon'] ] }
