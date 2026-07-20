@@ -110,7 +110,12 @@ async function billingShow() {
 }
 async function billingShowInner() {
   var c = document.getElementById('sections-container'); if (!c) return;
-  document.getElementById('view-pillars').style.display = 'none';
+  // v278: views toggle via the .hidden CLASS (site CSS), not inline display -
+  // the v276 inline-style approach left view-pillar display:none and the page
+  // blank. Mirror the pillar navigation exactly.
+  document.getElementById('view-pillars').classList.add('hidden');
+  document.getElementById('view-pillar').classList.remove('hidden');
+  document.getElementById('view-pillars').style.display = '';
   document.getElementById('view-pillar').style.display = '';
   var pc = document.getElementById('pillar-crumbtrail'); if (pc) pc.innerHTML = '';
   window.scrollTo(0, 0);
