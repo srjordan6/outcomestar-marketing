@@ -88,8 +88,8 @@ a{color:var(--orange)}
     </div>
 
     <div id="bc-block" style="display:none;background:#EEEDF7;border:1px solid #C9C6E4;border-radius:9px;padding:13px 15px;margin-top:16px">
-      <div style="font-weight:600;color:#201868;font-size:14px">Birth certificate required (ages 0&ndash;10)</div>
-      <div style="font-size:12.5px;color:#4A5563;margin:6px 0 10px">Students aged 0&ndash;10 get the membership free once age is validated. Upload the student's birth certificate (JPG, PNG, or PDF, up to 8&nbsp;MB). It is stored privately, never shown publicly, and reviewed only to confirm the name and birth date.</div>
+      <div style="font-weight:600;color:#201868;font-size:14px">Birth certificate required (all students under 18)</div>
+      <div style="font-size:12.5px;color:#4A5563;margin:6px 0 10px">The student's age sets pricing, privacy protections, and student access, so we verify it against the birth certificate. Upload a JPG, PNG, or PDF (up to 8&nbsp;MB). It is stored privately, never shown publicly, and reviewed only to confirm the name and birth date. Students aged 0&ndash;10 get the membership free once age is validated.</div>
       <input type="file" id="f-bcert" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" style="font-size:14px">
       <div id="bc-status" style="font-size:12px;color:#7A8A9E;margin-top:6px"></div>
     </div>
@@ -163,7 +163,36 @@ a{color:var(--orange)}
   if(q.get('vpc')==='complete'){
     document.getElementById('form-view').style.display='none';
     document.getElementById('done-view').style.display='block';
-    document.getElementById('done-msg').textContent='Payment received — parental consent captured. Your account is being created now; your portal access token and email confirmations are on the way to your inbox.';
+    var sid=q.get('sid'), dm=document.getElementById('done-msg');
+    if(sid && /^cs_/.test(sid)){
+      /* v11.19: poll claim-signup until the webhook finishes provisioning, then
+         land in the portal authenticated so the setup wizard opens. */
+      dm.textContent='Payment received \u2014 setting up your family account now\u2026';
+      var tries=0;
+      (function poll(){
+        tries++;
+        fetch('https://focms-api.onrender.com/focms/v1/auth/claim-signup',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({session_id:sid})})
+        .then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
+        .then(function(x){
+          if(x.s===200 && x.d.status==='ready' && x.d.api_token){
+            dm.textContent='Account ready \u2014 opening your parent portal\u2026';
+            location.href='/portal#t='+encodeURIComponent(x.d.api_token); return;
+          }
+          if(x.s===200 && x.d.status==='pending'){
+            if(tries<45){ setTimeout(poll,2000); }
+            else { dm.textContent='Payment received. Setup is taking longer than usual \u2014 your portal link and email confirmations are on the way to your inbox.'; }
+            return;
+          }
+          var m=(x.d && x.d.detail && (x.d.detail.message||x.d.detail.error))||'';
+          dm.textContent='Payment received. '+(m||'Sign in with your email and password to open your portal.');
+        })
+        .catch(function(){ if(tries<45){ setTimeout(poll,2000); } else { dm.textContent='Payment received \u2014 check your inbox for your portal link, or sign in with your email and password.'; } });
+      })();
+    } else {
+      dm.textContent='Payment received \u2014 parental consent captured. Your account is being created now; your portal access token and email confirmations are on the way to your inbox.';
+    }
   } else if(q.get('vpc')==='cancelled'){
     var e=document.getElementById('f-err'); e.textContent='Checkout was cancelled — no account was created and no charge was made. Your entries below are preserved; review and submit again when ready.'; e.style.display='block';
   }
@@ -179,7 +208,7 @@ a{color:var(--orange)}
   window.__studentAge=ageFrom;
   bd.addEventListener('change', function(){
     var a=ageFrom(bd.value);
-    document.getElementById('bc-block').style.display=(a!=null && a<=10)?'block':'none';
+    document.getElementById('bc-block').style.display=(a!=null && a<18)?'block':'none';
   });
 })();
 var BC_DATA=null;
@@ -240,8 +269,8 @@ document.getElementById('f-go').onclick = async function(){
     err.style.display='block'; return;
   }
   if(!body.accept_user_agreement||!body.accept_privacy_policy){ err.textContent='Both agreements must be accepted.'; err.style.display='block'; return; }
-  if(_age<=10){
-    if(!BC_DATA){ err.textContent='For students aged 0\u201310, upload the birth certificate so we can validate the birth date for free access.'; err.style.display='block'; return; }
+  if(_age<18){
+    if(!BC_DATA){ err.textContent='Upload the student\u2019s birth certificate \u2014 we verify the birth date because it sets pricing, privacy protections, and student access.'; err.style.display='block'; return; }
     body.birth_certificate_b64=BC_DATA.b64; body.birth_certificate_mime=BC_DATA.mime; body.birth_certificate_filename=BC_DATA.name;
   }
   var btn=this; btn.disabled=true; btn.textContent='Creating your account\u2026';
