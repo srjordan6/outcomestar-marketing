@@ -2106,11 +2106,15 @@ function ecSwimContext() {
   var isBsa = /boy scout|scouting america|\bbsa\b/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var bwrap = document.getElementById('bsa-wrap');
   if (bwrap) bwrap.style.display = isBsa ? '' : 'none';
+  // v271: Girl Scouts live-detect
+  var isGsa = /girl scout|gsusa/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var gwrap = document.getElementById('gsa-wrap');
+  if (gwrap) gwrap.style.display = isGsa ? '' : 'none';
   // v266: org programs always use the program name - hide the duplicate field
   var onw = document.getElementById('ec-orgname-wrap');
   if (onw && progSel) onw.style.display = LM_ORGS[progSel.value] ? 'none' : '';
   var sel = document.getElementById('sk-add');
-  if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : (isBsa ? bsaSkillOpts() : EC_POOL_OPTS));
+  if (sel) sel.innerHTML = '<option value="">-- add a skill --</option>' + (isSwim ? swimSkillOpts() : (isBsa ? bsaSkillOpts() : (isGsa ? gsaSkillOpts() : EC_POOL_OPTS)));
   return isSwim;
 }
 function renderFormSkillChips() {
@@ -2129,7 +2133,7 @@ function removeFormSkill(code) {
   FORM_SKILLS = FORM_SKILLS.filter(function(x){ return x !== code; });
   renderFormSkillChips();
 }
-function skillsGainedField(current, catName, swimOnly, bsaOnly) {
+function skillsGainedField(current, catName, swimOnly, orgPool) {
   FORM_SKILLS = (current || []).filter(Boolean).slice();
   const domains = catName ? EC_CAT_SKILL_DOMAINS[catName] : null;
   const pool = (SKILLS_CATALOG || []).filter(sk => !domains || domains.indexOf(sk.domain || sk.pillar) !== -1);
@@ -2137,7 +2141,7 @@ function skillsGainedField(current, catName, swimOnly, bsaOnly) {
     '<option value="' + (sk.code || '') + '">' +
     escapeHTML(sk.title || sk.code) + ((sk.domain || sk.pillar) ? ' \u00b7 ' + escapeHTML(sk.domain || sk.pillar) : '') +
     '</option>').join('');
-  const opts = swimOnly ? swimSkillOpts() : (bsaOnly ? bsaSkillOpts() : EC_POOL_OPTS);
+  const opts = swimOnly ? swimSkillOpts() : (orgPool === 'bsa' ? bsaSkillOpts() : (orgPool === 'gsa' ? gsaSkillOpts() : EC_POOL_OPTS));
   const chips = FORM_SKILLS.length
     ? FORM_SKILLS.map(function(code){ return '<span class="ec-chip">' + escapeHTML(skillTitle(code)) + ' <span class="art-x" onclick="removeFormSkill(\'' + code.replace(/'/g, "\\'") + '\')">\u00d7</span></span>'; }).join(' ')
     : '<span class="cr-waiting" style="padding:0">No skills on this record yet.</span>';
@@ -2343,7 +2347,8 @@ function applyTrainingSkillOptions(title) {
     if (cus) { cus.value = ''; cus.style.display = 'none'; }
   } else {
     sel.innerHTML = '<option value="">-- add a skill --</option>' +
-      ((typeof LM_CTX !== 'undefined' && LM_CTX.org === 'bsa') ? bsaSkillOpts() : EC_POOL_OPTS);
+      ((typeof LM_CTX !== 'undefined' && LM_CTX.org === 'bsa') ? bsaSkillOpts() :
+       (typeof LM_CTX !== 'undefined' && LM_CTX.org === 'gsa') ? gsaSkillOpts() : EC_POOL_OPTS);
     if (cus) cus.style.display = '';
   }
 }
@@ -3055,8 +3060,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
     const trainings = all.filter(s => s.milestone_kind === 'training' || s.milestone_kind === 'service_project');
     const lm = ranks[0] || null;
     if (LM_ORGS[ENTRY_VIEW.code] && ENTRY_VIEW.code !== 'usnscc') html += orgProfileCard(a, ENTRY_VIEW.code, lm);  // v261
-    // v265: Leadership Positions (BSA) - tenure feeds Star (4 mo) / Life & Eagle (6 mo)
-    if (ENTRY_VIEW.code === 'bsa') {
+    // v265: Leadership Positions (BSA; v271 also GSA) - BSA tenure feeds Star/Life/Eagle
+    if (ENTRY_VIEW.code === 'bsa' || ENTRY_VIEW.code === 'gsa') {
       const poss = all.filter(s => s.milestone_kind === 'leadership_position');
       html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
         '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Leadership Positions</span>' +
@@ -3075,8 +3080,8 @@ function renderEntryDetail(catCode, progCode, affilId) {
       '<button class="save-btn" onclick="lmEdit(null,\'training\')">Log training / service</button></div>';
     if (!trainings.length) html += '<div class="cr-waiting">No training logged yet. Record each training with the skills gained and the date.</div>';
     else html += trainings.map(lmRow).join('');
-    // v263: Camping & Outdoor Activities (BSA)
-    if (ENTRY_VIEW.code === 'bsa') {
+    // v263: Camping & Outdoor Activities (BSA; v271 also GSA)
+    if (ENTRY_VIEW.code === 'bsa' || ENTRY_VIEW.code === 'gsa') {
       const camps = all.filter(s => s.milestone_kind === 'campout');
       html += '<div class="ec-bar" style="margin-top:20px;align-items:center">' +
         '<span style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px">Camping &amp; Outdoor Activities</span>' +
@@ -3226,6 +3231,21 @@ function lmOrgRankField(ranks, val, orgLabel) {
     }).join('') + '</optgroup></select></label>' +
     '<div id="lm-rank-desc" class="ec-notes" style="margin-top:2px"></div>';
 }
+var GSA_AWARDS_G = ['Gold Award', 'Silver Award', 'Bronze Award', 'Journey Summit Award', 'Community Service Bar', 'Service to Girl Scouting Bar', 'My Promise, My Faith Pin', 'Cookie Entrepreneur Family Pin', 'Safety Award'];
+function lmAwardField(awards, val) {
+  // v271: highest awards + recognitions dropdown with free-text Other,
+  // reusing the lm-title-sel/lm-title-other ids so lmTitleValue and
+  // lmTrainingSwitch work unchanged.
+  var inList = val && awards.indexOf(val) !== -1;
+  var other = val && !inList;
+  return '<label class="ec-lbl">Award *<select class="ec-in" id="lm-title-sel" onchange="lmTrainingSwitch()">' +
+    '<option value=""></option>' +
+    awards.map(function(t){ return '<option' + (t === val ? ' selected' : '') + '>' + escapeHTML(t) + '</option>'; }).join('') +
+    '<option value="__other__"' + (other ? ' selected' : '') + '>Other (type below)</option>' +
+    '</select></label>' +
+    '<label class="ec-lbl" id="lm-title-other-wrap" style="' + (other ? '' : 'display:none') + '">Award name *' +
+    '<input class="ec-in" id="lm-title-other" type="text" value="' + escapeHTML(other ? val : '') + '"></label>';
+}
 function lmBadgeField(badges, val) {
   // v260: full official Merit Badge roster (stored stripped, e.g. 'Camping')
   return '<label class="ec-lbl">Merit badge *<select class="ec-in" id="lm-title">' +
@@ -3253,6 +3273,9 @@ function lmKindSwitch() {
   }
   if (k === 'merit_badge' && LM_CTX.badges) {   // v260: official badge roster
     wrap.innerHTML = lmBadgeField(LM_CTX.badges, cur); return;
+  }
+  if (k === 'award' && LM_CTX.awards) {         // v271: GS highest awards
+    wrap.innerHTML = lmAwardField(LM_CTX.awards, cur); return;
   }
   wrap.innerHTML = lmTitleField(false, k === 'rank' && isCadet, cur);
 }
@@ -3288,7 +3311,8 @@ async function lmEdit(id, presetKind) {
   }
   if (!isTraining && lmOrg && lmOrg !== 'usnscc') {
     LM_CTX.ranks = await loadOrgRanks(lmOrg);
-    LM_CTX.rankLabel = lmOrg === 'bsa' ? 'The 7 BSA Ranks' : (_prog.title || 'Ranks');
+    LM_CTX.rankLabel = lmOrg === 'bsa' ? 'The 7 BSA Ranks' : (lmOrg === 'gsa' ? 'The 6 Girl Scout Levels' : (_prog.title || 'Ranks'));
+    if (lmOrg === 'gsa') LM_CTX.awards = GSA_AWARDS_G;  // v271
     if (lmOrg === 'bsa') {
       const oc2 = await loadOrgTrainings('bsa');
       if (oc2) LM_CTX.badges = oc2.titles
@@ -3313,6 +3337,7 @@ async function lmEdit(id, presetKind) {
         ? (_tCat ? lmTrainingField(_tCat, isSvc ? '' : p.title) : lmTitleField(true, false, isSvc ? '' : p.title))
         : (LM_CTX.ranks && kind === 'rank' ? lmOrgRankField(LM_CTX.ranks, p.title, LM_CTX.rankLabel)
           : LM_CTX.badges && kind === 'merit_badge' ? lmBadgeField(LM_CTX.badges, p.title)
+          : LM_CTX.awards && kind === 'award' ? lmAwardField(LM_CTX.awards, p.title)
           : lmTitleField(false, (kind === 'rank' && lmIsCadet), p.title))) + '</div>' +
     (isTraining
       ? '<div id="lm-svc-wrap" style="' + (isSvc ? '' : 'display:none') + '">' +
@@ -3328,7 +3353,7 @@ async function lmEdit(id, presetKind) {
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('lmloc', p.location_parts || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
-    skillsGainedField(p.skills_gained, CAT_FILTER, false, LM_CTX.org === 'bsa') +
+    skillsGainedField(p.skills_gained, CAT_FILTER, false, (LM_CTX.org === 'bsa' || LM_CTX.org === 'gsa') ? LM_CTX.org : '') +
     mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
@@ -3859,11 +3884,40 @@ function ecEdit(id, presetProgCode) {
                ecField('bsa_unit_email', 'Unit email', dd.bsa_unit_email)) +
       ecField('bsa_unit_website', 'Unit website', dd.bsa_unit_website)) +
     '</div>';
+  // v271: Girl Scouts of the USA structure - full parity with the BSA block.
+  // National (GSUSA) > Council > Service Unit > Troop. 112 councils per the
+  // Wikipedia List_of_councils (Girl Scouts of the USA), fetched 2026-07-19;
+  // re-sync yearly. Frisco families: Girl Scouts of Northeast Texas.
+  const isGsaAffil = /girl scout|gsusa/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const GSA_COUNCILS_L = ['Alaska', 'Arizona Cactus-Pine', 'Black Diamond', 'California\'s Central Coast', 'Caribe', 'Carolinas Peaks to Piedmont', 'Central & Southern New Jersey', 'Central California South', 'Central Illinois', 'Central Indiana', 'Central Maryland', 'Central Texas', 'Central and Western Massachusetts', 'Chesapeake Bay', 'Citrus', 'Colonial Coast', 'Colorado', 'Commonwealth', 'Connecticut', 'Dakota Horizons', 'Desert Southwest- Southern New Mexico & West Texas', 'Diamonds of Ark. Okla. & Texas', 'Eastern Iowa and West Illinois', 'Eastern Massachusetts', 'Eastern Missouri', 'Eastern Oklahoma', 'Eastern Pennsylvania', 'Eastern South Carolina', 'Eastern Washington and North Idaho', 'Farthest North', 'Gateway', 'Greater Atlanta', 'Greater Chicago and NW Indiana', 'Greater Iowa', 'Greater Los Angeles', 'Greater Mississippi', 'Greater New York', 'Greater South Texas', 'Green and White Mountains', 'Gulfcoast', 'Hawaii', 'Heart of Central California', 'Heart of Michigan', 'Heart of New Jersey', 'Heart of Pennsylvania', 'Heart of the Hudson', 'Heart of the South', 'Historic Georgia', 'Hornets\' Nest', 'Jersey Shore', 'Kansas Heartland', 'Kentuckiana', 'Kentucky\'s Wilderness Road', 'Lakes and Pines', 'Louisiana East', 'Louisiana-Pines to the Gulf', 'Maine', 'Manitou', 'Michigan Shore to Shore', 'Middle Tennessee', 'Missouri Heartland', 'Montana and Wyoming', 'NE Kansas and NW Missouri', 'NYPENN Pathways', 'Nassau County', 'Nation\'s Capital', 'New Mexico Trails', 'North Carolina Coastal Pines', 'North East Ohio[1]', 'North-Central Alabama', 'Northeast Texas', 'Northeastern New York', 'Northern California', 'Northern Illinois', 'Northern Indiana-Michiana', 'Northern New Jersey', 'Northwestern Great Lakes', 'Ohio\'s Heartland', 'Orange County', 'Oregon and Southwest Washington', 'River Valleys', 'San Diego', 'San Gorgonio', 'San Jacinto', 'Sierra Nevada', 'Silver Sage', 'South Carolina - Mountains to Midlands', 'Southeast Florida', 'Southeastern Michigan', 'Southeastern New England', 'Southern Alabama', 'Southern Appalachians', 'Southern Arizona', 'Southern Illinois', 'Southern Nevada', 'Southwest Indiana', 'Southwest Texas', 'Spirit of Nebraska', 'Suffolk County', 'Texas Oklahoma Plains', 'Tropical Florida', 'USAGSO (American Scouting overseas)', 'Utah', 'Virginia Skyline', 'West Central Florida', 'Western New York', 'Western Ohio', 'Western Oklahoma', 'Western Pennsylvania', 'Western Washington', 'Wisconsin - Badgerland', 'Wisconsin Southeast'];
+  const GSA_LEVELS = ['Daisy (Grades K\u20131)', 'Brownie (Grades 2\u20133)', 'Junior (Grades 4\u20135)', 'Cadette (Grades 6\u20138)', 'Senior (Grades 9\u201310)', 'Ambassador (Grades 11\u201312)'];
+  const gsaBlock =
+    '<div id="gsa-wrap" style="' + (isGsaAffil ? '' : 'display:none') + '">' +
+    _cadetFormCard('Girl Scouts structure', 'National \u203a Council \u203a Service Unit \u203a Troop',
+      '<label class="ec-lbl">Program level<select class="ec-in" data-k="gsa_level"><option value=""></option>' +
+      GSA_LEVELS.map(function(t){ return '<option' + (dd.gsa_level === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecRowTwo(ecField('gsa_troop', 'Troop number', dd.gsa_troop),
+               ecField('gsa_service_unit', 'Service Unit', dd.gsa_service_unit)) +
+      '<label class="ec-lbl">Council<select class="ec-in" data-k="gsa_council"><option value=""></option>' +
+      '<optgroup label="Girl Scout Councils (GSUSA)">' +
+      GSA_COUNCILS_L.map(function(c){ return '<option' + (dd.gsa_council === c ? ' selected' : '') + '>' + escapeHTML(c) + '</option>'; }).join('') +
+      '</optgroup></select></label>' +
+      ecField('gsa_member_id', 'GSUSA member ID', dd.gsa_member_id) +
+      '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Troop contacts</div>' +
+      ecRowTwo(ecField('gsa_leader', 'Troop Leader', dd.gsa_leader),
+               ecField('gsa_leader_phone', 'Troop Leader phone', dd.gsa_leader_phone)) +
+      ecField('gsa_leader_email', 'Troop Leader email', dd.gsa_leader_email) +
+      ecRowTwo(ecField('gsa_troop_phone', 'Troop phone', dd.gsa_troop_phone),
+               ecField('gsa_troop_email', 'Troop email', dd.gsa_troop_email)) +
+      ecField('gsa_troop_website', 'Troop website', dd.gsa_troop_website)) +
+    '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
     cadetBlock +
     bsaBlock +
+    gsaBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -3881,7 +3935,7 @@ function ecEdit(id, presetProgCode) {
       ecField('coach_email', 'Coach email', a.coach_email) : '') +
     ecArea('notes', 'Notes (private)', a.notes) +
     ecArea('public_description', 'Public description (shown if published)', a.public_description) +
-    skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil, isBsaAffil) +
+    skillsGainedField(a.skills_gained, CAT_FILTER, isSwimAffil, isBsaAffil ? 'bsa' : (isGsaAffil ? 'gsa' : '')) +
     mediaWidgetHtml('ec-media', 'Photos, videos & documents', normalizeMediaIds(a)) +
     showcaseField(a.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
@@ -3954,6 +4008,18 @@ async function ecSave(id) {
     var _bd = {};
     _bKeys.forEach(function(k){ if (item[k] !== undefined) _bd[k] = item[k] || ''; delete item[k]; });
     item.details = Object.assign({}, item.details || {}, _bd);
+  }
+  // v271: GSA keys live in details JSONB; drop them when the block is hidden
+  var _gWrap = document.getElementById('gsa-wrap');
+  var _gKeys = ['gsa_level', 'gsa_troop', 'gsa_service_unit', 'gsa_council', 'gsa_member_id',
+                'gsa_leader', 'gsa_leader_phone', 'gsa_leader_email',
+                'gsa_troop_phone', 'gsa_troop_email', 'gsa_troop_website'];
+  if (!_gWrap || _gWrap.style.display === 'none') {
+    _gKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _gd = {};
+    _gKeys.forEach(function(k){ if (item[k] !== undefined) _gd[k] = item[k] || ''; delete item[k]; });
+    item.details = Object.assign({}, item.details || {}, _gd);
   }
   // v247: organization location via the standard block - runs whenever the
   // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
@@ -9735,6 +9801,30 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 })();
 
+/* v271: the 100-skill Girl Scout blueprint - mirrors the BSA blueprint.
+   Built from the GSUSA program pillars (Entrepreneurship, STEM, Outdoors,
+   Life Skills) plus civic, communication, arts, global, safety, and
+   highest-award project domains. Operator-reviewable; refine per season. */
+var GSA_SKILLS_G = [
+  ['Entrepreneurship & Cookie Business', ["Setting a sales-season goal and milestone plan", "Creating and delivering a sales pitch", "Handling money and making change at a booth", "Managing a Digital Cookie online storefront", "Customer service and order follow-through", "Designing and running a marketing booth", "Tracking inventory across a season", "Deciding how to allocate troop proceeds", "Coordinating a donation program (Gift of Caring)", "Practicing business ethics in selling", "Coordinating a team sales effort", "Producing an end-of-season financial report"]],
+  ['STEM & Innovation', ["Coding fundamentals", "Designing and testing a robot", "Cybersecurity and online-safety basics", "Prototyping an app or website", "Applying the engineering design process", "Collecting citizen-science data", "Observational astronomy and space science", "Using math in everyday decisions", "Building with simple machines", "Analyzing environmental data", "Designing a controlled science experiment", "Exploring STEM careers through interviews"]],
+  ['Outdoor Adventure', ["Building and managing a safe campfire", "Outdoor cooking for a group", "Pitching tents and setting up a campsite", "Hiking and trail navigation", "Archery fundamentals", "Canoeing and kayaking basics", "Practicing Leave No Trace stewardship", "Knife safety", "Tying and using essential knots", "Reading outdoor weather conditions", "Identifying local plants and animals", "Preparing for a backpacking trip"]],
+  ['Life Skills & Wellbeing', ["Personal safety awareness", "First aid fundamentals", "Planning and preparing healthy meals", "Budgeting personal money", "Managing time across school and activities", "Stress management and mindfulness practice", "Digital citizenship and media balance", "Household skills: sewing and simple repairs", "Advocating for yourself with adults", "Independent travel readiness", "Designing a personal fitness plan", "Babysitting and childcare readiness"]],
+  ['Civic Engagement & Community', ["Assessing a community need", "Planning a Take Action project", "Advocating for a cause", "Understanding local government", "Recruiting and coordinating volunteers", "Serving across generations", "Leading an environmental cleanup", "Voter education and registration awareness", "Public commenting and petitioning", "Partnering with community organizations"]],
+  ['Communication & Leadership', ["Public speaking to a large audience", "Active listening and summarizing", "Girl-led team decision making", "Facilitating a troop meeting", "Resolving conflicts between peers", "Mentoring younger Girl Scouts", "Serving in a troop leadership role", "Storytelling and presentations", "Interviewing community members", "Writing a project proposal"]],
+  ['Arts & Creativity', ["Visual arts techniques", "Performing arts and stagecraft", "Music performance and appreciation", "Photography and digital media production", "Creative writing", "Design thinking for crafts and products", "Taking a role in a theater production", "Exploring cultural arts"]],
+  ['Global Citizenship', ["World Thinking Day participation", "Partner-troop or pen-pal exchange", "Exploring cultural traditions", "Studying global issues with WAGGGS themes", "Language learning basics", "Preparing for international travel", "Working toward global sustainability goals", "Studying the Juliette Gordon Low legacy"]],
+  ['Safety & First Aid', ["CPR and AED awareness", "Family emergency preparedness planning", "Fire safety at home and camp", "Water safety and buddy swimming", "Severe-weather response", "Basic wound care", "Calling for and directing emergency help", "Practicing the buddy system"]],
+  ['Highest Awards & Project Execution', ["Completing a Bronze Award team project", "Leading a Silver Award project (50 hours)", "Leading a Gold Award project (80 hours)", "Researching a root cause", "Designing a sustainable project", "Budgeting and fundraising for a project", "Measuring and reporting project impact", "Presenting a final project to stakeholders"]]
+];
+function gsaSkillOpts() {
+  return GSA_SKILLS_G.map(function(g){
+    return '<optgroup label="' + escapeHTML(g[0]) + '">' + g[1].map(function(t){
+      return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>';
+    }).join('') + '</optgroup>';
+  }).join('');
+}
+
 /* v267: the 100-skill Eagle Scout blueprint - the skills dropdown on every
    BSA data-entry form (Edit entry, rank/badge/award, training/service,
    campout, position). Grouped optgroups; values are the skill names. */
@@ -9765,6 +9855,7 @@ function bsaSkillOpts() {
    event_end_date = end (blank = currently serving). Months served computed
    client-side against the Star (4-month) and Life/Eagle (6-month) active
    tenure requirements. */
+var GSA_POSITIONS_G = ['Troop President', 'Troop Vice President', 'Troop Secretary', 'Troop Treasurer', 'Patrol Leader', 'Assistant Patrol Leader', 'Girl Planning Board Member', 'Program Aide', 'Counselor-in-Training', 'Volunteer-in-Training', 'Camp Aide', 'Cookie Booth Team Lead'];
 var BSA_POSITIONS_G = ['Senior Patrol Leader', 'Assistant Senior Patrol Leader', 'Patrol Leader', 'Assistant Patrol Leader', 'Troop Guide', 'Den Chief', 'Scribe', 'Quartermaster', 'Librarian', 'Historian', 'Chaplain Aide', 'Instructor', 'Webmaster', 'Outdoor Ethics Guide', 'Bugler', 'Order of the Arrow Representative', 'Junior Assistant Scoutmaster'];
 function posMonthsServed(start, end) {
   if (!start) return 0;
@@ -9782,7 +9873,7 @@ function posTenureHint(m) {
 }
 function posRow(p) {
   var m = posMonthsServed(p.event_date, p.event_end_date);
-  var hint = posTenureHint(m);
+  var hint = (typeof ENTRY_VIEW !== 'undefined' && ENTRY_VIEW && ENTRY_VIEW.code === 'gsa') ? '' : posTenureHint(m);  // v271: Star/Life/Eagle is BSA-only
   return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(p.title || 'Position') +
     (p.event_date ? ' \u2014 ' + escapeHTML(p.event_date) + ' \u2192 ' + (p.event_end_date ? escapeHTML(p.event_end_date) : 'present') : '') + '</div>' +
     '<div class="ec-meta">Leadership position \u00b7 ' + m + ' month' + (m === 1 ? '' : 's') + ' served' +
@@ -9796,14 +9887,15 @@ function posEdit(id) {
   if (!ENTRY_VIEW) return;
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
   if (!p) return;
-  const inList = p.title && BSA_POSITIONS_G.indexOf(p.title) !== -1;
+  const _posList = (ENTRY_VIEW.code === 'gsa') ? GSA_POSITIONS_G : BSA_POSITIONS_G;  // v271
+  const inList = p.title && _posList.indexOf(p.title) !== -1;
   const other = p.title && !inList;
   const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
   document.getElementById('sections-container').innerHTML =
     ecTrailCrumb(id ? 'Edit position' : 'Log position') + '<div class="ec-form">' +
     '<label class="ec-lbl">Position *<select class="ec-in" id="pos-title" onchange="var w=document.getElementById(\'pos-other-wrap\');if(w)w.style.display=this.value===\'__other__\'?\'\':\'none\'">' +
     '<option value=""></option>' +
-    BSA_POSITIONS_G.map(function(t){ return '<option' + (p.title === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+    _posList.map(function(t){ return '<option' + (p.title === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
     '<option value="__other__"' + (other ? ' selected' : '') + '>Other (type below)</option>' +
     '</select></label>' +
     '<label class="ec-lbl" id="pos-other-wrap" style="' + (other ? '' : 'display:none') + '">Position name *' +
@@ -9812,14 +9904,14 @@ function posEdit(id) {
     perfField('pos-end', 'End date (blank = currently serving)', p.event_end_date, 'date') + '</div>' +
     '<div class="ec-notes" id="pos-months" style="margin-top:2px"></div>' +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="pos-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
-    skillsGainedField(p.skills_gained, CAT_FILTER, false, ENTRY_VIEW.code === 'bsa') +
+    skillsGainedField(p.skills_gained, CAT_FILTER, false, (ENTRY_VIEW.code === 'bsa' || ENTRY_VIEW.code === 'gsa') ? ENTRY_VIEW.code : '') +
     mediaWidgetHtml('pos-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="pos-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="posSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
   var upd = function(){
     var m = posMonthsServed((document.getElementById('pos-date') || {}).value, (document.getElementById('pos-end') || {}).value);
-    var h = posTenureHint(m);
+    var h = (ENTRY_VIEW && ENTRY_VIEW.code === 'gsa') ? '' : posTenureHint(m);
     var el = document.getElementById('pos-months');
     if (el) el.textContent = m + ' month' + (m === 1 ? '' : 's') + ' served' + (h ? ' \u2014 ' + h : '');
   };
@@ -9893,7 +9985,7 @@ function campEdit(id) {
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
     addrFields('cploc', lp) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="cp-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
-    skillsGainedField(p.skills_gained, CAT_FILTER, false, ENTRY_VIEW.code === 'bsa') +
+    skillsGainedField(p.skills_gained, CAT_FILTER, false, (ENTRY_VIEW.code === 'bsa' || ENTRY_VIEW.code === 'gsa') ? ENTRY_VIEW.code : '') +
     mediaWidgetHtml('cp-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="cp-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="campSave(\'' + (id || '') + '\')">Save</button>' +
@@ -9949,7 +10041,11 @@ var ORG_PROFILE_DEFS = {
     ['bsa_scoutmaster_email', 'Scoutmaster email'], ['bsa_unit_phone', 'Unit phone'],
     ['bsa_unit_email', 'Unit email'], ['bsa_unit_website', 'Unit website'] ] },
   gsa:   { title: 'Girl Scout Profile', fields: [
-    ['gsa_troop', 'Troop number'], ['gsa_member_id', 'Member ID'], ['gsa_council', 'Council'] ] },
+    ['gsa_level', 'Program level'], ['gsa_troop', 'Troop number'], ['gsa_service_unit', 'Service Unit'],
+    ['gsa_council', 'Council'], ['gsa_member_id', 'GSUSA member ID'],
+    ['gsa_leader', 'Troop Leader'], ['gsa_leader_phone', 'Troop Leader phone'],
+    ['gsa_leader_email', 'Troop Leader email'], ['gsa_troop_phone', 'Troop phone'],
+    ['gsa_troop_email', 'Troop email'], ['gsa_troop_website', 'Troop website'] ] },
   cap:   { title: 'Cadet Profile', fields: [
     ['cap_squadron', 'Squadron'], ['cap_wing', 'Wing'], ['cap_cap_id', 'CAP ID'] ] },
   jrotc: { title: 'Cadet Profile', fields: [
