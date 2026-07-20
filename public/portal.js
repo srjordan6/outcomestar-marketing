@@ -4,8 +4,16 @@
  * release. Deployed file is byte-identical to public/portal.js in
  * srjordan6/outcomestar-marketing.
  *
- * CHANGELOG — 2026-07-19 session (v259 → v281)
+ * CHANGELOG — 2026-07-19 session (v259 → v282)
  *
+ * v282 · EMAIL VERIFICATION GATE (operator decision): after the birth
+ *        certificate verifies (backend v0.11.20 pre-checkout gate), the parent
+ *        email AND the student email (required at signup from age 13) must be
+ *        verified before the portal opens. Blocking overlay lists every address
+ *        with live status and per-address Resend (auth/request-email-
+ *        verification); "check again" reloads; fail-open on endpoint/network
+ *        errors. Wizard fires only after the gate passes. Pairs with backend
+ *        GET auth/email-verification-status.
  * v281 · Documentation: this header block added (the file previously carried
  *        only inline // vNNN comments and no changelog).
  * v280 · Billing entrance consolidated to ONE surface: top-nav "Billing & Plan"
@@ -382,8 +390,71 @@ window.addEventListener('DOMContentLoaded', async () => {
   // welcome-email #t= URL adoption path. Parents who log in via email+password (or
   // arrive after a missed welcome email) now see the wizard. localStorage onboarded flag
   // (set by closeWizard() on completion or skip) still gates against re-showing.
-  if (getToken() && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) openWizard();
+  // v282 (2026-07-19, operator decision): EMAIL VERIFICATION GATE. After the birth
+  // certificate verifies (pre-checkout, backend v0.11.20), the parent email AND the
+  // student email (13+) must be verified before the portal experience opens. A
+  // blocking overlay lists each address with per-address Resend; fail-open on
+  // endpoint/network errors so an API blip never locks a paying family out.
+  if (getToken()) {
+    var evBlocked = await emailVerificationGate();
+    if (!evBlocked && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) openWizard();
+  }
 });
+
+/* ===== v282 email verification gate ===== */
+async function emailVerificationGate(){
+  var d;
+  try {
+    var r = await fetch(API_BASE + '/focms/v1/auth/email-verification-status',
+      { headers: { 'Authorization': 'Bearer ' + getToken() } });
+    if (!r.ok) return false;            // endpoint missing/older backend - fail open
+    d = await r.json();
+  } catch(e){ return false; }           // network blip - fail open
+  if (!d || !d.emails || !d.emails.length || d.all_verified) return false;
+  var roleLabel = { parent: 'Parent', student: 'Student' };
+  var rows = d.emails.map(function(e, i){
+    var state = e.verified
+      ? '<span style="color:#1a7f37;font-weight:600">Verified \u2713</span>'
+      : '<span style="color:#b42318;font-weight:600">Not verified</span>' +
+        (e.expired ? ' <span style="color:#7A8A9E">(link expired)</span>' : '');
+    var resend = e.verified ? '' :
+      '<button class="save-btn save-btn-ghost" style="padding:6px 14px;font-size:13px" ' +
+      'onclick="evgResend(this,\'' + encodeURIComponent(e.email) + '\',\'' + (e.role || 'parent') + '\')">Resend email</button>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;' +
+      'background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:12px 16px;margin-top:10px">' +
+      '<div><div style="font-weight:600;color:#201868">' + (roleLabel[e.role] || e.role) + '</div>' +
+      '<div style="color:#4A5563;font-size:14px;word-break:break-all">' + escapeHTML(e.email) + '</div>' +
+      '<div style="font-size:13px;margin-top:2px">' + state + '</div></div>' + resend + '</div>';
+  }).join('');
+  var ov = document.createElement('div');
+  ov.id = 'evgate-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#F4F4F0;overflow:auto;padding:24px';
+  ov.innerHTML =
+    '<div style="max-width:560px;margin:6vh auto 0;font-family:Poppins,sans-serif">' +
+    '<h2 style="font-family:Lora,serif;color:#201868;margin:0 0 6px">Verify your email addresses</h2>' +
+    '<p style="color:#4A5563;margin:0 0 4px">The birth certificate is verified \u2014 one step left. ' +
+    'Click the link in the verification email we sent to each address below. ' +
+    'The portal opens once every address is confirmed.</p>' + rows +
+    '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">' +
+    '<button class="save-btn" onclick="location.reload()">I\u2019ve verified \u2014 check again</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="signOut()">Sign out</button></div>' +
+    '<p style="color:#7A8A9E;font-size:13px;margin-top:14px">Check junk/spam folders. Links are valid for 7 days \u2014 use Resend if one expired.</p>' +
+    '</div>';
+  document.body.appendChild(ov);
+  return true;
+}
+async function evgResend(btn, encEmail, role){
+  btn.disabled = true; btn.textContent = 'Sending\u2026';
+  try {
+    var r = await fetch(API_BASE + '/focms/v1/auth/request-email-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ email: decodeURIComponent(encEmail), subject_role: role })
+    });
+    btn.textContent = r.ok ? 'Sent \u2713' : 'Try again';
+    if (!r.ok) btn.disabled = false;
+  } catch(e){ btn.textContent = 'Try again'; btn.disabled = false; }
+}
 
 /* ===== v140 onboarding wizard ===== */
 function openWizard(step){

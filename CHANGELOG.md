@@ -49,6 +49,26 @@ proving the email fix end-to-end. v0.11.19a also wraps the webhook's three
 token from the welcome email — sign-in with password covers all paths.
 Archive: `webhook_500_rls_root_cause_v0_11_19a`.
 
+### v0.11.20 + portal v282 — the two hard gates (operator decisions, same night)
+
+**Gate 1 — birth certificate verifies BEFORE checkout** (backend v0.11.20):
+the document must pass automated verification (is a certificate, name
+matches, birth date matches, registrar seal, no tamper signs, high
+confidence) before the Stripe session is created. Failing document → 400
+with parent-facing reasons, nothing charged; checker unavailable → 503
+fail-closed. Passing verdicts are parked; the webhook stores the document
+`verified` with the 10-year tenant flag; the post-provision AI check is a
+legacy fallback only. Requires a vision/LLM API key on Render — without
+one, all under-18 signups 503.
+
+**Gate 2 — both emails verify before the portal opens** (backend v0.11.20 +
+portal v282): student email required at signup from age 13 (COPPA boundary;
+younger children are covered by the parent verification). New
+`GET auth/email-verification-status`; the portal shows a blocking overlay
+listing every address with live status and per-address Resend, fail-open on
+endpoint errors, and only fires the onboarding wizard once every address is
+confirmed.
+
 ---
 
 ## 2026-07-19 — Six-org parity, age-tiered access, live billing, security hardening

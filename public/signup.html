@@ -71,8 +71,8 @@ a{color:var(--orange)}
       <div><label>First name</label><input id="f-sfirst"></div>
       <div><label>Last name</label><input id="f-slast"></div>
     </div>
-    <label>Student email (optional — school-issued preferred)</label>
-    <input id="f-semail" type="email" placeholder="For free access, we confirm both parent and student emails">
+    <label>Student email (required from age 13 — school-issued preferred)</label>
+    <input id="f-semail" type="email" placeholder="We verify both parent and student emails after signup">
     <div class="row">
       <div><label>Birth date</label>
         <input id="f-sbdate" type="date"></div>
@@ -270,6 +270,7 @@ document.getElementById('f-go').onclick = async function(){
   }
   if(!body.accept_user_agreement||!body.accept_privacy_policy){ err.textContent='Both agreements must be accepted.'; err.style.display='block'; return; }
   if(_age<18){
+    if(_age>=13 && !body.student_email){ err.textContent='For students 13 and older, enter the student\u2019s email \u2014 both the parent and student addresses are verified after signup.'; err.style.display='block'; return; }
     if(!BC_DATA){ err.textContent='Upload the student\u2019s birth certificate \u2014 we verify the birth date because it sets pricing, privacy protections, and student access.'; err.style.display='block'; return; }
     body.birth_certificate_b64=BC_DATA.b64; body.birth_certificate_mime=BC_DATA.mime; body.birth_certificate_filename=BC_DATA.name;
   }
