@@ -1,3 +1,72 @@
+/* ===========================================================================
+ * portal.js — outcomestar.app family portal (single-file client).
+ * Loaded by portal.html with a ?v=N cache-buster that MUST be bumped on every
+ * release. Deployed file is byte-identical to public/portal.js in
+ * srjordan6/outcomestar-marketing.
+ *
+ * CHANGELOG — 2026-07-19 session (v259 → v281)
+ *
+ * v281 · Documentation: this header block added (the file previously carried
+ *        only inline // vNNN comments and no changelog).
+ * v280 · Billing entrance consolidated to ONE surface: top-nav "Billing & Plan"
+ *        link removed, the Storage & Billing pillar card is the only entry,
+ *        page header renamed to match. "Update payment method · invoices ·
+ *        cancel" button is now ALWAYS shown (was gated on having a
+ *        subscription) and calls billing/portal-session-v2, which creates the
+ *        Stripe customer on demand — so a card can be added before any
+ *        purchase. Checkout return toasts retained.
+ * v279 · Two billing systems consolidated. The pre-existing Storage & Billing
+ *        page (auth/pricing + auth/billing-session, its own plan keys and
+ *        pricing that CONTRADICTED the canonical sheet — $13/yr vs $11.99)
+ *        now delegates to billingShow. startCheckout/openBillingPortal remain
+ *        but unreferenced; the auth/billing-* endpoints stay live and unlinked
+ *        pending a coordinated backend consolidation. Customer-facing copy
+ *        from the retired page (annual renewal, 90-day grace before any file
+ *        deletion, records never deleted, free ZIP export) merged into the
+ *        surviving page.
+ * v278 · FIX for the billing blank page: portal views toggle via the .hidden
+ *        CSS class, but billingShow set inline style.display, so the page
+ *        rendered fully into a zero-height invisible container. Now mirrors
+ *        pillar navigation exactly (classList + inline reset). Lesson: match
+ *        the codebase's existing show/hide mechanism, never add a parallel one.
+ * v277 · billingShow wrapped so ANY failure renders a visible on-page panel +
+ *        toast instead of a silent no-op (visible-diagnostics rule); clears
+ *        the breadcrumb slot and scrolls to top.
+ * v276 · Billing & Plan UI: current-plan card, plan + storage add-on grids with
+ *        Choose/Switch → Stripe Checkout, Manage-billing → Stripe customer
+ *        portal, ?billing=success|cancelled toasts, graceful "payments being
+ *        set up" state before Stripe keys exist.
+ * v275 · 30-minute inactivity timeout: passive listeners refresh the clock,
+ *        60-second sweep signs out an idle session (sessionStorage cleared,
+ *        reload) and the login screen shows an explanatory toast. Clock
+ *        persists across tab reopen within the browser session.
+ * v274 · Young Marines: 6-division block, ranks + trainings catalogs, profile
+ *        keys. (Division labels APPROXIMATE — verify against youngmarines.org.)
+ * v273 · JROTC parity: 6-branch block with SAI/SNSI/SMI/SASI contacts and 64
+ *        ranks across Army/Navy/Marine/Air Force ladders.
+ * v272 · Civil Air Patrol: 8 regions, 52 wings, group/squadron/type/CAP ID.
+ * v271 · Girl Scouts full parity: levels, 112 GSUSA councils, troop + Service
+ *        Unit, awards field (Gold/Silver/Bronze, Journeys), 12 positions,
+ *        100-skill pool, camping + leadership cards extended to GSA.
+ * v270 · BSA council dropdown: 236 councils in 52 state groups, scraped and
+ *        disambiguated by HQ city. Re-sync each January with badge refresh.
+ * v269 · BSA Council Service Territory dropdown (16 territories w/ coverage).
+ * v268 · BSA unit contacts (Scoutmaster + unit phone/email/website).
+ * v267 · BSA 100-skill blueprint wired into every BSA editor.
+ * v266 · Dedupe: org-name field hidden (not removed — removal would clobber
+ *        custom names on save) for known programs; duplicate position picker
+ *        removed from the BSA block.
+ * v265 · Leadership Positions card (17 BSA positions + tenure hints for Star/
+ *        Life/Eagle requirements).
+ * v264 · Scout Profile card display-only and hidden when empty.
+ * v263 · Camping card (nights, miles, service hours — feeds badge + OA needs).
+ * v262 · BSA unit structure on the entry editor (unit type, troop, patrol,
+ *        chartered org, district, council, territory, member ID).
+ * v261 · Per-org profile cards + org-profile save endpoint.
+ * v260 · Training & Service Hours log: Training vs Service Project entry types,
+ *        per-org rank/badge/award pickers, 141 merit badges.
+ * v259 · Extracurricular section photo (purpose-keyed media).
+ * ======================================================================== */
 let SUBJECT_CATALOG = [];
 const API_BASE   = "https://focms-api.onrender.com";
 let TENANT_ID  = "019ed384-56fc-7516-bfbf-efaa5231e281";   // resolved from token at startup (v140)
