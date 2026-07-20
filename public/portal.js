@@ -2114,6 +2114,10 @@ function ecSwimContext() {
   var isCap = /civil air patrol|\(cap\)/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
   var capw = document.getElementById('cap-wrap');
   if (capw) capw.style.display = isCap ? '' : 'none';
+  // v273: JROTC live-detect
+  var isJrotc = /jrotc|junior rotc|junior reserve officer/i.test(title + ' ' + ((orgIn && orgIn.value) || ''));
+  var jwrap = document.getElementById('jrotc-wrap');
+  if (jwrap) jwrap.style.display = isJrotc ? '' : 'none';
   // v266: org programs always use the program name - hide the duplicate field
   var onw = document.getElementById('ec-orgname-wrap');
   if (onw && progSel) onw.style.display = LM_ORGS[progSel.value] ? 'none' : '';
@@ -3235,6 +3239,23 @@ function lmOrgRankField(ranks, val, orgLabel) {
     }).join('') + '</optgroup></select></label>' +
     '<div id="lm-rank-desc" class="ec-notes" style="margin-top:2px"></div>';
 }
+/* v273: JROTC cadet rank ladders per branch - rendered as optgroups on the
+   rank form, the Sea Cadets NLCC/NSCC dual-track pattern. Space Force units
+   use the AFJROTC ladder; Coast Guard units use the NJROTC ladder. */
+var JROTC_RANKS_G = [
+  ['Army JROTC', ['Cadet Private (C/PVT)', 'Cadet Private Second Class (C/PV2)', 'Cadet Private First Class (C/PFC)', 'Cadet Corporal (C/CPL)', 'Cadet Sergeant (C/SGT)', 'Cadet Staff Sergeant (C/SSG)', 'Cadet Sergeant First Class (C/SFC)', 'Cadet Master Sergeant (C/MSG)', 'Cadet First Sergeant (C/1SG)', 'Cadet Sergeant Major (C/SGM)', 'Cadet Command Sergeant Major (C/CSM)', 'Cadet Second Lieutenant (C/2LT)', 'Cadet First Lieutenant (C/1LT)', 'Cadet Captain (C/CPT)', 'Cadet Major (C/MAJ)', 'Cadet Lieutenant Colonel (C/LTC)', 'Cadet Colonel (C/COL)']],
+  ['Navy JROTC (NJROTC)', ['Cadet Seaman Recruit', 'Cadet Seaman Apprentice', 'Cadet Seaman', 'Cadet Petty Officer 3rd Class', 'Cadet Petty Officer 2nd Class', 'Cadet Petty Officer 1st Class', 'Cadet Chief Petty Officer', 'Cadet Senior Chief Petty Officer', 'Cadet Master Chief Petty Officer', 'Cadet Ensign', 'Cadet Lieutenant Junior Grade', 'Cadet Lieutenant', 'Cadet Lieutenant Commander', 'Cadet Commander', 'Cadet Captain']],
+  ['Marine Corps JROTC (MCJROTC)', ['Cadet Private (C/Pvt)', 'Cadet Private First Class (C/PFC)', 'Cadet Lance Corporal (C/LCpl)', 'Cadet Corporal (C/Cpl)', 'Cadet Sergeant (C/Sgt)', 'Cadet Staff Sergeant (C/SSgt)', 'Cadet Gunnery Sergeant (C/GySgt)', 'Cadet Master Sergeant (C/MSgt)', 'Cadet First Sergeant (C/1stSgt)', 'Cadet Master Gunnery Sergeant (C/MGySgt)', 'Cadet Sergeant Major (C/SgtMaj)', 'Cadet Second Lieutenant (C/2ndLt)', 'Cadet First Lieutenant (C/1stLt)', 'Cadet Captain (C/Capt)', 'Cadet Major (C/Maj)', 'Cadet Lieutenant Colonel (C/LtCol)', 'Cadet Colonel (C/Col)']],
+  ['Air Force JROTC (AFJROTC)', ['Cadet Airman Basic (C/AB)', 'Cadet Airman (C/Amn)', 'Cadet Airman First Class (C/A1C)', 'Cadet Senior Airman (C/SrA)', 'Cadet Staff Sergeant (C/SSgt)', 'Cadet Technical Sergeant (C/TSgt)', 'Cadet Master Sergeant (C/MSgt)', 'Cadet Senior Master Sergeant (C/SMSgt)', 'Cadet Chief Master Sergeant (C/CMSgt)', 'Cadet Second Lieutenant (C/2d Lt)', 'Cadet First Lieutenant (C/1st Lt)', 'Cadet Captain (C/Capt)', 'Cadet Major (C/Maj)', 'Cadet Lieutenant Colonel (C/Lt Col)', 'Cadet Colonel (C/Col)']]
+];
+function jrotcRankField(val) {
+  return '<label class="ec-lbl">Cadet rank *<select class="ec-in" id="lm-title"><option value=""></option>' +
+    JROTC_RANKS_G.map(function(g){
+      return '<optgroup label="' + g[0] + '">' + g[1].map(function(r){
+        return '<option' + (val === r ? ' selected' : '') + '>' + escapeHTML(r) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('') + '</select></label>';
+}
 var GSA_AWARDS_G = ['Gold Award', 'Silver Award', 'Bronze Award', 'Journey Summit Award', 'Community Service Bar', 'Service to Girl Scouting Bar', 'My Promise, My Faith Pin', 'Cookie Entrepreneur Family Pin', 'Safety Award'];
 function lmAwardField(awards, val) {
   // v271: highest awards + recognitions dropdown with free-text Other,
@@ -3271,6 +3292,9 @@ function lmKindSwitch() {
   const isCadet = !!(document.getElementById('lm-cadet-flag') || {}).textContent;
   const k = (document.getElementById('lm-kind') || {}).value || 'rank';
   const cur = (document.getElementById('lm-title') || {}).value || '';
+  if (k === 'rank' && LM_CTX.jrotcRanks) {      // v273: per-branch ladders
+    wrap.innerHTML = jrotcRankField(cur); return;
+  }
   if (k === 'rank' && LM_CTX.ranks) {           // v260: org ladder
     wrap.innerHTML = lmOrgRankField(LM_CTX.ranks, cur, LM_CTX.rankLabel || 'Ranks');
     lmRankDescWire(); return;
@@ -3303,7 +3327,7 @@ async function lmEdit(id, presetKind) {
   const lmIsCadet = /sea cadet|usnscc|naval sea/i.test((_a.organization_name || '') + ' ' + (_prog.title || ''));
   // v260: org context - trainings + rank ladders + (bsa) badge roster
   const lmOrg = LM_ORGS[ENTRY_VIEW.code] ? ENTRY_VIEW.code : (lmIsCadet ? 'usnscc' : null);
-  LM_CTX = { org: lmOrg, ranks: null, badges: null, rankLabel: '' };
+  LM_CTX = { org: lmOrg, ranks: null, badges: null, awards: null, jrotcRanks: false, rankLabel: '' };
   let _tCat = null;
   if (isTraining && lmOrg === 'usnscc') _tCat = await loadCadetTrainings();
   else if (isTraining && lmOrg) {
@@ -3317,6 +3341,7 @@ async function lmEdit(id, presetKind) {
     LM_CTX.ranks = await loadOrgRanks(lmOrg);
     LM_CTX.rankLabel = lmOrg === 'bsa' ? 'The 7 BSA Ranks' : (lmOrg === 'gsa' ? 'The 6 Girl Scout Levels' : (_prog.title || 'Ranks'));
     if (lmOrg === 'gsa') LM_CTX.awards = GSA_AWARDS_G;  // v271
+    if (lmOrg === 'jrotc') LM_CTX.jrotcRanks = true;    // v273: per-branch optgroups
     if (lmOrg === 'bsa') {
       const oc2 = await loadOrgTrainings('bsa');
       if (oc2) LM_CTX.badges = oc2.titles
@@ -3339,7 +3364,8 @@ async function lmEdit(id, presetKind) {
     '<div id="lm-title-wrap"' + (isSvc ? ' style="display:none"' : '') + '>' +
       (isTraining
         ? (_tCat ? lmTrainingField(_tCat, isSvc ? '' : p.title) : lmTitleField(true, false, isSvc ? '' : p.title))
-        : (LM_CTX.ranks && kind === 'rank' ? lmOrgRankField(LM_CTX.ranks, p.title, LM_CTX.rankLabel)
+        : (LM_CTX.jrotcRanks && kind === 'rank' ? jrotcRankField(p.title)
+          : LM_CTX.ranks && kind === 'rank' ? lmOrgRankField(LM_CTX.ranks, p.title, LM_CTX.rankLabel)
           : LM_CTX.badges && kind === 'merit_badge' ? lmBadgeField(LM_CTX.badges, p.title)
           : LM_CTX.awards && kind === 'award' ? lmAwardField(LM_CTX.awards, p.title)
           : lmTitleField(false, (kind === 'rank' && lmIsCadet), p.title))) + '</div>' +
@@ -3939,6 +3965,27 @@ function ecEdit(id, presetProgCode) {
       '</select></label>' +
       ecField('cap_cap_id', 'CAP ID number', dd.cap_cap_id)) +
     '</div>';
+  // v273: JROTC organized like Sea Cadets - branch-scoped unit structure with
+  // instructor + unit contacts and the meeting/drill schedule. Space Force
+  // units follow the Air Force ladder; Coast Guard units follow the Navy one.
+  const isJrotcAffil = /jrotc|junior rotc|junior reserve officer/i.test((a.organization_name || '') + ' ' + ((_prog && _prog.title) || ''));
+  const JROTC_BRANCHES = ['Army JROTC', 'Navy JROTC (NJROTC)', 'Marine Corps JROTC (MCJROTC)', 'Air Force JROTC (AFJROTC)', 'Space Force JROTC (follows AFJROTC)', 'Coast Guard JROTC (follows NJROTC)'];
+  const jrotcBlock =
+    '<div id="jrotc-wrap" style="' + (isJrotcAffil ? '' : 'display:none') + '">' +
+    _cadetFormCard('JROTC Unit Information', 'Branch \u203a School unit \u203a Company / Flight / Platoon',
+      '<label class="ec-lbl">Branch<select class="ec-in" data-k="jrotc_branch"><option value=""></option>' +
+      JROTC_BRANCHES.map(function(t){ return '<option' + (dd.jrotc_branch === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+      '</select></label>' +
+      ecRowTwo(ecField('jrotc_unit', 'Unit / school', dd.jrotc_unit),
+               ecField('jrotc_company', 'Company / flight / platoon', dd.jrotc_company)) +
+      ecField('jrotc_period', 'Class period / drill schedule', dd.jrotc_period) +
+      '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Instructor & unit contacts</div>' +
+      ecRowTwo(ecField('jrotc_instructor', 'Senior Instructor (SAI / SNSI / SMI / SASI)', dd.jrotc_instructor),
+               ecField('jrotc_instructor_phone', 'Instructor phone', dd.jrotc_instructor_phone)) +
+      ecField('jrotc_instructor_email', 'Instructor email', dd.jrotc_instructor_email) +
+      ecRowTwo(ecField('jrotc_unit_phone', 'Unit phone', dd.jrotc_unit_phone),
+               ecField('jrotc_unit_email', 'Unit email', dd.jrotc_unit_email))) +
+    '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
     (showPicker ? ecProgramPicker(a) : ecField('organization_name', 'Organization name', a.organization_name, true)) +
     usaBlock +
@@ -3946,6 +3993,7 @@ function ecEdit(id, presetProgCode) {
     bsaBlock +
     gsaBlock +
     capBlock +
+    jrotcBlock +
     ecField('role', 'Role or activity', a.role) +
     ecRowTwo(ecField('role_start_date', 'Start date', a.role_start_date, false, 'date'),
              ecField('role_end_date', 'End date (blank = present)', a.role_end_date, false, 'date')) +
@@ -4058,6 +4106,18 @@ async function ecSave(id) {
     var _capd = {};
     _capKeys.forEach(function(k){ if (item[k] !== undefined) _capd[k] = item[k] || ''; delete item[k]; });
     item.details = Object.assign({}, item.details || {}, _capd);
+  }
+  // v273: JROTC keys live in details JSONB; drop them when the block is hidden
+  var _jWrap = document.getElementById('jrotc-wrap');
+  var _jKeys = ['jrotc_branch', 'jrotc_unit', 'jrotc_company', 'jrotc_period',
+                'jrotc_instructor', 'jrotc_instructor_phone', 'jrotc_instructor_email',
+                'jrotc_unit_phone', 'jrotc_unit_email'];
+  if (!_jWrap || _jWrap.style.display === 'none') {
+    _jKeys.forEach(function(k){ delete item[k]; });
+  } else {
+    var _jd = {};
+    _jKeys.forEach(function(k){ if (item[k] !== undefined) _jd[k] = item[k] || ''; delete item[k]; });
+    item.details = Object.assign({}, item.details || {}, _jd);
   }
   // v247: organization location via the standard block - runs whenever the
   // block is present (non-cadet forms; cadet forms omit it, drill is canonical).
@@ -10088,8 +10148,11 @@ var ORG_PROFILE_DEFS = {
     ['cap_region', 'Region'], ['cap_wing', 'Wing'], ['cap_group', 'Group'],
     ['cap_squadron', 'Squadron'], ['cap_squadron_type', 'Squadron type'], ['cap_cap_id', 'CAP ID'] ] },
   jrotc: { title: 'Cadet Profile', fields: [
-    ['jrotc_branch', 'Branch (Army / Navy / Air Force / Marine Corps / Space Force / Coast Guard)'],
-    ['jrotc_unit', 'Unit / school'], ['jrotc_company', 'Company / flight / platoon'] ] }
+    ['jrotc_branch', 'Branch'], ['jrotc_unit', 'Unit / school'],
+    ['jrotc_company', 'Company / flight / platoon'], ['jrotc_period', 'Class period / drill schedule'],
+    ['jrotc_instructor', 'Senior Instructor'], ['jrotc_instructor_phone', 'Instructor phone'],
+    ['jrotc_instructor_email', 'Instructor email'], ['jrotc_unit_phone', 'Unit phone'],
+    ['jrotc_unit_email', 'Unit email'] ] }
 };
 function orgProfileCard(a, org, latestRank) {
   // v264: display-only, sourced from the entry's details (edited via the main
