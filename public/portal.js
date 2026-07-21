@@ -2506,6 +2506,20 @@ async function saveSkills() {
 
 
 /* ============ v27: Extra Curricular (affiliations) ============ */
+function isAcademicTutoring(a) {
+  // v299: single definition of "this affiliation is really tutoring". Private
+  // tutoring is bought FROM a school and is coursework, so a 20-pack at Fusion
+  // Academy was surfacing next to Scouts and orchestra camp. It belongs under
+  // Academics > Tutoring.
+  // NOTE: this filters the VISIBLE Extracurricular lists only - EC_DATA itself
+  // stays complete, because ecEdit() and renderEntryDetail() resolve records
+  // out of it and a filtered array would make tutoring impossible to open.
+  const d = (a && a.details) || {};
+  return d.program_code === 'private_tutoring' ||
+         (String(d.pillar || '').toLowerCase() === 'academics' &&
+          String(d.sub_pillar || '').toLowerCase() === 'tutoring');
+}
+
 let EC_DATA = [];
 let EC_FILTER = null;
 
@@ -3438,7 +3452,7 @@ function renderProgramEntries(catCode, progCode) {
   ENTRY_VIEW = null;
   CAT_FILTER = CAT_MAP[catCode];
   const prog = (EC_PROGRAMS || []).find(p => p.code === progCode);
-  const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog);
+  const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && progForAffil(a) === prog && !isAcademicTutoring(a));
   const t = EC_SECTIONS.find(x => x.code === catCode);
   const isArts = !!(prog && prog.category === 'Creative, Visual & Performing Arts');
   const isLead = !!(prog && prog.category === 'Leadership, Civic & Career Prep');
@@ -3995,7 +4009,7 @@ async function perfDelete(id) {
 
 function renderUnassignedList() {
   PROG_VIEW = null; ENTRY_VIEW = null; CAT_FILTER = null; EC_VIEW = 'unassigned'; EC_FILTER = 'program';
-  const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && !progForAffil(a));
+  const rows = EC_DATA.filter(a => a.affiliation_type !== 'coach_relationship' && !progForAffil(a) && !isAcademicTutoring(a));
   let html = ecCrumbHtml([{ label: 'Extracurricular', go: 'renderEcSections()' }, { label: 'Needs a program' }]) +
     '<div class="ec-bar"><button class="save-btn save-btn-ghost" onclick="renderEcSections()">Back to sections</button></div>' +
     '<div class="cr-waiting">Open each entry (Edit) and pick its program so it shows in the right category.</div>';
@@ -4088,7 +4102,7 @@ function sessionEditPrefilled(code) {
 
 function renderEcTypes() {
   const counts = {}; for (const t of EC_AFFIL_TYPES) counts[t.code] = 0;
-  for (const a of EC_DATA) if (counts[a.affiliation_type] != null) counts[a.affiliation_type]++;
+  for (const a of EC_DATA) if (counts[a.affiliation_type] != null && !isAcademicTutoring(a)) counts[a.affiliation_type]++;
   const cards = EC_AFFIL_TYPES.map(t =>
     `<button class="ec-card" onclick="openEcType('${t.code}')">
        <div><div class="ec-name">${t.label}</div><div class="ec-desc">${t.desc}</div></div>
@@ -4849,7 +4863,7 @@ function renderAcadBands() {
     '</button>' +
     '<button class="ec-card" onclick="openTutoring()">' +
       '<div><div class="ec-name">Private Tutoring</div><div class="ec-desc">Subject, tutor, school year, description, skills gained, grade or certificate of completion</div></div>' +
-      '<div class="ec-count">' + (TUTORING.length || '—') + ' <span>on file</span></div>' +
+      '<div class="ec-count">' + ((TUTORING.length + TUTOR_PROGRAMS.length) || '—') + ' <span>on file</span></div>' +
     '</button>';
   const step3cards =
     '<button class="ec-card" onclick="openReportCards(null)">' +
@@ -5362,11 +5376,53 @@ async function courseDelete(id) {
    parent enters (subject, course, description, skills) feeds the skill inventory
    and the meta-skill inference engine (rule R11). Meta-skills stay internal-only. */
 let TUTORING = [];
+let TUTOR_PROGRAMS = [];
 
 async function loadTutoring() {
   const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/courses');
   TUTORING = (d.courses || []).filter(c => c.is_private_tutoring);
+  // v299: tutoring bought as a package from a school lives in affiliations with
+  // its sessions as events, not in `courses`. Both are private tutoring, so the
+  // Tutoring page reads both rather than showing half the picture.
+  try {
+    const a = await apiGet('/focms/v1/student/' + STUDENT_ID + '/affiliations');
+    TUTOR_PROGRAMS = (a.affiliations || []).filter(isAcademicTutoring);
+  } catch (e) { TUTOR_PROGRAMS = []; }
   return TUTORING;
+}
+
+function tutorProgramRow(a) {
+  const d = a.details || {};
+  const school = d.school_name || a.organization_name || '';
+  const sessions = (d.sessions_attended_to_date != null && d.session_count_total != null)
+    ? d.sessions_attended_to_date + ' of ' + d.session_count_total + ' sessions'
+    : '';
+  const teacher = d.lead_teacher ? d.lead_teacher + (d.lead_teacher_role ? ' \u00b7 ' + d.lead_teacher_role : '') : '';
+  const meta = [school, sessions, teacher].filter(Boolean).join(' \u00b7 ');
+  const nces = d.nces_school_id ? '<div class="ec-meta">NCES School ID: ' + escapeHTML(d.nces_school_id) + '</div>' : '';
+  return '<div class="ec-row"><div>' +
+    '<div class="ec-title">' + escapeHTML(d.program_name || a.organization_name || 'Tutoring program') +
+      ' <span class="pillar-badge">Tutoring</span></div>' +
+    '<div class="ec-meta">' + escapeHTML(meta) + '</div>' + nces +
+    (d.session_format ? '<div class="ec-meta">' + escapeHTML(d.session_format) + '</div>' : '') +
+    '</div><div class="ec-actions">' +
+    '<button onclick="tutorOpenProgram(\'' + a.id + '\')">Open</button>' +
+    '</div></div>';
+}
+
+async function tutorOpenProgram(id) {
+  // v299: the tutoring program is an affiliation, and ecEdit() resolves it from
+  // EC_DATA - which is only populated once the Extracurricular pillar has been
+  // opened. Coming straight from Academics that array is empty, so load it here
+  // before handing off.
+  if (!EC_DATA.length) {
+    try {
+      const af = await apiGet('/focms/v1/student/' + STUDENT_ID + '/affiliations');
+      EC_DATA = af.affiliations || [];
+      await Promise.all([ecLoadPrograms(), ecLoadSkills()]);
+    } catch (e) { showToast('Could not open: ' + e.message, 'error'); return; }
+  }
+  ecEdit(id);
 }
 
 async function openTutoring() {
@@ -5387,8 +5443,8 @@ function renderTutoringList() {
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>' +
     '<div class="ec-desc" style="margin-bottom:10px">Private tutoring, coaching, and one-to-one instruction \u2014 tracked alongside school coursework.</div>';
-  if (!TUTORING.length) html += '<div class="cr-waiting">No private tutoring logged yet.</div>';
-  else html += TUTORING.map(tutorRow).join('');
+  if (!TUTORING.length && !TUTOR_PROGRAMS.length) html += '<div class="cr-waiting">No private tutoring logged yet.</div>';
+  else html += TUTOR_PROGRAMS.map(tutorProgramRow).join('') + TUTORING.map(tutorRow).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
 
@@ -5416,38 +5472,50 @@ async function tutorEdit(id) {
   if (!SUBJECT_CATALOG.length) {
     try { const d = await apiGet('/focms/v1/catalogs/subjects'); SUBJECT_CATALOG = d.subjects || []; } catch (e) {}
   }
+  // v300: the 1,791-course catalog and the teacher registry drive this form now,
+  // so both have to be in memory before it renders.
+  try { await bkLoadAllCourses(); } catch (e) {}
+  if (!(typeof TEACHERS !== 'undefined' && TEACHERS && TEACHERS.length)) {
+    try { const t = await apiGet('/focms/v1/student/' + STUDENT_ID + '/teachers'); TEACHERS = t.teachers || []; } catch (e) {}
+  }
   if (!(typeof SKILLS_CATALOG !== 'undefined' && SKILLS_CATALOG && SKILLS_CATALOG.length)) {
     try { const sk = await apiGet('/focms/v1/skills-catalog'); SKILLS_CATALOG = sk.skills || []; } catch (e) {}
   }
   const c = id ? TUTORING.find(x => x.id === id) : {};
   if (!c) return;
   const sch = CURRENT_SCHOOL || {};
-  const subjOpts = '<option value="">-- pick a subject --</option>' +
-    (SUBJECT_CATALOG || []).map(s => '<option value="' + s.code + '"' +
-      (c.subject === s.code ? ' selected' : '') + '>' + escapeHTML(s.title) + '</option>').join('') +
-    '<option value="other"' + (c.subject === 'other' ? ' selected' : '') + '>Other</option>';
   const gradeOpts = '<option value="">-- grade level --</option>' +
     [0,1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
       '<option value="' + n + '"' + (c.grade_level == n ? ' selected' : '') + '>' +
       (n === 0 ? 'Kindergarten' : 'Grade ' + n) + '</option>').join('');
+  const tutFree = !!(c.course_name && !c.sced_code);
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
             { label: 'Tutoring', go: 'renderTutoringList()' },
             { label: id ? (c.course_name || 'Edit') : 'Add tutoring' }]) +
     '<input type="hidden" class="ec-in" data-k="course_type" value="private_tutoring">' +
-    ecField('course_name', 'Course / tutoring focus', c.course_name, true) +
-    ecRowTwo(
-      '<label class="ec-lbl">Subject *<select class="ec-in" data-k="subject">' + subjOpts + '</select></label>',
-      '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts + '</select></label>') +
-    ecField('subject_other', 'If Other, name the subject', c.subject_other) +
+    // v300: ONE course dropdown off the same catalog the course grid uses, and
+    // the subject is DERIVED from the course. The old free-text focus box, the
+    // separate Subject select, the "if Other, name the subject" field and the
+    // "Subject / course description" textarea all asked for the same fact in
+    // four different ways; free text now appears only if the course isn't listed.
+    '<label class="ec-lbl">Course / tutoring focus *' +
+      '<select class="ec-in" id="tut-course" onchange="tutCoursePick(this.value)">' +
+        bkCourseOptions(c.sced_code || '', tutFree) + '</select>' +
+      '<input class="ec-in" data-k="course_name" id="tut-name" type="text" ' +
+        'placeholder="Type the tutoring focus" style="margin-top:6px;' + (tutFree ? '' : 'display:none') + '" ' +
+        'value="' + escapeHTML(c.course_name || '') + '">' +
+      '<input type="hidden" class="ec-in" data-k="sced_code" id="tut-sced" value="' + escapeHTML(c.sced_code || '') + '">' +
+      '<input type="hidden" class="ec-in" data-k="subject" id="tut-subject" value="' + escapeHTML(c.subject || '') + '">' +
+    '</label>' +
+    '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts + '</select></label>' +
     schoolChoiceField({ key: 'school_name', label: 'School / tutoring provider', value: c.school_name || (sch.school_name || ''), school_id: c.school_id }) +
+    teacherPickerField(c) +
     ecRowTwo(
-      ecField('teacher_name', 'Teacher / tutor', c.teacher_name),
-      ecField('teacher_email', 'Teacher / tutor email', c.teacher_email, false, 'email')) +
-    ecRowTwo(
-      ecField('school_year', 'School year (e.g. 2025-2026)', c.school_year),
-      ecField('term', 'Term (optional)', c.term)) +
-    ecArea('course_description', 'Subject / course description', c.course_description) +
+      '<label class="ec-lbl">School year<select class="ec-in" data-k="school_year">' + schoolYearOpts(c.school_year) + '</select></label>',
+      '<label class="ec-lbl">Term<select class="ec-in" data-k="term">' +
+        TERM_OPTS.map(t => '<option value="' + t + '"' + ((c.term || '') === t ? ' selected' : '') + '>' +
+          escapeHTML(t || '-- pick a term --') + '</option>').join('') + '</select></label>') +
     ecRowTwo(
       ecField('grade_received', 'Grade received (if graded)', c.grade_received),
       ecField('completion_award', 'Award / certificate of completion', c.completion_award)) +
@@ -5458,6 +5526,24 @@ async function tutorEdit(id) {
     '<button class="save-btn" onclick="tutorSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openTutoring()">Cancel</button>' +
     '</div></div>';
+}
+
+function tutCoursePick(code) {
+  // v300: mirrors bkCoursePick - the subject is written from the chosen course,
+  // never typed by the parent.
+  const txt = document.getElementById('tut-name');
+  const sced = document.getElementById('tut-sced');
+  const subj = document.getElementById('tut-subject');
+  if (!txt || !sced || !subj) return;
+  if (code === '__other__') {
+    txt.style.display = ''; txt.value = ''; sced.value = ''; subj.value = 'other'; txt.focus();
+    return;
+  }
+  txt.style.display = 'none';
+  const hit = (ALL_COURSES || []).find(function (x) { return x.code === code; });
+  txt.value = hit ? hit.title : '';
+  sced.value = hit ? hit.code : '';
+  subj.value = hit ? hit.subject_code : '';
 }
 
 async function tutorSave(id) {
