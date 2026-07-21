@@ -5799,17 +5799,18 @@ function schoolEdit(id) {
     // has street_address_line_2 - only the form was missing it, so campuses
     // with a suite or building number had nowhere to put it.
     ecField('street_address_line_2', 'Suite / building / unit (optional)', sc.street_address_line_2) +
-    ecRowTwo(
-      '<label class="ec-lbl" id="sc-zip-lbl">Postal code' +
-        '<input class="ec-in" data-k="zip_postal_code" id="sc-zip" type="text" value="' + escapeHTML(sc.zip_postal_code || '') + '"></label>',
-      '<label class="ec-lbl" id="sc-state-lbl">State / Province / Region' +
-        '<span id="sc-state-wrap" data-value="' + escapeHTML(sc.state_province || '') + '">' +
-        '<input class="ec-in" data-k="state_province" id="sc-state" type="text" value="' + escapeHTML(sc.state_province || '') + '">' +
-        '</span></label>'
-    ) +
-    // v305: city gets its own full-width row - squeezed into a third of a row it
-    // truncated on long names, and plenty of them are long once you leave the US.
-    ecField('city_town', 'City', sc.city_town) +
+    // v307: international labels and one field per row, so every box in the block
+    // is the same width. "ZIP" and "State" are US-only words; the US ZIP lookup
+    // is still live, it just says so in a hint instead of in the label.
+    ecField('city_town', 'City / Town', sc.city_town) +
+    '<label class="ec-lbl" id="sc-state-lbl">State / Province / Region' +
+      '<span id="sc-state-wrap" data-value="' + escapeHTML(sc.state_province || '') + '">' +
+      '<input class="ec-in" data-k="state_province" id="sc-state" type="text" value="' + escapeHTML(sc.state_province || '') + '">' +
+      '</span></label>' +
+    '<label class="ec-lbl" id="sc-zip-lbl">Postal code' +
+      '<input class="ec-in" data-k="zip_postal_code" id="sc-zip" type="text" value="' + escapeHTML(sc.zip_postal_code || '') + '">' +
+      '<div class="ec-hint" id="sc-zip-hint" style="display:none">Fills city and state automatically</div>' +
+      '</label>' +
     // v292: phones use the shared intl-tel-input control (country flag + dial
     // code + as-you-type formatting, persisted as E.164 like +19724039018).
     // These four were plain text boxes, which is why a phone could be saved as
@@ -5881,12 +5882,12 @@ async function schoolCountryChange(defaultToHome) {
   const cEl = document.getElementById('sc-country');
   const iso2 = cEl ? (cEl.value || 'US') : 'US';
   const isUS = iso2 === 'US';
-  const zipLbl = document.getElementById('sc-zip-lbl');
-  const stLbl = document.getElementById('sc-state-lbl');
+  const zipHint = document.getElementById('sc-zip-hint');
   const wrap = document.getElementById('sc-state-wrap');
   const zEl = document.getElementById('sc-zip');
-  if (zipLbl && zipLbl.firstChild) zipLbl.firstChild.nodeValue = isUS ? 'ZIP code (fills city + state)' : 'Postal code';
-  if (stLbl && stLbl.firstChild) stLbl.firstChild.nodeValue = isUS ? 'State' : 'State / Province / Region';
+  // v307: the labels stay international. Only the hint changes, because only the
+  // US has the lookup behind it.
+  if (zipHint) zipHint.style.display = isUS ? '' : 'none';
   if (isUS && zEl) {
     attachZipTrio(zEl, byKey('city_town'), document.getElementById('sc-state'), !!defaultToHome);
   }
