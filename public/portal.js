@@ -283,14 +283,16 @@ async function billingShowInner() {
   var html = '';
   if (pmInfo) {
     var ok = !!pmInfo.has_card;
+    var notCfg = pmInfo.configured === false;
     html += '<div style="background:#fff;border:1px solid ' + (ok ? '#E5E7EB' : 'var(--orange)') + ';border-radius:14px;padding:16px 18px;margin-top:12px">' +
       '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Card on file</div>' +
-      '<div class="ec-title">' + (ok ? 'Yes - a card is saved and can be charged' : 'No card saved') + '</div>' +
-      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : '') +
+      '<div class="ec-title">' + (notCfg ? 'Online payments are not configured on this server'
+                                          : (ok ? 'Yes - a card is saved and can be charged' : 'No card saved')) + '</div>' +
+      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '')) +
         (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') + '</div>' +
-      (ok ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the "Update payment method" link goes to the subscription portal, which cannot add a first card.</div>') +
-      '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
-      (ok ? 'Replace card' : 'Add a card') + '</button></div></div>';
+      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the "Update payment method" link goes to the subscription portal, which cannot add a first card.</div>') +
+      (notCfg ? '' : '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
+        (ok ? 'Replace card' : 'Add a card') + '</button></div>') + '</div>';
   }
   html += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
     '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Current plan</div>' +
@@ -343,9 +345,15 @@ async function billingAddCard() {
   try {
     showToast('Opening secure card entry\u2026', 'success');
     var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/setup-session', {});
-    if (d.url) location.href = d.url;
-    else showToast('Card entry unavailable right now', 'error');
-  } catch (e) { showToast(e.message, 'error'); }
+    if (d && d.url) { location.href = d.url; return; }
+    // v318: never fail silently here. A click that appears to do nothing is
+    // the worst possible outcome - show exactly what came back.
+    alert('Card entry did not return a link.\n\nServer replied: ' + JSON.stringify(d));
+  } catch (e) {
+    alert('Could not open the card page.\n\n' + (e && e.message ? e.message : String(e)) +
+          '\n\nbilling_not_configured = Stripe key missing on the server.\n' +
+          '400 / parameter_missing = the backend fix is not deployed yet.');
+  }
 }
 /* v275: 30-minute inactivity timeout. Any interaction (mouse, keys, touch,
    scroll) refreshes the clock; a 60-second sweep signs out an idle session
@@ -8833,20 +8841,36 @@ async function ucaSaveInstance(){
     // card - previously the add-card detour was offered on any payment error,
     // including to people whose card was already on file.
     var hasCard = true;
+    var pmv = null;
     try {
-      const pmv = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/payment-method');
+      pmv = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/payment-method');
       hasCard = !!pmv.has_card;
     } catch (e2) { hasCard = true; }        // unknown -> attempt, let the charge decide
 
     if (!hasCard) {
-      if (confirm('AI generation costs $1.00 + tax and there is no card on file.\n\nAdd a card now? Your draft stays open.')) {
+      // v316b: distinguish "payments are not configured on this deployment"
+      // from "this parent has no card". Both used to read "no card on file",
+      // and the add-card button then failed silently because setup-session
+      // returns 503 when Stripe is not configured.
+      if (pmv && pmv.configured === false) {
+        alert('Online payments are not switched on for this deployment yet, so AI generation cannot be charged.\n\nSaving the free standard resume. (Stripe is not configured on the server.)');
+        showToast('Payments not configured - saved the free standard resume','info');
+        window.__UCAAI = null;
+      } else if (confirm('AI generation costs $1.00 + tax and there is no card on file.\n\nAdd a card now? Your draft stays open.')) {
         try {
           const ss = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/setup-session', {});
           if (ss.url) { location.href = ss.url; return; }
-        } catch (e3) { showToast('Could not open card entry - ' + (e3.message||''), 'error'); }
+          showToast('Card entry did not return a link - payments may not be configured','error');
+        } catch (e3) {
+          // Surface the real reason instead of a dead click.
+          alert('Could not open the card page.\n\n' + (e3.message || 'unknown error') +
+                '\n\nIf this says billing_not_configured, Stripe keys are missing on the server.');
+        }
+        window.__UCAAI = null;
+      } else {
+        showToast('Saving the free standard resume (no charge)','info');
+        window.__UCAAI = null;
       }
-      showToast('Saving the free standard resume (no charge)','info');
-      window.__UCAAI = null;
     } else if (!confirm('Generate the AI-tailored resume now?\n\nThis charges $1.00 + tax to your card on file. Cancel to save the free standard resume instead.')) {
       window.__UCAAI = null;             // fall through and save the free version
     } else {
