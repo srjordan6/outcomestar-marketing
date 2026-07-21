@@ -5523,27 +5523,57 @@ async function tutorEdit(id) {
     '</div></div>';
 }
 
+/* v302: one personnel registry, many roles. `teachers.role` is free text with no
+   CHECK constraint, so adding roles needs no migration. Order is the order the
+   dropdown offers and the order the groups print in. */
+const PERSONNEL_ROLES = [
+  ['teacher', 'Teacher'],
+  ['counselor', 'Counselor'],
+  ['nurse', 'Nurse'],
+  ['assistant_principal', 'Assistant Principal'],
+  ['principal', 'Principal'],
+  ['coach', 'Coach'],
+  ['advisor', 'Advisor']
+];
+
+function personnelRoleLabel(code) {
+  const hit = PERSONNEL_ROLES.find(function (r) { return r[0] === (code || 'teacher'); });
+  return hit ? hit[1] : (code || 'Teacher');
+}
+
 function openSchoolPersonnel() {
   // v301: Teachers and Counselors were two cards over ONE registry - the only
   // difference is role. Merged into School Personnel so a parent doesn't have to
   // know which bucket a person falls in before they can find them.
   const all = tchSort(TEACHERS || []);
-  const teachers = all.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; });
-  const counselors = all.filter(function (t) { return (t.role || 'teacher') === 'counselor'; });
   let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
                      { label: 'School Personnel' }]) +
     '<div class="ec-bar">' +
-    '<button class="save-btn" onclick="TCH_ROLE=\'teacher\';teacherEdit(null)">Add teacher</button>' +
-    '<button class="save-btn" onclick="TCH_ROLE=\'counselor\';teacherEdit(null)">Add counselor</button>' +
+    '<button class="save-btn" onclick="TCH_ROLE=\'\';teacherEdit(null)">Add school personnel</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>' +
     '<div class="ec-desc" style="margin-bottom:10px">Everyone at the school who is named on an application \u2014 entered once, reused across courses, recommendations, and the Common App.</div>';
-  html += '<div class="ec-lbl" style="margin:2px 0 6px">Teachers</div>';
-  html += teachers.length ? teachers.map(teacherRow).join('')
-                          : '<div class="cr-waiting">No teachers yet.</div>';
-  html += '<div class="ec-lbl" style="margin:18px 0 6px">Counselors</div>';
-  html += counselors.length ? counselors.map(teacherRow).join('')
-                            : '<div class="cr-waiting">No counselors yet. The counselor submits the School Report and Mid-Year Report on the Common App.</div>';
+  if (!all.length) {
+    html += '<div class="cr-waiting">No school personnel yet.</div>';
+  } else {
+    // v302: group by role, in PERSONNEL_ROLES order. Anything with an unknown or
+    // missing role still prints, under its own heading - nobody disappears.
+    const seen = {};
+    let first = true;
+    PERSONNEL_ROLES.forEach(function (r) {
+      const rows = all.filter(function (t) { return (t.role || 'teacher') === r[0]; });
+      rows.forEach(function (t) { seen[t.id] = 1; });
+      if (!rows.length) return;
+      html += '<div class="ec-lbl" style="margin:' + (first ? '2px' : '18px') + ' 0 6px">' + r[1] + '</div>';
+      first = false;
+      html += rows.map(teacherRow).join('');
+    });
+    const leftover = all.filter(function (t) { return !seen[t.id]; });
+    if (leftover.length) {
+      html += '<div class="ec-lbl" style="margin:18px 0 6px">Other</div>' +
+              leftover.map(teacherRow).join('');
+    }
+  }
   document.getElementById('sections-container').innerHTML = html;
 }
 
@@ -9074,11 +9104,17 @@ function teacherEdit(id) {
   const t = id ? TEACHERS.find(x => x.id === id) : {};
   if (!t) return;
   if (!t.school_name && CURRENT_SCHOOL && CURRENT_SCHOOL.school_name) t.school_name = CURRENT_SCHOOL.school_name;
+  // v302: role is chosen IN the form, not inferred from which list you came in
+  // through. TCH_ROLE only seeds the default for a brand-new record.
+  const roleSel = t.role || TCH_ROLE || 'teacher';
+  const roleOpts = PERSONNEL_ROLES.map(function (r) {
+    return '<option value="' + r[0] + '"' + (roleSel === r[0] ? ' selected' : '') + '>' + r[1] + '</option>';
+  }).join('');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
-            { label: (t.role === 'counselor' || TCH_ROLE === 'counselor') ? 'Counselors' : 'Teachers',
-              go: (t.role === 'counselor' || TCH_ROLE === 'counselor') ? 'openCounselors()' : 'openTeachers()' },
-            { label: id ? (tchDisplay(t) || 'Edit') : ((t.role === 'counselor' || TCH_ROLE === 'counselor') ? 'Add counselor' : 'Add teacher') }]) +
+            { label: 'School Personnel', go: 'openSchoolPersonnel()' },
+            { label: id ? (tchDisplay(t) || 'Edit') : 'Add school personnel' }]) +
+    '<label class="ec-lbl">Role *<select class="ec-in" data-k="role">' + roleOpts + '</select></label>' +
     ecRowTwo(
       ecField('first_name', 'First name', t.first_name || ((t.teacher_name || '').split(' ')[0] || ''), true),
       ecField('last_name', 'Last name', t.last_name || ((t.teacher_name || '').split(' ').slice(1).join(' ')), true)
@@ -9101,7 +9137,7 @@ function teacherEdit(id) {
     ecArea('notes', 'Notes', t.notes) +
     '<div class="ec-bar">' +
     '<button class="save-btn" onclick="teacherSave(\'' + (id || '') + '\')">Save</button>' +
-    '<button class="save-btn save-btn-ghost" onclick="openTeachers()">Cancel</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="openSchoolPersonnel()">Cancel</button>' +
     (t.teacher_name ? askRecBtn(t.teacher_email, t.teacher_name, 'teacher') : '') +
     '</div></div>';
 }
@@ -9109,8 +9145,8 @@ function teacherEdit(id) {
 async function teacherSave(id) {
   const item = {};
   if (id) item.id = id;
-  // v0.12.121: file the record under whichever list you opened (Teachers or
-  // Counselors). Editing an existing record keeps its own role.
+  // v302: the form carries a Role select (data-k="role"), so the sweep below
+  // sets the role. This is only the fallback for a record saved without one.
   const existing = id ? TEACHERS.find(x => x.id === id) : null;
   item.role = existing ? (existing.role || 'teacher') : (TCH_ROLE || 'teacher');
   document.querySelectorAll('.ec-in').forEach(el => {
@@ -9134,7 +9170,7 @@ async function teacherSave(id) {
   const _fn = (item.first_name || '').trim();
   const _ln = (item.last_name || '').trim();
   if (!_fn && !_ln) {
-    showToast((item.role === 'counselor' ? 'Counselor' : 'Teacher') + ' name required', 'error');
+    showToast(personnelRoleLabel(item.role) + ' name required', 'error');
     return;
   }
   item.teacher_name = [_fn, _ln].filter(Boolean).join(' ');
@@ -9142,17 +9178,19 @@ async function teacherSave(id) {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/teachers', { items: [item] });
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/teachers');
     TEACHERS = d.teachers || [];
-    openTeachers();
+    // v302: return to School Personnel - openTeachers() filters by role, so a
+    // nurse or principal saved here would have vanished from the list.
+    openSchoolPersonnel();
     showToast('Saved', 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
 
 async function teacherDelete(id) {
-  if (!confirm('Delete this teacher?')) return;
+  if (!confirm('Delete this person?')) return;
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/teachers', { delete_ids: [id] });
     TEACHERS = TEACHERS.filter(x => x.id !== id);
-    openTeachers();
+    openSchoolPersonnel();
     showToast('Deleted', 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
