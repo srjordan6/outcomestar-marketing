@@ -884,26 +884,17 @@ function schoolTypeChanged(v) {
   // own lookup, proxied by the API at /catalogs/private-school-search.
   var hint = document.getElementById('school-type-hint');
   var box = document.getElementById('pss-box');
+  var ccd = document.getElementById('ccd-box');
   var isPriv = (v === 'private' || v === 'parochial');
+  // v287: private/parochial replaces the PUBLIC cascade outright rather than
+  // sitting beside it. A private school can never appear in the CCD selects,
+  // and leaving a second free-text name box on screen just asked the same
+  // question twice. The PSS search field below IS the school-name field.
+  if (ccd) ccd.style.display = isPriv ? 'none' : '';
   if (box) box.style.display = isPriv ? 'block' : 'none';
-  // v286: hide the PUBLIC cascade itself when the type is private. Leaving the
-  // country/state/district/school selects on screen was the bug - a private
-  // school can never appear in them, so the parent is asked to drive a picker
-  // guaranteed to fail. The free-text name input (data-k school_name) stays
-  // visible, because that is the field the record is actually saved from.
-  ['.sp-country', '.sp-cascade'].forEach(function (sel) {
-    document.querySelectorAll('#sections-container ' + sel).forEach(function (el) {
-      el.style.display = isPriv ? 'none' : '';
-    });
-  });
-  document.querySelectorAll('#sections-container select[id^="sp"][id$="-school"], ' +
-                            '#sections-container [id^="sp"][id$="-hint"]').forEach(function (el) {
-    el.style.display = isPriv ? 'none' : '';
-  });
   if (!hint) return;
   if (isPriv) {
-    hint.textContent = 'Private and religious schools are not in the public-school directory. ' +
-      'Search the federal private-school survey instead \u2014 or just type the name below.';
+    hint.textContent = '';
   } else if (v === 'home_school' || v === 'correspondence' || v === 'education_provider' || v === 'other') {
     hint.textContent = 'Type the name as it should appear on transcripts and applications.';
   } else {
@@ -914,6 +905,11 @@ function schoolTypeChanged(v) {
 var PSS_LAST = [];
 var PSS_TIMER = null;
 function pssInput(val) {
+  // v287: the search box doubles as the school-name field, so whatever is typed
+  // is already saved even if the federal survey has no match. Picking a result
+  // overwrites it with the official name and fills the address.
+  var nameEl = document.querySelector('.ec-in[data-k="school_name"]');
+  if (nameEl) nameEl.value = val || '';
   if (PSS_TIMER) clearTimeout(PSS_TIMER);
   PSS_TIMER = setTimeout(function () { pssSearch(val); }, 350);
 }
@@ -933,8 +929,8 @@ async function pssSearch(q) {
       encodeURIComponent(q) + (st ? '&state=' + encodeURIComponent(st) : ''));
     const rows = d.schools || [];
     if (!rows.length) {
-      res.innerHTML = '<div class="ec-hint">No match in the federal private-school survey. ' +
-        'Type the name and address by hand \u2014 nothing downstream requires a federal id.</div>';
+      res.innerHTML = '<div class="ec-hint">No match in the federal private-school survey \u2014 ' +
+        'the name you typed is kept as-is. Fill in the address below.</div>';
       return;
     }
     PSS_LAST = rows;
@@ -974,8 +970,24 @@ function pssPick(i) {
   set('zip_postal_code', s.zip_postal_code);
   set('school_phone', s.phone);
   const res = document.getElementById('pss-results');
+  const q = document.getElementById('pss-q');
+  if (q) q.value = s.name;
   if (res) res.innerHTML = '<div class="ec-hint">Filled from the federal private-school survey. ' +
     'Check the address \u2014 campuses move and the survey lags.</div>';
+}
+
+function crumbs(trail) {
+  // v287: breadcrumbs. The Academics flow nests three deep (Academics ->
+  // Schools -> Add school) with no indication of where you are or how to get
+  // back except a lone Cancel button.
+  return '<div class="ec-crumbs" style="margin:0 0 14px;font-size:0.9rem;color:#7A8A9E">' +
+    trail.map(function (t, i) {
+      const last = (i === trail.length - 1);
+      const sep = i ? '<span style="margin:0 8px;color:#7A8A9E">\u203a</span>' : '';
+      if (last || !t.go) return sep + '<span style="color:#201868;font-weight:600">' + escapeHTML(t.label) + '</span>';
+      return sep + '<a href="javascript:void(0)" onclick="' + t.go +
+        '" style="color:#F07800;font-weight:600;text-decoration:none">' + escapeHTML(t.label) + '</a>';
+    }).join('') + '</div>';
 }
 
 function hideSiteBanner() {
@@ -5345,7 +5357,8 @@ async function tutorDelete(id) {
 function openSchoolProfiles() {
   hideSiteBanner();
   const rows = SCHOOLS;
-  let html = '<div class="ec-bar">' +
+  let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' }, { label: 'Schools' }]) +
+    '<div class="ec-bar">' +
     '<button class="save-btn" onclick="schoolEdit(null)">Add school</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>';
@@ -5396,6 +5409,9 @@ function schoolEdit(id) {
   const caf = sc.courses_available_flags || {};
   const flagCode = (k, label) => '<label class="ec-check"><input type="checkbox" class="ec-in" data-caf="' + k + '"' + (caf[k] ? ' checked' : '') + '> ' + label + '</label>';
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+            { label: 'Schools', go: 'openSchoolProfiles()' },
+            { label: id ? (sc.school_name || 'Edit school') : 'Add school' }]) +
     (known && !sc.id
       ? '<div class="ec-hint" style="margin-bottom:8px">District: <b>' + escapeHTML(known.name) +
         '</b> \u2014 already set for this student, so the picker below opens on it. ' +
@@ -5428,12 +5444,20 @@ function schoolEdit(id) {
     // before a name is chosen. The NCES cascade here covers PUBLIC and CHARTER
     // schools (k12_schools is the CCD universe); private and parochial route to
     // the PSS lookup rendered just under it.
+    // v287: the CCD cascade is wrapped so private/parochial can swap it out
+    // wholesale for the PSS lookup rather than stacking two name fields.
+    '<div id="ccd-box">' +
     schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country, state: preState, leaid: sc.school_leaid || preLeaid }) +
+    '</div>' +
     '<div id="school-type-hint" class="ec-hint" style="margin:-4px 0 6px"></div>' +
     // v285: private / parochial lookup, hidden until that type is chosen.
     '<div id="pss-box" style="display:none;margin:0 0 12px">' +
-      '<input class="ec-in" id="pss-q" placeholder="Search private schools by name\u2026" ' +
-        'oninput="pssInput(this.value)" style="width:100%">' +
+      '<label class="ec-lbl">School name' +
+      '<input class="ec-in" id="pss-q" placeholder="Start typing the school name\u2026" ' +
+        'autocomplete="off" oninput="pssInput(this.value)" value="' + escapeHTML(sc.school_name || '') + '">' +
+      '</label>' +
+      '<div class="ec-hint">Matches come from the federal private-school survey. ' +
+        'No match? What you type is still saved.</div>' +
       '<div id="pss-results"></div>' +
     '</div>' +
     ecField('street_address', 'Street address', sc.street_address) +
