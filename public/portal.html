@@ -2,7 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- PWA (2026-07-21): installable to the home screen on iOS and Android. No app
+     store, so no 15-30% commission and no Kids-Category review. viewport-fit=cover
+     stops iOS notch/home-indicator letterboxing in standalone mode. The service
+     worker NEVER caches portal.js or portal.html, so the ?v=N release discipline
+     still governs what a parent actually runs. -->
+<meta name="theme-color" content="#201868">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="outcomestar">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/favicon.svg">
+<script>
+  /* Registered here rather than inside portal.js: portal.js is version-busted on
+     every release, and the worker must not re-register on that cadence. */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+    });
+  }
+</script>
 <title>Family portal · outcomestar</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/intlTelInput.min.js"></script>

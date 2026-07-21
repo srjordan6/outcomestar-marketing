@@ -1,0 +1,29 @@
+{
+  "name": "outcomestar family portal",
+  "short_name": "outcomestar",
+  "description": "Capture and keep your child's permanent record - academics, activities, milestones, and files.",
+  "id": "/portal",
+  "start_url": "/portal",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F4F4F0",
+  "theme_color": "#201868",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log data",
+      "short_name": "Log",
+      "description": "Open the pillar list and log new records",
+      "url": "/portal",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

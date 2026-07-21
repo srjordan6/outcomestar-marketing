@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Offline &middot; outcomestar</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@600&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#201868; --orange:#F07800; --gray:#7A8A9E; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#F4F4F0; font-family:Poppins,system-ui,sans-serif; color:#4A5563; padding:24px; }
+  .card { background:#fff; border:1px solid #E5E7EB; border-radius:16px; padding:32px 28px;
+          max-width:440px; width:100%; text-align:center; box-shadow:0 8px 30px rgba(32,24,104,.06); }
+  h1 { font-family:Lora,serif; color:var(--navy); font-size:22px; margin:0 0 6px; }
+  .rule { width:70px; height:3px; background:var(--orange); margin:0 auto 16px; }
+  p { font-size:14.5px; line-height:1.65; margin:0 0 10px; }
+  .small { color:var(--gray); font-size:13px; margin-top:14px; }
+  button { font-family:Poppins,sans-serif; font-weight:600; font-size:14px; cursor:pointer;
+           background:var(--orange); color:#fff; border:0; border-radius:10px;
+           padding:11px 22px; margin-top:18px; }
+  button:active { transform:translateY(1px); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="/icon-192.png" alt="" width="64" height="64" style="border-radius:14px;margin-bottom:14px">
+    <h1>You're offline</h1>
+    <div class="rule"></div>
+    <p>The portal needs a connection to load and save records &mdash; your child's data lives on the server, not on this device.</p>
+    <p>Nothing you already saved is affected.</p>
+    <button onclick="location.reload()">Try again</button>
+    <div class="small">outcomestar.app</div>
+  </div>
+</body>
+</html>
