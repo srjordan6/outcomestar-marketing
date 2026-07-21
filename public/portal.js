@@ -5799,14 +5799,14 @@ function schoolEdit(id) {
     ecRowTwo(
       '<label class="ec-lbl" id="sc-zip-lbl">Postal code' +
         '<input class="ec-in" data-k="zip_postal_code" id="sc-zip" type="text" value="' + escapeHTML(sc.zip_postal_code || '') + '"></label>',
-      ecRowTwo(
-        ecField('city_town', 'City', sc.city_town),
-        '<label class="ec-lbl" id="sc-state-lbl">State / Province / Region' +
-          '<span id="sc-state-wrap" data-value="' + escapeHTML(sc.state_province || '') + '">' +
-          '<input class="ec-in" data-k="state_province" id="sc-state" type="text" value="' + escapeHTML(sc.state_province || '') + '">' +
-          '</span></label>'
-      )
+      '<label class="ec-lbl" id="sc-state-lbl">State / Province / Region' +
+        '<span id="sc-state-wrap" data-value="' + escapeHTML(sc.state_province || '') + '">' +
+        '<input class="ec-in" data-k="state_province" id="sc-state" type="text" value="' + escapeHTML(sc.state_province || '') + '">' +
+        '</span></label>'
     ) +
+    // v305: city gets its own full-width row - squeezed into a third of a row it
+    // truncated on long names, and plenty of them are long once you leave the US.
+    ecField('city_town', 'City', sc.city_town) +
     // v292: phones use the shared intl-tel-input control (country flag + dial
     // code + as-you-type formatting, persisted as E.164 like +19724039018).
     // These four were plain text boxes, which is why a phone could be saved as
