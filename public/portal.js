@@ -1917,8 +1917,13 @@ function addrInput(pfx, key, val, ph) {
 function addrFields(pfx, a) {
   a = a || {};
   var ctry = a.country || PROFILE_COUNTRY || 'US';
-  return '<div class="field-grid">' +
-    '<div class="field"><label>Postal / ZIP code</label>' + addrInput(pfx, 'zip_postal_code', a.zip_postal_code, 'Start here \u2014 fills city, state, county') + '</div>' +
+  // v310: COUNTRY FIRST, then one field per row. Country decides what every
+  // field below it means, so asking for a postal code before knowing the country
+  // is backwards. Ordering is locality -> administrative area -> postal code,
+  // which is the international convention. This block backs the family
+  // addresses, the EC organization location, the Sea Cadet drill block and the
+  // session/performance loggers - they all inherit this.
+  return '<div class="field-grid" style="grid-template-columns:1fr">' +
     // v297: the Country box pointed at list="country-dl", but no datalist with
     // that id was ever emitted - anywhere. So it rendered as a bare text box
     // with no country list at all, and a parent had to know the exact spelling.
@@ -1934,6 +1939,7 @@ function addrFields(pfx, a) {
     '<div class="field"><label>City / Town</label>' + addrInput(pfx, 'city_town', a.city_town) + '</div>' +
     '<div class="field" id="' + pfx + '-county_wrap" style="display:none"><label>County</label>' + addrInput(pfx, 'county', a.county) + '</div>' +
     '<div class="field"><label>State / Province / Region</label><span id="' + pfx + '-state_wrap" data-value="' + escapeHTML(a.state_province || '') + '"><input id="' + pfx + '-state_province" type="text" value="' + escapeHTML(a.state_province || '') + '"></span></div>' +
+    '<div class="field"><label>Postal code</label>' + addrInput(pfx, 'zip_postal_code', a.zip_postal_code, 'Fills city, state, county in the US') + '</div>' +
     '</div>';
 }
 function addrBlock(pfx, physical, mailing, same) {
@@ -4638,9 +4644,12 @@ function ecIsSchoolProgram(code) {
 }
 
 function ecOrgSchoolOptions(sel) {
+  // v310: option values are ARRAY INDICES, not s.id. The id key name depends on
+  // what /school-profiles returns; if it differs the find() fails silently and
+  // the address simply never prefills - which is exactly what happened.
   return '<option value="">-- pick a school --</option>' +
-    (SCHOOLS || []).map(function (s) {
-      return '<option value="' + escapeHTML(s.id) + '"' +
+    (SCHOOLS || []).map(function (s, i) {
+      return '<option value="' + i + '"' +
         (s.school_name === sel ? ' selected' : '') + '>' + escapeHTML(s.school_name || '') + '</option>';
     }).join('') +
     '<option value="__other__">Not one of these - type a name</option>';
@@ -4668,7 +4677,7 @@ async function ecProgramChanged(code) {
   }
   const cur = (document.querySelector('.ec-in[data-k="organization_name"]') || {}).value || '';
   wrap.innerHTML = '<label class="ec-lbl">School' +
-    '<select id="ec-orgschool" onchange="ecOrgSchoolPick(this.value)">' +
+    '<select class="ec-in" id="ec-orgschool" onchange="ecOrgSchoolPick(this.value)">' +
     ecOrgSchoolOptions(cur) + '</select>' +
     '<div class="ec-hint">Schools come from Academics \u2192 School Profile. Picking one fills the address below.</div>' +
     '</label>';
@@ -4676,30 +4685,31 @@ async function ecProgramChanged(code) {
   if (nameWrap) nameWrap.style.display = 'none';
 }
 
-function ecOrgSchoolPick(schoolId) {
+function ecOrgSchoolPick(idx) {
   const nameWrap = document.getElementById('ec-orgname-wrap');
   const nameEl = document.querySelector('.ec-in[data-k="organization_name"]');
-  if (schoolId === '__other__') {
+  if (idx === '__other__') {
     if (nameWrap) nameWrap.style.display = '';
     if (nameEl) { nameEl.value = ''; nameEl.focus(); }
     return;
   }
-  const s = (SCHOOLS || []).find(function (x) { return String(x.id) === String(schoolId); });
+  const s = (SCHOOLS || [])[parseInt(idx, 10)];
   if (!s) return;
   if (nameEl) nameEl.value = s.school_name || '';
   if (nameWrap) nameWrap.style.display = 'none';
   // v308: prefill the standard location block from the school profile. These are
   // addrFields ids, so it works for whatever country the school carries -
   // onCountryChange rebuilds the region control to match.
-  const set = function (k, v) { const el = document.getElementById('ecorg-' + k); if (el && v) el.value = v; };
+  const set = function (k, v) { const el = document.getElementById('ecorg-' + k); if (el) el.value = v || ''; };
   set('street_address', s.street_address);
   set('street_address_line_2', s.street_address_line_2);
   set('city_town', s.city_town);
   set('zip_postal_code', s.zip_postal_code);
+  set('county', s.county);
   const cEl = document.getElementById('ecorg-country');
   if (cEl) cEl.value = countryName(s.country || 'US');
   const wrap = document.getElementById('ecorg-state_wrap');
-  if (wrap && s.state_province) wrap.setAttribute('data-value', s.state_province);
+  if (wrap) wrap.setAttribute('data-value', s.state_province || '');
   if (typeof onCountryChange === 'function') onCountryChange('ecorg');
 }
 
