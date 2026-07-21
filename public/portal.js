@@ -877,6 +877,100 @@ function pillarCodeToSiteKey(code){
               website:null, apps_docs:null, skills:null };
   return code in map ? map[code] : null;
 }
+function schoolTypeChanged(v) {
+  // v285: PUBLIC and CHARTER resolve through the NCES Common Core of Data
+  // cascade (k12_schools). PRIVATE and PAROCHIAL are a different federal
+  // survey entirely - the Private School Universe Survey - so they get their
+  // own lookup, proxied by the API at /catalogs/private-school-search.
+  var hint = document.getElementById('school-type-hint');
+  var box = document.getElementById('pss-box');
+  var isPriv = (v === 'private' || v === 'parochial');
+  if (box) box.style.display = isPriv ? 'block' : 'none';
+  if (!hint) return;
+  if (isPriv) {
+    hint.textContent = 'Private and religious schools are not in the public-school directory above. ' +
+      'Search the federal private-school survey instead:';
+  } else if (v === 'home_school' || v === 'correspondence' || v === 'education_provider' || v === 'other') {
+    hint.textContent = 'Type the name as it should appear on transcripts and applications.';
+  } else {
+    hint.textContent = '';
+  }
+}
+
+var PSS_LAST = [];
+var PSS_TIMER = null;
+function pssInput(val) {
+  if (PSS_TIMER) clearTimeout(PSS_TIMER);
+  PSS_TIMER = setTimeout(function () { pssSearch(val); }, 350);
+}
+
+async function pssSearch(q) {
+  const res = document.getElementById('pss-results');
+  if (!res) return;
+  q = (q || '').trim();
+  if (q.length < 3) { res.innerHTML = ''; return; }
+  // Narrow by the state already on the form when there is one - NCES wants a
+  // FIPS code but the API maps the postal abbreviation for us.
+  const stEl = document.querySelector('.ec-in[data-k="state_province"]');
+  const st = stEl && stEl.value ? stEl.value.trim() : '';
+  res.innerHTML = '<div class="ec-hint">Searching\u2026</div>';
+  try {
+    const d = await apiGet('/focms/v1/catalogs/private-school-search?q=' +
+      encodeURIComponent(q) + (st ? '&state=' + encodeURIComponent(st) : ''));
+    const rows = d.schools || [];
+    if (!rows.length) {
+      res.innerHTML = '<div class="ec-hint">No match in the federal private-school survey. ' +
+        'Type the name and address by hand \u2014 nothing downstream requires a federal id.</div>';
+      return;
+    }
+    PSS_LAST = rows;
+    res.innerHTML = rows.map(function (s, i) {
+      const loc = [s.city_town, s.state_province, s.zip_postal_code].filter(Boolean).join(', ');
+      const meta = [loc, s.grades ? 'Grades ' + s.grades : '', s.students ? s.students + ' students' : '']
+        .filter(Boolean).join(' \u00b7 ');
+      return '<div class="ec-row" style="cursor:pointer" onclick="pssPick(' + i + ')">' +
+        '<div><div class="ec-title">' + escapeHTML(s.name) + '</div>' +
+        '<div class="ec-meta">' + escapeHTML(s.street_address || '') + '</div>' +
+        '<div class="ec-meta">' + escapeHTML(meta) + '</div></div>' +
+        '<div class="ec-actions"><button type="button">Use this</button></div></div>';
+    }).join('');
+  } catch (e) {
+    res.innerHTML = '<div class="ec-hint">Lookup unavailable right now \u2014 type the name and address by hand.</div>';
+  }
+}
+
+function pssPick(i) {
+  const s = PSS_LAST[i];
+  if (!s) return;
+  const set = function (k, v) {
+    const el = document.querySelector('.ec-in[data-k="' + k + '"]');
+    if (el && v) el.value = v;
+  };
+  // v285: split a trailing suite/unit off the street line into address line 2,
+  // which is exactly what PSS rows carry ("2400 Dallas Pkwy Ste 180").
+  let street = s.street_address || '';
+  let line2 = '';
+  const m = street.match(/\s+(Ste|Suite|Unit|Apt|Bldg|Building|#)\s*\.?\s*(\S+)$/i);
+  if (m) { line2 = m[1].replace(/^Ste$/i, 'Suite') + ' ' + m[2]; street = street.slice(0, m.index).trim(); }
+  set('school_name', s.name);
+  set('street_address', street);
+  set('street_address_line_2', line2);
+  set('city_town', s.city_town);
+  set('state_province', s.state_province);
+  set('zip_postal_code', s.zip_postal_code);
+  set('school_phone', s.phone);
+  const res = document.getElementById('pss-results');
+  if (res) res.innerHTML = '<div class="ec-hint">Filled from the federal private-school survey. ' +
+    'Check the address \u2014 campuses move and the survey lags.</div>';
+}
+
+function hideSiteBanner() {
+  // v284: the publish/website bar belongs on the Academics landing view. It is
+  // noise inside the school setup flow and invited stray clicks mid-form.
+  var el = document.getElementById('site-banner');
+  if (el) el.style.display = 'none';
+}
+
 async function renderSiteBanner(pillarCode){
   var el = document.getElementById('site-banner');
   if (!el) return;
@@ -5235,6 +5329,7 @@ async function tutorDelete(id) {
 
 /* ============ v38: School Profile ============ */
 function openSchoolProfiles() {
+  hideSiteBanner();
   const rows = SCHOOLS;
   let html = '<div class="ec-bar">' +
     '<button class="save-btn" onclick="schoolEdit(null)">Add school</button>' +
@@ -5294,7 +5389,6 @@ function schoolEdit(id) {
       : '') +
     '<input type="hidden" class="ec-in" data-k="district_leaid" value="' + escapeHTML(sc.district_leaid || (known ? known.leaid : '')) + '">' +
     '<input type="hidden" class="ec-in" data-k="district_name" value="' + escapeHTML(sc.district_name || (known ? known.name : '')) + '">' +
-    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country, state: preState, leaid: sc.school_leaid || preLeaid }) +
     // v185: CEEB is hidden from the parent form. It is a College Board code that
     // only matters for the HIGH SCHOOL at application time (Common App, SAT/ACT
     // score sends, transcript delivery) - K-8 schools generally do not have one,
@@ -5303,9 +5397,12 @@ function schoolEdit(id) {
     // high-school-only capture when John reaches Grade 9.
     '<input type="hidden" class="ec-in" data-k="school_ceeb_code" value="' +
       escapeHTML(sc.school_ceeb_code || sc.ceeb_code || '') + '">' +
+    // v284: SCHOOL TYPE now comes FIRST - the answer here drives which picker
+    // makes sense below (public/charter -> NCES CCD cascade; private/parochial
+    // -> free text until the NCES PSS private-school universe is ingested).
     // v186: school_type must match the DB check constraint - lowercase codes only.
     // Display labels are friendly; the stored value is the code.
-    '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type">' +
+    '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type" onchange="schoolTypeChanged(this.value)">' +
       [['', '-- pick --'], ['public', 'Public'], ['private', 'Independent / Private'],
        ['charter', 'Charter'], ['parochial', 'Religious / Parochial'],
        ['home_school', 'Home school'], ['correspondence', 'Correspondence / Distance'],
@@ -5313,7 +5410,23 @@ function schoolEdit(id) {
         return '<option value="' + o[0] + '"' +
           ((sc.school_type || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
       }).join('') + '</select></label>' +
+    // v285: the picker sits BELOW school type, so the type answer is known
+    // before a name is chosen. The NCES cascade here covers PUBLIC and CHARTER
+    // schools (k12_schools is the CCD universe); private and parochial route to
+    // the PSS lookup rendered just under it.
+    schoolPickerField({ key: 'school_name', label: 'School name', value: sc.school_name, level: 'k12', country: sc.country, state: preState, leaid: sc.school_leaid || preLeaid }) +
+    '<div id="school-type-hint" class="ec-hint" style="margin:-4px 0 6px"></div>' +
+    // v285: private / parochial lookup, hidden until that type is chosen.
+    '<div id="pss-box" style="display:none;margin:0 0 12px">' +
+      '<input class="ec-inp" id="pss-q" placeholder="Search private schools by name\u2026" ' +
+        'oninput="pssInput(this.value)" style="width:100%">' +
+      '<div id="pss-results"></div>' +
+    '</div>' +
     ecField('street_address', 'Street address', sc.street_address) +
+    // v283: suite / building / unit line. student_school_enrollments already
+    // has street_address_line_2 - only the form was missing it, so campuses
+    // with a suite or building number had nowhere to put it.
+    ecField('street_address_line_2', 'Suite / building / unit (optional)', sc.street_address_line_2) +
     ecRowTwo(
       ecField('zip_postal_code', 'ZIP code (fills city + state)', sc.zip_postal_code),
       ecRowTwo(
@@ -5363,6 +5476,10 @@ function schoolEdit(id) {
     '<button class="save-btn save-btn-ghost" onclick="openSchoolProfiles()">Cancel</button>' +
     '</div></div>';
   attachZipTrio(byKey('zip_postal_code'), byKey('city_town'), byKey('state_province'), !id);
+  // v285: reflect the saved type on open, so editing an existing private school
+  // shows the PSS lookup instead of hiding it until the select is touched.
+  schoolTypeChanged(sc.school_type || '');
+  hideSiteBanner();
 }
 
 async function schoolSave(id) {
@@ -8625,7 +8742,18 @@ async function teacherSave(id) {
     if (!item.zip_postal_code && picked.zip) item.zip_postal_code = picked.zip;
     if (!item.school_phone && picked.phone) item.school_phone = picked.phone;
   }
-  if (!item.teacher_name) { showToast('Teacher name required', 'error'); return; }
+  // v283 fix: the form renders First name / Last name (teacherEdit), but this
+  // guard still tested the legacy single teacher_name field, which nothing on
+  // the form writes - so every save failed with 'Teacher name required' no
+  // matter what was typed. Validate what is on screen, then compose the
+  // teacher_name the API and tchDisplay/askRecBtn still expect.
+  const _fn = (item.first_name || '').trim();
+  const _ln = (item.last_name || '').trim();
+  if (!_fn && !_ln) {
+    showToast((item.role === 'counselor' ? 'Counselor' : 'Teacher') + ' name required', 'error');
+    return;
+  }
+  item.teacher_name = [_fn, _ln].filter(Boolean).join(' ');
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/teachers', { items: [item] });
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/teachers');
