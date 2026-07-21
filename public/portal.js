@@ -198,9 +198,37 @@ function sessionAlive() {
   // come back to life regardless of how long the parent had been away.
   try {
     var last = parseInt(sessionGet('focms_last_activity') || '0', 10);
-    if (last && (Date.now() - last) > IDLE_LIMIT_MS) { sessionClear(); return false; }
+    if (last && (Date.now() - last) > IDLE_LIMIT_MS) {
+      sessionClear();
+      showLoginGate('Signed out after 30 minutes of inactivity. Please sign in again.');
+      return false;
+    }
   } catch (e) {}
   return true;
+}
+
+/* v315: one place that puts the parent back on the sign-in screen.
+   Previously an expired session surfaced as the toast "Set your API token
+   first" - which is developer language for a parent who has never seen a
+   token, and left them staring at a portal they could not use until the
+   60-second sweep happened to reload the page. Now the sign-in card comes
+   straight back with an explanation. */
+function showLoginGate(msg) {
+  try {
+    var gate = document.getElementById('token-gate');
+    if (gate) {
+      gate.classList.remove('hidden');
+      gate.style.display = '';
+      var p = document.getElementById('login-pass');
+      if (p) p.value = '';
+      var err = document.getElementById('login-err');
+      if (err && msg) { err.textContent = msg; err.style.display = ''; }
+    }
+    if (msg && typeof showToast === 'function' && !showToast.__gating) {
+      showToast.__gating = true;                 // never recurse via the wrapper
+      try { showToast(msg, 'info'); } finally { showToast.__gating = false; }
+    }
+  } catch (e) {}
 }
 
 function saveToken() {
@@ -355,6 +383,30 @@ var LAST_ACTIVITY = Date.now();
       if (typeof showToast === 'function') showToast('Signed out after 30 minutes of inactivity', 'info');
     } catch (e) {}
   });
+})();
+
+// ===========================================================================
+// v315: EXPIRED-SESSION UX. Twelve call sites still do
+//   if (!getToken()) { showToast("Set your API token first", "error"); return; }
+// which is the message a parent meets after the 30-minute timeout. It is
+// developer language - parents sign in with an email and password and have
+// never seen a "token" - and it leaves them on a dead page until the
+// 60-second sweep reloads. Rather than edit twelve sites (and miss the next
+// one someone adds), showToast is wrapped once: that specific message is
+// intercepted and the sign-in card is shown instead.
+// ===========================================================================
+(function () {
+  var orig = window.showToast;
+  if (typeof orig !== 'function' || orig.__authGate) return;
+  var wrapped = function (msg, kind) {
+    if (typeof msg === 'string' && /Set your API token first/i.test(msg)) {
+      showLoginGate('Your session ended. Please sign in again.');
+      return;
+    }
+    return orig.apply(this, arguments);
+  };
+  wrapped.__authGate = true;
+  window.showToast = wrapped;
 })();
 /* v140: re-run the tour any time */
 window.startTour = function(){ openWizard(1); };
