@@ -8707,7 +8707,7 @@ function ucaResumeCreate(code){
         + fld('uc-loc','Employer location (city, state)','',1) + fld('uc-ct','Hiring manager / contact (if known)','',1)
         + fld('uc-phone','Employer telephone (if known)','',1) + fld('uc-type','Hours / status','e.g. Part time, weekends',1))
     + (acad ? '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ec" checked style="width:auto;margin-right:8px;vertical-align:middle">Include Extracurricular information</label>' : '')
-    + '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ai" checked style="width:auto;margin-right:8px;vertical-align:middle">Enhance with AI \u2014 selects, orders, and words your records professionally (facts only, never invented). <b>$1.00 + tax</b>, charged to your card on file \u2014 applies on every plan.</label>'
+    + '<label class="ec-lbl" style="display:block;margin:6px 0"><input type="checkbox" id="uc-ai-resume" checked style="width:auto;margin-right:8px;vertical-align:middle">Enhance with AI \u2014 selects, orders, and words your records professionally (facts only, never invented). <b>$1.00 + tax</b>, charged to your card on file \u2014 applies on every plan.</label>'
     +'<label class="ec-lbl">Paste the '+(acad?'program, scholarship, or opportunity description':'job posting / description')+' (optional)'
     +'<textarea class="rec-i" id="uc-jd" rows="7"></textarea></label>'
     +'<div class="rec-bar"><button class="save-btn" id="uc-jd-go">Continue</button>'
@@ -8718,7 +8718,14 @@ function ucaResumeCreate(code){
     var org=gv('uc-org'), pos=gv('uc-pos'), loc=gv('uc-loc'), ct=gv('uc-ct'),
         phone=gv('uc-phone'), htype=gv('uc-type'), fld2=gv('uc-fld'), dead=gv('uc-dead'), jd=gv('uc-jd');
     var incEc = acad && (function(){ var el=document.getElementById('uc-ec'); return el ? el.checked : false; })();
-    var useAi2 = (function(){ var el=document.getElementById('uc-ai'); return el ? el.checked : false; })();
+    // v316: read uc-ai-resume, NOT uc-ai. Two elements carried id="uc-ai" -
+    // this one (checked by default) and the report modal's (unchecked).
+    // getElementById returns the FIRST in document order, so whenever the
+    // report modal's node was still in the DOM this read the wrong checkbox,
+    // came back false, and the whole AI branch was skipped: no charge row, no
+    // billing message, and a plain structured resume. Silent, and it looked
+    // like a billing failure.
+    var useAi2 = (function(){ var el=document.getElementById('uc-ai-resume'); return el ? el.checked : false; })();
     ov.remove();
     const d = await appData();
     var secs = await ucaBuildSections(code, null, d);
