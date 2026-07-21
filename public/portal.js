@@ -292,7 +292,9 @@ async function billingShowInner() {
         (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') + '</div>' +
       (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the "Update payment method" link goes to the subscription portal, which cannot add a first card.</div>') +
       (notCfg ? '' : '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
-        (ok ? 'Replace card' : 'Add a card') + '</button></div>') + '</div>';
+        (ok ? 'Replace card' : 'Add a card') + '</button>' +
+        (ok ? '' : '<button class="save-btn save-btn-ghost" onclick="billingReconcile()">Re-check Stripe</button>') +
+        '</div>') + '</div>';
   }
   html += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
     '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Current plan</div>' +
@@ -341,6 +343,19 @@ async function billingPortal() {
    subscription and, for a tenant with none, can present nothing to complete -
    which is exactly what happened when the AI resume asked for a card.
    mode=setup is the surface built to capture and store one. */
+/* v320: recover a card that Stripe accepted but never attached to the
+   customer - the exact state that produced "save a card, still no card". */
+async function billingReconcile() {
+  try {
+    showToast('Re-checking Stripe\u2026', 'success');
+    var r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/reconcile-card', {});
+    if (r && r.has_card) { showToast('Card attached', 'success'); return billingShow(); }
+    alert('No usable card found.\n\n' + JSON.stringify(r) +
+          '\n\nno_succeeded_setup_intent means Stripe has no completed card setup for this customer.');
+  } catch (e) {
+    alert('Re-check failed.\n\n' + (e && e.message ? e.message : String(e)));
+  }
+}
 async function billingAddCard() {
   try {
     showToast('Opening secure card entry\u2026', 'success');
@@ -479,12 +494,34 @@ window.addEventListener('DOMContentLoaded', async () => {
       else if (bp === 'cancelled') { showToast('Checkout cancelled', 'info'); history.replaceState(null, '', location.pathname); }
       // v314b: return leg from Checkout mode=setup (card capture).
       var cardp = new URLSearchParams(location.search).get('card');
-      if (cardp === 'saved') { showToast('Card saved - reopen your resume and press Generate', 'success'); history.replaceState(null, '', location.pathname); }
+      if (cardp === 'saved') {
+        showToast('Card saved - checking Stripe\u2026', 'success');
+        history.replaceState(null, '', location.pathname);
+        window.__SHOW_BILLING_AFTER_BOOT = true;   // v319: land on Billing so the
+                                                   // result is visible, not silent
+      }
       else if (cardp === 'cancelled') { showToast('Card entry cancelled - no card saved', 'info'); history.replaceState(null, '', location.pathname); }
     } catch (e) {}
   }
   if (getToken()) await resolveContext();
   renderPillars();
+  // v319: after saving a card, show Billing immediately. Returning to the
+  // pillar list looked like "nothing happened" - the parent had no way to see
+  // whether the card actually attached.
+  if (window.__SHOW_BILLING_AFTER_BOOT && getToken()) {
+    window.__SHOW_BILLING_AFTER_BOOT = false;
+    // v320: reconcile FIRST. A completed Checkout setup can leave the
+    // PaymentMethod unattached, which is what put this account in a
+    // save-a-card / no-card-saved loop. This attaches it explicitly, then
+    // Billing renders the true state.
+    try {
+      var rc = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/reconcile-card', {});
+      if (rc && rc.has_card) showToast('Card saved and ready', 'success');
+      else alert('Stripe finished, but no usable card is attached.\n\n' + JSON.stringify(rc) +
+                 '\n\nreason no_succeeded_setup_intent = the card page closed without completing.');
+    } catch (e) {}
+    try { await billingShow(); } catch (e) {}
+  }
   if (getToken()) { apiGet('/focms/v1/catalogs/subjects').then(d=>{ SUBJECT_CATALOG = d.subjects || []; }).catch(()=>{}); }
   // v258 (2026-07-16): Age gate UI for college applications + essays (pairs with backend v0.12.149, operator decision: creation opens at age 17). New heAge17() fetches/caches personal-details date_of_birth and computes age. Under 17: the Add application / Add essay buttons are replaced with an explanatory banner (the record keeps building; applications and essays unlock at 17); existing rows still display. Backend enforces the same rule server-side (403 age_restricted), so the UI gate is presentation, not the security boundary.
   // v257 (2026-07-16): AI resume price disclosure + payment handling (pairs with backend v0.12.148). The Enhance with AI label now states the $1.00 + tax charge to the card on file, applicable on every plan including free and cohort signups. When the backend returns 402 (declined / no card on file), the portal shows the payment message and falls back to the FREE standard structured resume; on other tailoring failures the existing fallback message stands (backend auto-refunds any successful charge when its own LLM step fails).
