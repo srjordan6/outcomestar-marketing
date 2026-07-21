@@ -3773,8 +3773,19 @@ async function loadInstruments() {
   return INSTRUMENTS;
 }
 function instrumentField(val) {
-  const list = INSTRUMENTS || [];
+  let list = INSTRUMENTS || [];
   if (!list.length) return perfField('pf-instrument', 'Instrument', val);   // catalog unreachable -> old text box
+  // v312: scope the list to the program's ensemble. School Orchestra and
+  // Marching Band were showing the identical 49 instruments - a harp on a
+  // football field. The program's ensemble tag comes from the catalog
+  // (EC_PROGRAMS), each instrument carries ensembles[]; no tag or an
+  // over-aggressive filter (empty result) falls back to the full list.
+  const prog = (ENTRY_VIEW && (EC_PROGRAMS || []).find(function (p) { return p.code === ENTRY_VIEW.code; })) || null;
+  const ens = prog && prog.ensemble;
+  if (ens) {
+    const scoped = list.filter(function (i) { return (i.ensembles || []).indexOf(ens) >= 0; });
+    if (scoped.length) list = scoped;
+  }
   const cur = (val || '').trim();
   const inList = list.some(function (i) { return i.title === cur; });
   let html = '<label class="ec-lbl">Instrument<select class="ec-in" id="pf-instrument" onchange="instrumentOther(this.value)">' +
@@ -11411,4 +11422,98 @@ async function ecPhotoUpload(inputEl, catCode) {
   wrap('renderEntryDetail', function (catCode) { ecPhotoShow(catCode); });
   wrap('renderEcSections', function () { ecPhotoRemoveBox(); });
   wrap('ecClearCrumb', function () { ecPhotoRemoveBox(); });
+})();
+
+// ===========================================================================
+// v312: BROWSER HISTORY. Every view swap here is an innerHTML replace, so the
+// browser saw the whole portal as ONE page and Back exited the app entirely.
+// This shim wraps the page-level navigation functions post-hoc (same pattern
+// as the photo-strip wrapper above - zero changes at ~200 onclick call
+// sites): each wrapped call pushes {fn, args} onto the history stack, and
+// popstate replays it. Back/forward now walk the portal's own pages; the
+// final Back from the home view leaves the site, which is correct.
+//
+// Rules that keep this safe:
+//   - args are pushed ONLY if every one is a primitive (they all are today -
+//     codes and uuids); otherwise the call still runs, just without an entry.
+//   - consecutive identical states REPLACE instead of push, so re-renders
+//     after a save do not stack duplicate entries.
+//   - replayed calls (POPPING) never push - no infinite loops.
+//   - form editors (ecEdit, perfEdit...) are deliberately NOT wrapped: Back
+//     from a form lands on the list view it came from, and abandoning an
+//     unsaved form via Back is the expected browser behavior.
+//   - a popstate after a RELOAD may reference in-memory state that no longer
+//     exists (ENTRY_VIEW etc); the replay is wrapped in try/catch and falls
+//     back to the pillar list rather than a blank screen.
+// ===========================================================================
+(function () {
+  const NAV_FNS = ['renderPillars', 'backToPillars', 'openWizard',
+    'openPillar', 'openMilestones', 'openAcademics', 'openFamily', 'openPersonal',
+    'openSkills', 'openExtracurricular', 'openEcSection', 'openEcType',
+    'openAwardKind', 'openSessionKind', 'openAcademicsBands', 'openAcadBand',
+    'openAcadYear', 'openTutoring', 'openSchoolPersonnel', 'openSchoolProfiles',
+    'openReportCards', 'openTeachers', 'openCounselors', 'openBillingPillar',
+    'openWebsitePillar', 'openAppsDocs', 'openCareer', 'openCareerProfile',
+    'openJobs', 'openReferences', 'openHigherEducation', 'openHeSection',
+    'openEssayStudio', 'openMajorFit', 'renderEntryDetail', 'renderProgramEntries'];
+  let POPPING = false;
+  let LAST_KEY = null;
+
+  function primitive(a) {
+    return a === null || a === undefined ||
+      typeof a === 'string' || typeof a === 'number' || typeof a === 'boolean';
+  }
+
+  NAV_FNS.forEach(function (name) {
+    const orig = window[name];
+    if (typeof orig !== 'function' || orig.__hist) return;
+    const wrapped = function () {
+      const args = Array.prototype.slice.call(arguments);
+      if (!POPPING && args.every(primitive)) {
+        // renderPillars/backToPillars read CURRENT_PARENT (set by the caller
+        // just before the call) instead of taking an argument - capture it,
+        // or Back to a sub-pillar list would replay with whatever parent is
+        // current at pop time. openPillarOrDrill is NOT wrapped for the same
+        // reason: it delegates to these and would double-push.
+        const spa = { fn: name, args: args };
+        if (name === 'renderPillars' || name === 'backToPillars') spa.parent = CURRENT_PARENT;
+        const key = name + '|' + JSON.stringify(args) + '|' + (spa.parent || '');
+        try {
+          if (key === LAST_KEY) history.replaceState({ __spa: spa }, '');
+          else history.pushState({ __spa: spa }, '');
+          LAST_KEY = key;
+        } catch (e) { /* history quota - navigation still works */ }
+      }
+      return orig.apply(this, args);
+    };
+    wrapped.__hist = true;
+    window[name] = wrapped;
+  });
+
+  window.addEventListener('popstate', function (e) {
+    const s = e.state && e.state.__spa;
+    POPPING = true;
+    try {
+      if (s && typeof window[s.fn] === 'function') {
+        if (s.fn === 'renderPillars' || s.fn === 'backToPillars') CURRENT_PARENT = ('parent' in s) ? s.parent : null;
+        window[s.fn].apply(null, s.args || []);
+        LAST_KEY = s.fn + '|' + JSON.stringify(s.args || []) + '|' + (s.parent || '');
+      } else if (typeof renderPillars === 'function' && sessionStorage.getItem('focms_token')) {
+        renderPillars();          // reached the base entry - show home
+        LAST_KEY = 'renderPillars|[]';
+      }
+    } catch (err) {
+      try { renderPillars(); } catch (e2) { /* pre-login: leave the page alone */ }
+    } finally {
+      POPPING = false;
+    }
+  });
+
+  // Name the base entry so Back can land ON home instead of leaving the site.
+  try {
+    if (!history.state || !history.state.__spa) {
+      history.replaceState({ __spa: { fn: 'renderPillars', args: [], parent: null } }, '');
+      LAST_KEY = 'renderPillars|[]|';
+    }
+  } catch (e) { /* ignore */ }
 })();
