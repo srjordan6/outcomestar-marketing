@@ -1694,7 +1694,10 @@ async function zipTrioFill(zEl, cEl, sEl) {
    whole trio is empty (new record) it defaults to the child's home address. */
 async function attachZipTrio(zEl, cEl, sEl, defaultToHome) {
   if (!zEl) return;
-  if (!zEl.__ziptrio) { zEl.__ziptrio = true; zEl.addEventListener('input', function(){ zipTrioFill(zEl, cEl, sEl); }); }
+  // v306: __zipoff lets a caller suspend the lookup without unbinding. /catalogs/zip
+  // is US-only, so a non-US country sets the flag rather than leaving a live US
+  // handler on the field.
+  if (!zEl.__ziptrio) { zEl.__ziptrio = true; zEl.addEventListener('input', function(){ if (zEl.__zipoff) return; zipTrioFill(zEl, cEl, sEl); }); }
   if (defaultToHome && !zEl.value.trim() && (!cEl || !cEl.value.trim()) && (!sEl || !sEl.value.trim())) {
     const h = await studentHomeAddr();
     if (h.zip_postal_code) zEl.value = h.zip_postal_code;
@@ -5884,15 +5887,33 @@ async function schoolCountryChange(defaultToHome) {
   const zEl = document.getElementById('sc-zip');
   if (zipLbl && zipLbl.firstChild) zipLbl.firstChild.nodeValue = isUS ? 'ZIP code (fills city + state)' : 'Postal code';
   if (stLbl && stLbl.firstChild) stLbl.firstChild.nodeValue = isUS ? 'State' : 'State / Province / Region';
-  if (isUS && zEl) attachZipTrio(zEl, byKey('city_town'), document.getElementById('sc-state'), !!defaultToHome);
+  if (isUS && zEl) {
+    attachZipTrio(zEl, byKey('city_town'), document.getElementById('sc-state'), !!defaultToHome);
+  }
+  // v306: the ZIP trio binds its listener once and never unbinds. Once a US
+  // address had been open, typing a postal code under any other country kept
+  // firing the US lookup - which is how Frisco, Texas ended up under Kazakhstan.
+  // attachZipTrio's handler checks this flag before filling.
+  if (zEl) zEl.__zipoff = !isUS;
   if (!wrap) return;
+  // v306: the saved region only applies to the country it was saved under. When
+  // the country actually changes, drop it - otherwise a stale "TX" gets matched
+  // against another country's list and silently saves a wrong subdivision (a US
+  // ZIP and city were landing under a Chinese province).
+  const prev = wrap.getAttribute('data-country');
+  if (prev && prev !== iso2) wrap.setAttribute('data-value', '');
+  wrap.setAttribute('data-country', iso2);
   const cur = wrap.getAttribute('data-value') || '';
   const subs = await loadSubdivisions(iso2);
   if (subs.length) {
     wrap.innerHTML = '<select class="ec-in" data-k="state_province" id="sc-state">' +
       '<option value=""></option>' +
       subs.map(function (x) {
-        const sel = (x.code === cur || x.name === cur || x.code.split('-')[1] === cur) ? ' selected' : '';
+        // v306: exact code, exact name, or the bare abbreviation qualified by THIS
+        // country. The old test compared any code fragment, so 'TX' could match
+        // an unrelated subdivision elsewhere.
+        const sel = (x.code === cur || x.name === cur ||
+                     (cur && cur.indexOf('-') < 0 && x.code === iso2 + '-' + cur)) ? ' selected' : '';
         return '<option value="' + escapeHTML(x.code) + '"' + sel + '>' + escapeHTML(x.name) + '</option>';
       }).join('') + '</select>';
   } else {
