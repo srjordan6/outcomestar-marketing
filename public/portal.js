@@ -244,7 +244,27 @@ async function billingShowInner() {
   try { d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/status'); }
   catch (e) { c.innerHTML = '<div class="cr-waiting">Billing is unavailable right now: ' + escapeHTML(e.message) + '</div>'; return; }
   var cp = d.current_plan || {};
-  var html = '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
+  // v315: VISIBLE card diagnostic. Whether a card is actually attached to the
+  // Stripe customer the charge uses was previously invisible from inside the
+  // portal - the only symptom was a failed AI resume charge, and the billing
+  // portal (which manages subscriptions) offered nothing to fix it. This
+  // states the answer plainly and offers Checkout mode=setup, which is the
+  // surface that captures a card.
+  var pmInfo = null;
+  try { pmInfo = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/payment-method'); } catch (e) { pmInfo = null; }
+  var html = '';
+  if (pmInfo) {
+    var ok = !!pmInfo.has_card;
+    html += '<div style="background:#fff;border:1px solid ' + (ok ? '#E5E7EB' : 'var(--orange)') + ';border-radius:14px;padding:16px 18px;margin-top:12px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Card on file</div>' +
+      '<div class="ec-title">' + (ok ? 'Yes - a card is saved and can be charged' : 'No card saved') + '</div>' +
+      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : '') +
+        (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') + '</div>' +
+      (ok ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the "Update payment method" link goes to the subscription portal, which cannot add a first card.</div>') +
+      '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
+      (ok ? 'Replace card' : 'Add a card') + '</button></div></div>';
+  }
+  html += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
     '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Current plan</div>' +
     '<div class="ec-title">' + escapeHTML(cp.title || 'Free plan') + '</div>' +
     '<div class="ec-meta">Status: ' + escapeHTML(cp.status || 'active') +
@@ -284,6 +304,19 @@ async function billingPortal() {
   try {
     var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/portal-session-v2', {});
     if (d.url) location.href = d.url;
+  } catch (e) { showToast(e.message, 'error'); }
+}
+/* v315: add or replace the saved card via Stripe Checkout in mode=setup.
+   Distinct from billingPortal() above: the billing PORTAL manages an existing
+   subscription and, for a tenant with none, can present nothing to complete -
+   which is exactly what happened when the AI resume asked for a card.
+   mode=setup is the surface built to capture and store one. */
+async function billingAddCard() {
+  try {
+    showToast('Opening secure card entry\u2026', 'success');
+    var d = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/setup-session', {});
+    if (d.url) location.href = d.url;
+    else showToast('Card entry unavailable right now', 'error');
   } catch (e) { showToast(e.message, 'error'); }
 }
 /* v275: 30-minute inactivity timeout. Any interaction (mouse, keys, touch,
