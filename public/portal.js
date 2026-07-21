@@ -1002,11 +1002,11 @@ function pssPick(i) {
   set('school_phone', s.phone);
   // v292: the phone box is owned by intl-tel-input, so push the survey's number
   // through the control rather than writing a data-k input that no longer exists.
-  var phEl = document.getElementById('sch-phone');
+  var phEl = document.getElementById('ph-school_phone');
   if (phEl && s.phone) {
     var digits = String(s.phone).replace(/\D/g, '');
     var e164 = digits.length === 10 ? '+1' + digits : (digits ? '+' + digits : '');
-    if (window.ITI && ITI['sch-phone']) { try { ITI['sch-phone'].setNumber(e164); } catch (e) { phEl.value = s.phone; } }
+    if (window.ITI && ITI['ph-school_phone']) { try { ITI['ph-school_phone'].setNumber(e164); } catch (e) { phEl.value = s.phone; } }
     else { phEl.value = s.phone; }
   }
   // v291: keep the federal id. PSS ids carry a letter prefix (A1703455) so they
@@ -2681,6 +2681,16 @@ function collectEcForm(item) {
       item.skills_gained = (item.skills_gained || []).concat(extras);
     } else if (k === 'show_on_showcase') {
       item.show_on_showcase = el.checked;
+    } else if (el.type === 'tel') {
+      // v294: ONE phone standard across the whole portal. Any tel input bound to
+      // intl-tel-input reports E.164 (+19724039018) - country code, area code
+      // and number in a single canonical string. Falls back to raw text if the
+      // library has not bound yet, so a value is never silently dropped.
+      const iti = (window.ITI && ITI[el.id]) ? ITI[el.id] : null;
+      let pv = '';
+      if (iti) { try { pv = iti.getNumber() || ''; } catch (e) { pv = ''; } }
+      if (!pv) pv = (el.value || '').trim();
+      if (pv) item[k] = pv;
     } else if (el.type === 'checkbox') {
       item[k] = el.checked;
     } else {
@@ -4247,7 +4257,7 @@ function ecEdit(id, presetProgCode) {
         return '<option' + (dd.usnscc_member_type === m ? ' selected' : '') + '>' + m + '</option>';
       }).join('') + '</select></label>') +
     ecField('usnscc_co', 'Commanding Officer', dd.usnscc_co) +
-    ecRowTwo(ecField('usnscc_unit_phone', 'Unit phone', dd.usnscc_unit_phone),
+    ecRowTwo(ecPhone('usnscc_unit_phone', 'Unit phone', dd.usnscc_unit_phone),
              ecField('usnscc_unit_email', 'Unit email', dd.usnscc_unit_email)) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Drill location</div>' +
     addrFields('drill', { street_address: dd.drill_street || dd.drill_location, street_address_line_2: dd.drill_line2,
@@ -4363,9 +4373,9 @@ function ecEdit(id, presetProgCode) {
       ecField('bsa_member_id', 'BSA ID number', dd.bsa_member_id) +
       '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Unit contacts</div>' +
       ecRowTwo(ecField('bsa_scoutmaster', 'Scoutmaster', dd.bsa_scoutmaster),
-               ecField('bsa_scoutmaster_phone', 'Scoutmaster phone', dd.bsa_scoutmaster_phone)) +
+               ecPhone('bsa_scoutmaster_phone', 'Scoutmaster phone', dd.bsa_scoutmaster_phone)) +
       ecField('bsa_scoutmaster_email', 'Scoutmaster email', dd.bsa_scoutmaster_email) +
-      ecRowTwo(ecField('bsa_unit_phone', 'Unit phone', dd.bsa_unit_phone),
+      ecRowTwo(ecPhone('bsa_unit_phone', 'Unit phone', dd.bsa_unit_phone),
                ecField('bsa_unit_email', 'Unit email', dd.bsa_unit_email)) +
       ecField('bsa_unit_website', 'Unit website', dd.bsa_unit_website)) +
     '</div>';
@@ -4391,9 +4401,9 @@ function ecEdit(id, presetProgCode) {
       ecField('gsa_member_id', 'GSUSA member ID', dd.gsa_member_id) +
       '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Troop contacts</div>' +
       ecRowTwo(ecField('gsa_leader', 'Troop Leader', dd.gsa_leader),
-               ecField('gsa_leader_phone', 'Troop Leader phone', dd.gsa_leader_phone)) +
+               ecPhone('gsa_leader_phone', 'Troop Leader phone', dd.gsa_leader_phone)) +
       ecField('gsa_leader_email', 'Troop Leader email', dd.gsa_leader_email) +
-      ecRowTwo(ecField('gsa_troop_phone', 'Troop phone', dd.gsa_troop_phone),
+      ecRowTwo(ecPhone('gsa_troop_phone', 'Troop phone', dd.gsa_troop_phone),
                ecField('gsa_troop_email', 'Troop email', dd.gsa_troop_email)) +
       ecField('gsa_troop_website', 'Troop website', dd.gsa_troop_website)) +
     '</div>';
@@ -4436,9 +4446,9 @@ function ecEdit(id, presetProgCode) {
       ecField('jrotc_period', 'Class period / drill schedule', dd.jrotc_period) +
       '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Instructor & unit contacts</div>' +
       ecRowTwo(ecField('jrotc_instructor', 'Senior Instructor (SAI / SNSI / SMI / SASI)', dd.jrotc_instructor),
-               ecField('jrotc_instructor_phone', 'Instructor phone', dd.jrotc_instructor_phone)) +
+               ecPhone('jrotc_instructor_phone', 'Instructor phone', dd.jrotc_instructor_phone)) +
       ecField('jrotc_instructor_email', 'Instructor email', dd.jrotc_instructor_email) +
-      ecRowTwo(ecField('jrotc_unit_phone', 'Unit phone', dd.jrotc_unit_phone),
+      ecRowTwo(ecPhone('jrotc_unit_phone', 'Unit phone', dd.jrotc_unit_phone),
                ecField('jrotc_unit_email', 'Unit email', dd.jrotc_unit_email))) +
     '</div>';
   // v274: Young Marines organized like Sea Cadets. National HQ > Division (6)
@@ -4458,9 +4468,9 @@ function ecEdit(id, presetProgCode) {
       ecField('ym_drill_schedule', 'Drill schedule', dd.ym_drill_schedule) +
       '<div class="ec-lbl" style="font-weight:600;margin-top:6px">Unit contacts</div>' +
       ecRowTwo(ecField('ym_unit_commander', 'Unit Commander', dd.ym_unit_commander),
-               ecField('ym_commander_phone', 'Commander phone', dd.ym_commander_phone)) +
+               ecPhone('ym_commander_phone', 'Commander phone', dd.ym_commander_phone)) +
       ecField('ym_commander_email', 'Commander email', dd.ym_commander_email) +
-      ecRowTwo(ecField('ym_unit_phone', 'Unit phone', dd.ym_unit_phone),
+      ecRowTwo(ecPhone('ym_unit_phone', 'Unit phone', dd.ym_unit_phone),
                ecField('ym_unit_email', 'Unit email', dd.ym_unit_email))) +
     '</div>';
   c.innerHTML = ecTrailCrumb(id ? 'Edit entry' : 'Add entry') + '<div class="ec-form">' +
@@ -4518,6 +4528,18 @@ function ecArea(key, label, val) {
   return '<label class="ec-lbl">' + label +
     '<textarea class="ec-in" data-k="' + key + '" rows="2">' + escapeHTML(val || '') + '</textarea></label>';
 }
+function ecPhone(key, label, val) {
+  // v294: the standard phone field. Flag + country-code dropdown + a number box
+  // that validates and formats for whichever country is chosen, persisted as
+  // E.164. It keeps data-k so it flows through collectEcForm like every other
+  // field - no per-form save wiring. Scheduling initPhones here means any form
+  // that renders a phone gets the control bound without being modified.
+  setTimeout(initPhones, 0);
+  return '<label class="ec-lbl">' + label +
+    '<input class="ec-in" data-k="' + key + '" id="ph-' + key + '" type="tel" ' +
+    'data-e164="' + escapeHTML(val == null ? '' : String(val)) + '"></label>';
+}
+
 function ecPhoneField(label, idBase, value) {
   // v292: label + shared phone control. Kept out of the data-k collector on
   // purpose - intl-tel-input owns the input, and the E.164 value is read back
@@ -5537,7 +5559,7 @@ function schoolEdit(id) {
       // v288: state narrows the private search the same way the public cascade
       // narrows by state. Without it "fusion" returns every campus nationwide.
       '<label class="ec-lbl">State' +
-      '<select id="pss-state" onchange="pssStateChanged()">' +
+      '<select class="ec-in" id="pss-state" onchange="pssStateChanged()">' +
         '<option value="">-- all states --</option></select>' +
       '</label>' +
       '<div class="ec-hint">Matches come from the federal private-school survey. ' +
@@ -5577,12 +5599,12 @@ function schoolEdit(id) {
     // These four were plain text boxes, which is why a phone could be saved as
     // an unbounded run of digits with no country or area code.
     ecRowTwo(
-      ecPhoneField('School phone', 'sch-phone', sc.school_phone),
-      ecPhoneField('School fax', 'sch-fax', sc.school_fax)
+      ecPhone('school_phone', 'School phone', sc.school_phone),
+      ecPhone('school_fax', 'School fax', sc.school_fax)
     ) +
     ecRowTwo(
       ecField('principal_name', 'Principal', sc.principal_name),
-      ecPhoneField('Principal phone', 'sch-prin-phone', sc.principal_phone)
+      ecPhone('principal_phone', 'Principal phone', sc.principal_phone)
     ) +
     // v193: counselor details live on the Counselors card, not here. A school can
     // change counselors, and the counselor needs their own record for the Common
@@ -5682,11 +5704,8 @@ async function schoolSave(id) {
   // v289: reconcile the three possible name inputs into the one column. Whichever
   // block is visible for the chosen type wins; the hidden ones are scratch keys
   // the API does not know about and are dropped by the whitelist below.
-  // v292: phones come from the intl-tel-input controls, not the data-k sweep,
-  // and are stored E.164 so a number is unambiguous across countries.
-  item.school_phone = readPhone('sch-phone');
-  item.school_fax = readPhone('sch-fax');
-  item.principal_phone = readPhone('sch-prin-phone');
+  // v294: phones now carry data-k and are read by collectEcForm like any other
+  // field, so no bespoke read here.
   if (item.school_name_plain) item.school_name = item.school_name_plain;
   delete item.school_name_plain;
   if (!item.school_name) {
@@ -6083,7 +6102,14 @@ function schoolPickerField(opts) {
       '<option value="">-- school --</option></select>' +
     '<input class="ec-in" data-k="' + opts.key + '" id="' + id + '-input" type="text" ' +
       'placeholder="School name (or type it if not listed)" autocomplete="off" ' +
-      'value="' + escapeHTML(val) + '">' +
+      'value="' + escapeHTML(val) + '"' +
+      // v293: the typed box duplicated the chosen school. It is only the escape
+      // hatch for a school the directory does not list, so it stays hidden once
+      // the cascade has a pick. The value still submits while hidden.
+      (val ? ' style="display:none"' : '') + '>' +
+    '<div class="ec-hint" id="' + id + '-manual-link" style="' + (val ? '' : 'display:none') + '">' +
+      '<a href="javascript:void(0)" onclick="spShowManual(\'' + id + '\')" ' +
+      'style="color:#F07800;font-weight:600;text-decoration:none">School not listed? Type the name</a></div>' +
     '<div class="ec-hint" id="' + id + '-hint">Pick state \u2192 district \u2192 school. Not listed (private, home, or outside the US)? Just type the name above.</div>' +
     '</label>';
 }
@@ -6191,13 +6217,23 @@ async function spCascadeDistrict(id) {
   }
 }
 
+function spShowManual(id) {
+  // v293: reveal the free-text name box when the directory has no match.
+  var inp = document.getElementById(id + '-input');
+  var lnk = document.getElementById(id + '-manual-link');
+  if (inp) { inp.style.display = ''; inp.focus(); }
+  if (lnk) lnk.style.display = 'none';
+}
+
 function spCascadePick(id) {
   const i = document.getElementById(id + '-school').value;
   const list = SP_SCHOOLS_CACHE[id] || [];
   if (i === '' || !list[i]) return;
   const s = list[i];
   const input = document.getElementById(id + '-input');
-  if (input) { input.removeAttribute('readonly'); input.value = s.name; }
+  if (input) { input.removeAttribute('readonly'); input.value = s.name; input.style.display = 'none'; }
+  const mlink = document.getElementById(id + '-manual-link');
+  if (mlink) mlink.style.display = '';
   SP_PICKED = { name: s.name, ncessch: s.ncessch, leaid: s.leaid, street: s.street, city: s.city,
                 state: s.state, zip: s.zip, phone: s.phone, district: s.district_name };
   // Feed the same store the legacy picker uses, so spLastPicked() (courseSave,
@@ -8893,7 +8929,7 @@ function teacherEdit(id) {
     ) +
     countryField('country', t.country) +
     ecRowTwo(
-      ecField('school_phone', 'School phone', t.school_phone),
+      ecPhone('school_phone', 'School phone', t.school_phone),
       ecField('teacher_email', 'Teacher email', t.teacher_email)
     ) +
     ecArea('notes', 'Notes', t.notes) +
@@ -9102,7 +9138,7 @@ function jobEdit(id) {
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     ecRowTwo(ecField('job_title', 'Job title', j.job_title), ecField('company_name', 'Company name', j.company_name)) +
     ecArea('job_description', 'Job description (role summary — drives meta-skill inference)', j.job_description) +
-    ecRowTwo(ecField('supervisor_name', "Supervisor's name", j.supervisor_name), ecField('supervisor_phone', 'Supervisor phone', j.supervisor_phone)) +
+    ecRowTwo(ecField('supervisor_name', "Supervisor's name", j.supervisor_name), ecPhone('supervisor_phone', 'Supervisor phone', j.supervisor_phone)) +
     ecField('supervisor_email', "Supervisor's email", j.supervisor_email) +
     ecField('street_address', 'Street address', j.street_address) +
     ecRowTwo(ecField('city_town', 'City', j.city_town), ecRowTwo(ecField('state_province', 'State', j.state_province), ecField('zip_postal_code', 'Zip', j.zip_postal_code))) +
@@ -9175,7 +9211,7 @@ function refEdit(id) {
     ecField('street_address', 'Street address', r.street_address) +
     ecRowTwo(ecField('city_town', 'City', r.city_town), ecRowTwo(ecField('state_province', 'State', r.state_province), ecField('zip_postal_code', 'Zip', r.zip_postal_code))) +
     countryField('country', r.country) +
-    ecRowTwo(ecField('phone', 'Phone', r.phone), ecField('email', 'Email', r.email)) +
+    ecRowTwo(ecPhone('phone', 'Phone', r.phone), ecField('email', 'Email', r.email)) +
     ecArea('notes', 'Notes', r.notes) +
     '<div class="ec-bar"><button class="save-btn" onclick="refSave(\'' + (id || '') + '\')">Save</button><button class="save-btn save-btn-ghost" onclick="openReferences()">Cancel</button>' + (r.ref_name ? askRecBtn(r.email, r.ref_name, r.is_professional === false ? 'reference' : 'employer') : '') + '</div>' +
   '</div>';
@@ -9788,7 +9824,7 @@ function recEditHE(id){
     ecRowTwo(ecField('organization_name','Organization/school',r.organization_name),ecField('subject_or_specialty','Subject/specialty',r.subject_or_specialty))+
     '<label class="ec-lbl">Relationship quality<select class="ec-in" data-k="relationship_quality">'+qOpts+'</select></label>'+
     ecRowTwo(ecField('years_known','Years known',r.years_known,false,'number'),ecField('preferred_contact_method','Preferred contact',r.preferred_contact_method))+
-    ecRowTwo(ecField('contact_email','Email',r.contact_email),ecField('contact_phone','Phone',r.contact_phone))+
+    ecRowTwo(ecField('contact_email','Email',r.contact_email),ecPhone('contact_phone','Phone',r.contact_phone))+
     ecArea('notes','Notes',r.notes)+
     '<div class="ec-bar"><button class="save-btn" onclick="recSaveHE(\''+(id||'')+'\')">Save</button><button class="save-btn save-btn-ghost" onclick="renderRecsList()">Cancel</button></div></div>';
 }
