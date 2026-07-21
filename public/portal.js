@@ -2171,11 +2171,37 @@ async function uploadIdDoc(inputEl) {
       const st = row.querySelector('.idd-status');
       st.textContent = 'Submitted'; st.className = 'idd-status submitted';
       showToast('Document submitted for review', 'success');
+      // v296: re-read the record after submitting. Verification is automatic and
+      // lands within seconds, but the UI only ever wrote "Submitted" locally and
+      // never looked again - so a document that WAS verified sat there reading
+      // "Submitted" until the page happened to be reloaded, which looks exactly
+      // like a stuck review. Poll briefly, then repaint the section in place.
+      iddRefresh(docType);
     } catch (e) { showToast('Upload failed: ' + e.message, 'error'); }
     inputEl.value = '';
   };
   reader.readAsDataURL(file);
 }
+async function iddRefresh(docType) {
+  // v296: verification is server-side and quick, so check a few times rather
+  // than making the parent reload the page to find out.
+  for (var attempt = 0; attempt < 6; attempt++) {
+    await new Promise(function (r) { setTimeout(r, attempt === 0 ? 1200 : 2500); });
+    let idd;
+    try {
+      idd = await apiGet('/focms/v1/student/' + STUDENT_ID + '/identity-documents');
+    } catch (e) { return; }
+    var host = document.getElementById('idd-host');
+    if (host) host.innerHTML = iddSection(idd);
+    var doc = (idd.documents || []).find(function (d) { return d.doc_type === docType; });
+    if (doc && doc.status === 'verified') {
+      showToast('Document verified', 'success');
+      return;
+    }
+    if (idd.age_verified) return;
+  }
+}
+
 function renderPersonal(pd, rel, fam, idd, adr) {
   pd = pd || {}; const ppub = pd.public || {};
   const arr = a => (a || []).join(', ');
@@ -2222,7 +2248,7 @@ function renderPersonal(pd, rel, fam, idd, adr) {
     '<div class="ms-savebar"><button class="save-btn" onclick="saveAddresses()">Save addresses</button><span id="adr-status" class="save-status"></span></div>';
   document.getElementById('sections-container').innerHTML =
     intro +
-    acSection('Identity documents', iddSection(idd)) +
+    acSection('Identity documents', '<div id="idd-host">' + iddSection(idd) + '</div>') +
     '<div id="pd-wrap">' +
       acSection('Identity & contact', '<div class="field-grid">' + idFields + '</div>') +
     '</div>' +
