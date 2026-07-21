@@ -600,7 +600,9 @@ async function openPillar(pillarCode) {
   if (pillarCode === 'milestones') return openMilestones();
   if (pillarCode === 'skills') return openSkills();
   if (pillarCode === 'major_fit') return openMajorFit();
-  if (pillarCode === 'academics') { renderSiteBanner('academics'); return openAcademicsBands(); }
+  // v303: no website banner on the Academics landing - publish controls live on
+  // the Website pillar, not on a data-entry page.
+  if (pillarCode === 'academics') { hideSiteBanner(); return openAcademicsBands(); }
   if (pillarCode === 'personal') { renderSiteBanner('personal'); return openPersonal(); }
   if (pillarCode === 'extracurricular') return openExtracurricular();
   if (pillarCode === 'higher_education') return openHigherEducation();
@@ -1041,6 +1043,8 @@ function crumbs(trail) {
 function hideSiteBanner() {
   // v284: the publish/website bar belongs on the Academics landing view. It is
   // noise inside the school setup flow and invited stray clicks mid-form.
+  // v303: it is now hidden on the Academics landing too - publish controls live
+  // on the Website pillar, so a data-entry page never carries them.
   var el = document.getElementById('site-banner');
   if (el) el.style.display = 'none';
 }
@@ -4851,11 +4855,13 @@ function renderAcadBands() {
     '<button class="ec-card" onclick="openSchoolProfiles()">' +
       '<div><div class="ec-name">School Profile</div><div class="ec-desc">CEEB, address, counselor, grading scale, class size, boarding, curriculum</div></div>' +
       '<div class="ec-count">' + (SCHOOLS.length || '—') + ' <span>schools on file</span></div>' +
-    '</button>' +
+    '</button>';
+  const personnelCards =
     '<button class="ec-card" onclick="openSchoolPersonnel()">' +
-      '<div><div class="ec-name">School Personnel</div><div class="ec-desc">Teachers and counselors \u2014 name, school, phone, and email. Entered once, reused across courses, recommendations, and the Common App.</div></div>' +
+      '<div><div class="ec-name">School Personnel</div><div class="ec-desc">Teachers, counselors, and other staff \u2014 name, school, phone, and email. Entered once, reused across courses, recommendations, and the Common App.</div></div>' +
       '<div class="ec-count">' + (TEACHERS.length || '—') + ' <span>on file</span></div>' +
-    '</button>' +
+    '</button>';
+  const tutoringCard =
     '<button class="ec-card" onclick="openTutoring()">' +
       '<div><div class="ec-name">Private Tutoring</div><div class="ec-desc">Subject, tutor, school year, description, skills gained, grade or certificate of completion</div></div>' +
       '<div class="ec-count">' + ((TUTORING.length + TUTOR_PROGRAMS.length) || '—') + ' <span>on file</span></div>' +
@@ -4867,13 +4873,16 @@ function renderAcadBands() {
     '</button>';
   // v193: legacy "full Academics data-entry form" button removed - the stepped
   // cards above are now the only entry path.
-  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once \u2014 school, personnel, tutoring</div>';
-  const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 Enter courses / subjects by year</div>';
-  const step3 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 3 \u00b7 Enter grades (report cards)</div>';
+  // v303: four steps. Tutoring sits with courses because it IS coursework.
+  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 School</div>';
+  const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 School personnel</div>';
+  const step3 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 3 \u00b7 Enter courses / subjects by year</div>';
+  const step4 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 4 \u00b7 Enter grades (report cards)</div>';
   document.getElementById('sections-container').innerHTML =
     step1 + '<div class="ec-grid">' + extras + '</div>' +
-    step2 + '<div class="ec-grid">' + cards + '</div>' +
-    step3 + '<div class="ec-grid">' + step3cards + '</div>';
+    step2 + '<div class="ec-grid">' + personnelCards + '</div>' +
+    step3 + '<div class="ec-grid">' + cards + tutoringCard + '</div>' +
+    step4 + '<div class="ec-grid">' + step3cards + '</div>';
 }
 
 async function openAcadBand(code) {
