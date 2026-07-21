@@ -23,10 +23,14 @@
  *   - caching of media (files are large and quota-sensitive)
  * ======================================================================== */
 
-const CACHE = 'outcomestar-static-v312';
+const CACHE = 'outcomestar-static-v312a';
 
+// NOTE: the host strips .html (that is why the portal lives at /portal, not
+// /portal.html). Requesting /offline.html returns a 307 to /offline, and a
+// redirect is not a usable navigation fallback - so the extensionless path is
+// the canonical one here.
 const PRECACHE = [
-  '/offline.html',
+  '/offline',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/icon-192.png',
@@ -82,7 +86,7 @@ self.addEventListener('fetch', function (event) {
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req).catch(function () {
-        return caches.match('/offline.html').then(function (r) {
+        return caches.match('/offline').then(function (r) {
           return r || new Response('Offline', {
             status: 503, headers: { 'Content-Type': 'text/plain' }
           });
