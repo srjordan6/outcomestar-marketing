@@ -265,12 +265,19 @@
   .ec-in { padding: 8px 10px; border: 1px solid #E3E7ED; border-radius: 6px; font-size: 13px; color: var(--navy); font-family: inherit; }
   .ec-in:focus { outline: none; border-color: var(--orange); }
   .ec-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
-    /* v292: the phone control is an intl-tel-input wrapper around the input.
-       Without these it renders at the library's default width and a different
-       height from the fields beside it, so a two-column row looked ragged. */
-    .ec-lbl .iti { width: 100%; display: block; margin-top: 4px; }
+    /* v295: the intl-tel-input wrapper is display:inline-block by default, so a
+       wide dial code (+93 with a flag vs +1) stops fitting beside its label and
+       wraps onto the next line - which is why only the non-US phone dropped.
+       Forcing the wrapper to a full-width block makes every phone box render at
+       the same size and position no matter which country is selected. Applies
+       everywhere phoneControl is used: identity & contact, family members, and
+       the ec-* forms. */
+    .iti { display: block !important; width: 100%; box-sizing: border-box; }
+    .iti input[type=tel] { width: 100%; box-sizing: border-box; }
+    .iti__selected-flag { padding: 0 6px 0 8px; }
+    .ec-lbl .iti { margin-top: 4px; }
     .ec-lbl .iti input[type=tel] {
-      width: 100%; box-sizing: border-box; padding: 8px 10px;
+      padding: 8px 10px;
       border: 1px solid #E3E7ED; border-radius: 6px; font-size: 13px;
       color: var(--navy); font-family: inherit; background: #fff; margin: 0;
     }
@@ -545,7 +552,7 @@
 </footer>
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
-<script src="/portal.js?v=294"></script>
+<script src="/portal.js?v=295"></script>
 <!-- chatwoot-widget -->
 <style>
   #chatwoot-hint {

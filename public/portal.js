@@ -2193,9 +2193,9 @@ function renderPersonal(pd, rel, fam, idd, adr) {
     pField('Primary email', '<input id="pd-email_primary" type="email" value="' + escapeHTML(pd.email_primary || '') + '">', 'email_primary', ppub) +
     '<div class="field" style="grid-column:1/-1"><label>Phone numbers</label>' +
       '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">' +
-        '<div><span style="font-size:11px;color:#7A8A9E">Mobile</span>' + phoneControl('pd-phone_primary', pd.phone_primary) + webToggle('phone_primary', false, PD_LOCKED.has('phone_primary')) + '</div>' +
-        '<div><span style="font-size:11px;color:#7A8A9E">Home</span>' + phoneControl('pd-phone_home', pd.phone_home) + '</div>' +
-        '<div><span style="font-size:11px;color:#7A8A9E">Work</span>' + phoneControl('pd-phone_work', pd.phone_work) + '</div>' +
+        '<div><span style="font-size:11px;color:#7A8A9E;display:block;margin-bottom:2px">Mobile</span>' + phoneControl('pd-phone_primary', pd.phone_primary) + webToggle('phone_primary', false, PD_LOCKED.has('phone_primary')) + '</div>' +
+        '<div><span style="font-size:11px;color:#7A8A9E;display:block;margin-bottom:2px">Home</span>' + phoneControl('pd-phone_home', pd.phone_home) + '</div>' +
+        '<div><span style="font-size:11px;color:#7A8A9E;display:block;margin-bottom:2px">Work</span>' + phoneControl('pd-phone_work', pd.phone_work) + '</div>' +
       '</div></div>' +
     pField('Country of residence', '<select id="pd-residence_country">' + countryOptions(pd.residence_country || PROFILE_COUNTRY) + '</select>', 'residence_country', ppub);
   const demoFields =
