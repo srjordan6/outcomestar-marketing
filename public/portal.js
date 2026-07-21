@@ -4586,16 +4586,95 @@ function ecEdit(id, presetProgCode) {
     '<div class="ec-bar"><button class="save-btn" onclick="ecSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + (ENTRY_VIEW ? "renderEntryDetail('" + ENTRY_VIEW.cat + "','" + ENTRY_VIEW.code + "','" + ENTRY_VIEW.id + "')" : PROG_VIEW ? "renderProgramEntries('" + PROG_VIEW.cat + "','" + PROG_VIEW.code + "')" : EC_VIEW === 'unassigned' ? "renderUnassignedList()" : CAT_FILTER ? "renderCategoryList('" + Object.keys(CAT_MAP).find(function(k){return CAT_MAP[k]===CAT_FILTER;}) + "')" : "openEcType('" + EC_FILTER + "')") + '">Cancel</button></div></div>';
   if (!isCadetAffil) stdLocWire('ecorg', !id);
+  // v308: reflect a saved school program on open, so editing an existing entry
+  // shows the school picker rather than hiding it until the select is touched.
+  ecProgramChanged(a.program_code || '');
   stdLocWire('drill', !id);
   mediaWidgetRenderChips('ec-media'); // v226
+}
+
+function ecIsSchoolProgram(code) {
+  // v308: keyed on the program TITLE starting with "School", not on the code -
+  // marching_band's title is "School Marching Band" and would be missed otherwise.
+  const p = (EC_PROGRAMS || []).find(function (x) { return x.code === code; });
+  return !!(p && /^school\b/i.test(p.title || ''));
+}
+
+function ecOrgSchoolOptions(sel) {
+  return '<option value="">-- pick a school --</option>' +
+    (SCHOOLS || []).map(function (s) {
+      return '<option value="' + escapeHTML(s.id) + '"' +
+        (s.school_name === sel ? ' selected' : '') + '>' + escapeHTML(s.school_name || '') + '</option>';
+    }).join('') +
+    '<option value="__other__">Not one of these - type a name</option>';
+}
+
+async function ecProgramChanged(code) {
+  // v308: a school program is delivered BY a school already in the academic
+  // record, so the provider is picked from that list rather than retyped - and
+  // the organization address comes from the school profile.
+  if (typeof ecSwimContext === 'function') ecSwimContext();
+  const wrap = document.getElementById('ec-orgschool-wrap');
+  const nameWrap = document.getElementById('ec-orgname-wrap');
+  if (!wrap) return;
+  const isSchool = ecIsSchoolProgram(code);
+  if (isSchool && !(SCHOOLS || []).length) {
+    try {
+      const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/school-profiles');
+      SCHOOLS = d.schools || [];
+    } catch (e) { SCHOOLS = []; }
+  }
+  if (!isSchool) {
+    wrap.style.display = 'none';
+    if (nameWrap && !LM_ORGS[code]) nameWrap.style.display = '';
+    return;
+  }
+  const cur = (document.querySelector('.ec-in[data-k="organization_name"]') || {}).value || '';
+  wrap.innerHTML = '<label class="ec-lbl">School' +
+    '<select id="ec-orgschool" onchange="ecOrgSchoolPick(this.value)">' +
+    ecOrgSchoolOptions(cur) + '</select>' +
+    '<div class="ec-hint">Schools come from Academics \u2192 School Profile. Picking one fills the address below.</div>' +
+    '</label>';
+  wrap.style.display = '';
+  if (nameWrap) nameWrap.style.display = 'none';
+}
+
+function ecOrgSchoolPick(schoolId) {
+  const nameWrap = document.getElementById('ec-orgname-wrap');
+  const nameEl = document.querySelector('.ec-in[data-k="organization_name"]');
+  if (schoolId === '__other__') {
+    if (nameWrap) nameWrap.style.display = '';
+    if (nameEl) { nameEl.value = ''; nameEl.focus(); }
+    return;
+  }
+  const s = (SCHOOLS || []).find(function (x) { return String(x.id) === String(schoolId); });
+  if (!s) return;
+  if (nameEl) nameEl.value = s.school_name || '';
+  if (nameWrap) nameWrap.style.display = 'none';
+  // v308: prefill the standard location block from the school profile. These are
+  // addrFields ids, so it works for whatever country the school carries -
+  // onCountryChange rebuilds the region control to match.
+  const set = function (k, v) { const el = document.getElementById('ecorg-' + k); if (el && v) el.value = v; };
+  set('street_address', s.street_address);
+  set('street_address_line_2', s.street_address_line_2);
+  set('city_town', s.city_town);
+  set('zip_postal_code', s.zip_postal_code);
+  const cEl = document.getElementById('ecorg-country');
+  if (cEl) cEl.value = countryName(s.country || 'US');
+  const wrap = document.getElementById('ecorg-state_wrap');
+  if (wrap && s.state_province) wrap.setAttribute('data-value', s.state_province);
+  if (typeof onCountryChange === 'function') onCountryChange('ecorg');
 }
 
 function ecProgramPicker(a) {
   const filtered = CAT_FILTER ? (EC_PROGRAMS || []).filter(p => p.category === CAT_FILTER) : (EC_PROGRAMS || []);
   const opts = filtered.map(p => '<option value="'+p.code+'"'+(a.program_code===p.code?' selected':'')+'>'+escapeHTML(p.title)+(CAT_FILTER?'':' ('+escapeHTML(p.category)+')')+'</option>').join('');
   return '<label class="ec-lbl">Program *' +
-    '<select class="ec-in" data-k="program_code" onchange="if(typeof ecSwimContext===\'function\')ecSwimContext()">' +
+    '<select class="ec-in" data-k="program_code" onchange="ecProgramChanged(this.value)">' +
     '<option value="">-- pick a program --</option>' + opts + '</select></label>' +
+    // v308: school-delivered programs pick their provider from the academic
+    // record instead of retyping the school name and address.
+    '<span id="ec-orgschool-wrap" style="display:none"></span>' +
     '<span id="ec-orgname-wrap" style="' + (LM_ORGS[a.program_code] ? 'display:none' : '') + '">' +
     '<label class="ec-lbl">Organization / provider name' +
     '<input class="ec-in" data-k="organization_name" type="text" placeholder="e.g. Frisco School of Music (defaults to the program name)" value="'+escapeHTML(a.organization_name||'')+'" oninput="if(typeof ecSwimContext===\'function\')ecSwimContext()"></label></span>';
