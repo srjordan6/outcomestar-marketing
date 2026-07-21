@@ -885,19 +885,20 @@ function schoolTypeChanged(v) {
   var hint = document.getElementById('school-type-hint');
   var box = document.getElementById('pss-box');
   var ccd = document.getElementById('ccd-box');
+  var plain = document.getElementById('plain-box');
   var isPriv = (v === 'private' || v === 'parochial');
-  // v287: private/parochial replaces the PUBLIC cascade outright rather than
-  // sitting beside it. A private school can never appear in the CCD selects,
-  // and leaving a second free-text name box on screen just asked the same
-  // question twice. The PSS search field below IS the school-name field.
-  if (ccd) ccd.style.display = isPriv ? 'none' : '';
+  // v289: three routes. PUBLIC keeps the NCES CCD cascade. PRIVATE swaps in the
+  // PSS survey lookup. OTHER (home school, online provider, overseas, anything
+  // unlisted) drops both directories entirely - no federal list can help, so it
+  // just asks for a name and an address.
+  var isOther = !!v && v !== 'public' && !isPriv;
+  if (ccd) ccd.style.display = (v === 'public' || !v) ? '' : 'none';
   if (box) box.style.display = isPriv ? 'block' : 'none';
+  if (plain) plain.style.display = isOther ? 'block' : 'none';
   if (isPriv) pssLoadStates(null);
   if (!hint) return;
-  if (isPriv) {
+  if (isPriv || isOther) {
     hint.textContent = '';
-  } else if (v === 'home_school' || v === 'correspondence' || v === 'education_provider' || v === 'other') {
-    hint.textContent = 'Type the name as it should appear on transcripts and applications.';
   } else {
     hint.textContent = '';
   }
@@ -5454,16 +5455,27 @@ function schoolEdit(id) {
     // v284: SCHOOL TYPE now comes FIRST - the answer here drives which picker
     // makes sense below (public/charter -> NCES CCD cascade; private/parochial
     // -> free text until the NCES PSS private-school universe is ingested).
-    // v186: school_type must match the DB check constraint - lowercase codes only.
-    // Display labels are friendly; the stored value is the code.
+    // v289: THREE choices only - Public, Private, Other. The old eight-way list
+    // (charter/parochial/home_school/correspondence/education_provider) asked a
+    // classification question parents do not think in, and only two answers
+    // actually change behaviour: public routes to the NCES CCD cascade, private
+    // routes to the PSS survey. Everything else is Other, which drops both
+    // directories and just takes a typed name and address.
+    // Legacy rows may still hold charter/parochial/etc - those codes are still
+    // valid in the DB check constraint, so a saved value outside these three is
+    // preserved as an extra option rather than silently rewritten.
     '<label class="ec-lbl">School type<select class="ec-in" data-k="school_type" onchange="schoolTypeChanged(this.value)">' +
-      [['', '-- pick --'], ['public', 'Public'], ['private', 'Independent / Private'],
-       ['charter', 'Charter'], ['parochial', 'Religious / Parochial'],
-       ['home_school', 'Home school'], ['correspondence', 'Correspondence / Distance'],
-       ['education_provider', 'Education provider'], ['other', 'Other']].map(function (o) {
-        return '<option value="' + o[0] + '"' +
-          ((sc.school_type || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
-      }).join('') + '</select></label>' +
+      (function () {
+        var opts = [['', '-- pick --'], ['public', 'Public'], ['private', 'Private'], ['other', 'Other']];
+        var cur = sc.school_type || '';
+        if (cur && !opts.some(function (o) { return o[0] === cur; })) {
+          opts.push([cur, cur.replace(/_/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); }) + ' (existing)']);
+        }
+        return opts.map(function (o) {
+          return '<option value="' + o[0] + '"' +
+            (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('');
+      })() + '</select></label>' +
     // v285: the picker sits BELOW school type, so the type answer is known
     // before a name is chosen. The NCES cascade here covers PUBLIC and CHARTER
     // schools (k12_schools is the CCD universe); private and parochial route to
@@ -5490,6 +5502,10 @@ function schoolEdit(id) {
         'No match? What you type is still saved.</div>' +
       '<div id="pss-results"></div>' +
     '</div>' +
+    // v289: free-text name for Other - no directory can help, so just ask.
+    '<div id="plain-box" style="display:none">' +
+      ecField('school_name_plain', 'School name', sc.school_name) +
+    '</div>' +
     ecField('street_address', 'Street address', sc.street_address) +
     // v283: suite / building / unit line. student_school_enrollments already
     // has street_address_line_2 - only the form was missing it, so campuses
@@ -5503,6 +5519,17 @@ function schoolEdit(id) {
       )
     ) +
     countryField('country', sc.country) +
+    // v289: the school's own contact block. Distinct from the counselor block
+    // below - a transcript request goes to the front office, a recommendation
+    // conversation goes to the principal.
+    ecRowTwo(
+      ecField('school_phone', 'School phone', sc.school_phone, false, 'tel'),
+      ecField('school_fax', 'School fax', sc.school_fax, false, 'tel')
+    ) +
+    ecRowTwo(
+      ecField('principal_name', 'Principal', sc.principal_name),
+      ecField('principal_phone', 'Principal phone', sc.principal_phone, false, 'tel')
+    ) +
     // v193: counselor details live on the Counselors card, not here. A school can
     // change counselors, and the counselor needs their own record for the Common
     // App School Report anyway. Existing values round-trip so nothing is lost.
@@ -5597,6 +5624,15 @@ async function schoolSave(id) {
       // has their own record under Academics -> Counselors.
     }
   } catch (e) {}
+  // v289: reconcile the three possible name inputs into the one column. Whichever
+  // block is visible for the chosen type wins; the hidden ones are scratch keys
+  // the API does not know about and are dropped by the whitelist below.
+  if (item.school_name_plain) item.school_name = item.school_name_plain;
+  delete item.school_name_plain;
+  if (!item.school_name) {
+    const pq = document.getElementById('pss-q');
+    if (pq && pq.value.trim()) item.school_name = pq.value.trim();
+  }
   if (!item.school_name) { showToast('School name required', 'error'); return; }
   // v187: whitelist + type-coerce before POST. Anything not a real column (picker
   // scratch keys, stray data-k) is dropped, and integer columns are sent as ints -
@@ -5610,6 +5646,7 @@ async function schoolSave(id) {
   const SCHOOL_ALLOWED = ['id', 'school_name', 'school_leaid', 'school_ceeb_code', 'ceeb_code',
     'district_leaid', 'district_name', 'student_school_id',
     'school_type', 'street_address', 'street_address_line_2', 'city_town', 'state_province',
+    'school_phone', 'school_fax', 'principal_name', 'principal_phone',
     'country', 'zip_postal_code', 'is_current_school', 'enrollment_kind', 'start_date', 'end_date',
     'expected_graduation_date', 'counselor_name', 'counselor_position', 'counselor_phone',
     'counselor_email', 'counselor_fax', 'notes', 'grading_scale', 'max_grade_offered',
