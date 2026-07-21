@@ -8912,6 +8912,11 @@ async function ucaSaveInstance(){
       window.__UCAAI = null;             // fall through and save the free version
     } else {
       showToast('Generating with AI\u2026','success');
+      // v321: lock the button. Two successful charges landed 20 seconds apart
+      // (pi_3Tvmhi..., pi_3Tvmi2...) because nothing stopped a second press
+      // while the first request was still running. $1.00 each, no output.
+      var genBtn = document.querySelector('.ec-bar .save-btn');
+      if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating\u2026'; }
       try {
         const r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/resume-tailor',
           { resume_kind: ai.code, job_description: ai.parts.join('\n'),
@@ -8928,6 +8933,13 @@ async function ucaSaveInstance(){
           if (tEl && (ai.pos || ai.org)) {
             tEl.value = tEl.value + ' \u2014 ' + (ai.pos||ai.org||'tailored') + (ai.pos&&ai.org?(', '+ai.org):'');
           }
+        } else {
+          // v321: the charge succeeded and the AI returned nothing usable, so
+          // the parent pays and silently gets the generic resume. Say so, and
+          // show what came back - this is money taken for no output.
+          alert('You were charged, but the AI returned no usable content.\n\n' +
+                'Server response: ' + JSON.stringify(r).slice(0, 600) +
+                '\n\nSaving the standard resume. This charge should be refunded.');
         }
         window.__UCAAI = null;
       } catch(err){
@@ -8952,6 +8964,10 @@ async function ucaSaveInstance(){
           showToast('AI unavailable - saving the free standard resume (no charge)','error');
         }
         window.__UCAAI = null;
+      } finally {
+        // v321: always restore the button. Without this a failed run leaves it
+        // disabled and the draft unsavable.
+        if (genBtn) { genBtn.disabled = false; genBtn.textContent = 'Generate'; }
       }
     }
   }
