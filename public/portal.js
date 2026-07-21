@@ -3758,15 +3758,62 @@ function perfField(id, label, val, type) {
     '<input class="ec-in" id="' + id + '" type="' + (type || 'text') + '" value="' + escapeHTML(val == null ? '' : String(val)) + '"></label>';
 }
 
-function perfEdit(id) {
+// v311: instrument dropdown for the performance logger. 49 instruments in six
+// families from /catalogs/instruments (instruments_catalog - orchestral set
+// per the standard taxonomy + band/jazz staples: saxes, mellophone,
+// sousaphone, euphonium, drum set). Grouped <optgroup> per family. A value
+// saved before the catalog existed (or an instrument we do not list) still
+// round-trips: it is prepended as its own selected option rather than
+// silently dropped, and "Other" opens a free-text box.
+let INSTRUMENTS = null;
+async function loadInstruments() {
+  if (INSTRUMENTS) return INSTRUMENTS;
+  try { const d = await apiGet('/focms/v1/catalogs/instruments'); INSTRUMENTS = d.instruments || []; }
+  catch (e) { INSTRUMENTS = []; }
+  return INSTRUMENTS;
+}
+function instrumentField(val) {
+  const list = INSTRUMENTS || [];
+  if (!list.length) return perfField('pf-instrument', 'Instrument', val);   // catalog unreachable -> old text box
+  const cur = (val || '').trim();
+  const inList = list.some(function (i) { return i.title === cur; });
+  let html = '<label class="ec-lbl">Instrument<select class="ec-in" id="pf-instrument" onchange="instrumentOther(this.value)">' +
+    '<option value="">-- pick an instrument --</option>';
+  if (cur && !inList) html += '<option value="' + escapeHTML(cur) + '" selected>' + escapeHTML(cur) + '</option>';
+  let fam = null;
+  list.forEach(function (i) {
+    if (i.family !== fam) { if (fam !== null) html += '</optgroup>'; html += '<optgroup label="' + escapeHTML(i.family) + '">'; fam = i.family; }
+    html += '<option value="' + escapeHTML(i.title) + '"' + (i.title === cur ? ' selected' : '') + '>' + escapeHTML(i.title) + '</option>';
+  });
+  if (fam !== null) html += '</optgroup>';
+  html += '<option value="__other__">Other \u2014 type it in</option></select></label>' +
+    '<label class="ec-lbl" id="pf-instrument-other-wrap" style="display:none">Instrument name' +
+    '<input class="ec-in" id="pf-instrument-other" placeholder="e.g. Mandolin"></label>';
+  return html;
+}
+function instrumentOther(v) {
+  const w = document.getElementById('pf-instrument-other-wrap');
+  if (w) w.style.display = (v === '__other__') ? '' : 'none';
+  if (v === '__other__') { const el = document.getElementById('pf-instrument-other'); if (el) el.focus(); }
+}
+function instrumentValue() {
+  const sel = document.getElementById('pf-instrument');
+  if (!sel) return null;
+  const v = (sel.value || '').trim();
+  if (v === '__other__') return ((document.getElementById('pf-instrument-other') || {}).value || '').trim() || null;
+  return v || null;
+}
+
+async function perfEdit(id) {
   if (!ENTRY_VIEW) return;
+  await loadInstruments();   // v311: one fetch per session; cached after
   const p = id ? (EC_SESSIONS || []).find(x => x.id === id) : { event_date: new Date().toISOString().slice(0, 10) };
   if (!p) return;
   const back = 'renderEntryDetail(\'' + ENTRY_VIEW.cat + '\',\'' + ENTRY_VIEW.code + '\',\'' + ENTRY_VIEW.id + '\')';
   document.getElementById('sections-container').innerHTML = ecTrailCrumb(id ? 'Edit performance' : 'Log performance') + '<div class="ec-form">' +
     perfField('pf-title', 'Performance / concert name *', p.title) +
     perfField('pf-date', 'Date *', p.event_date, 'date') +
-    perfField('pf-instrument', 'Instrument', p.instrument) +
+    instrumentField(p.instrument) +
     perfField('pf-music', 'Music played (piece or program)', p.music_played) +
     perfField('pf-composer', 'Composer(s)', p.composer) +
     perfField('pf-location', 'Venue / place name', venuePrefill(p)) +
@@ -4024,7 +4071,7 @@ async function perfSave(id) {
   const item = {
     event_type: 'music_performance',
     title: v('pf-title'), event_date: v('pf-date'),
-    instrument: v('pf-instrument') || null, music_played: v('pf-music') || null,
+    instrument: instrumentValue(), music_played: v('pf-music') || null,
     composer: v('pf-composer') || null,
     media_ids: mediaWidgetCollect('pf-media'),
     location_parts: document.getElementById('pfloc-zip_postal_code') ? Object.assign(readAddr('pfloc'), { venue: v('pf-location') || '' }) : null,
