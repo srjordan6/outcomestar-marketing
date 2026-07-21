@@ -1068,7 +1068,6 @@ async function renderSiteBanner(pillarCode){
     +       '<input type="checkbox" id="banner-publish" '+(pubMaster?'checked':'')+' onchange="bannerSetPublish(this.checked)"><span>Publish site</span></label>'
     +     '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'
     +       '<input type="checkbox" id="banner-pillar" '+(pubPillar?'checked':'')+' onchange="bannerSetPillar(\''+siteKey+'\',this.checked)"><span>Show '+escapeHTML(pillarLabel)+' on site</span></label>'
-    +     '<a href="javascript:void(0)" onclick="openWebsitePillar()" style="color:var(--orange);font-weight:600">Manage website \u2192</a>'
     +   '</div>'
     + '</div>';
 }
@@ -4853,13 +4852,9 @@ function renderAcadBands() {
       '<div><div class="ec-name">School Profile</div><div class="ec-desc">CEEB, address, counselor, grading scale, class size, boarding, curriculum</div></div>' +
       '<div class="ec-count">' + (SCHOOLS.length || '—') + ' <span>schools on file</span></div>' +
     '</button>' +
-    '<button class="ec-card" onclick="openTeachers()">' +
-      '<div><div class="ec-name">Teachers</div><div class="ec-desc">Name, school, address, phone, and email — reused across courses and recommenders</div></div>' +
-      '<div class="ec-count">' + (TEACHERS.filter(function(t){return (t.role||'teacher')!=='counselor';}).length || '—') + ' <span>on file</span></div>' +
-    '</button>' +
-    '<button class="ec-card" onclick="openCounselors()">' +
-      '<div><div class="ec-name">Counselors</div><div class="ec-desc">School counselor — name, title, school, phone, and email. Required on the Common App and school reports.</div></div>' +
-      '<div class="ec-count">' + (TEACHERS.filter(function(t){return (t.role||'teacher')==='counselor';}).length || '—') + ' <span>on file</span></div>' +
+    '<button class="ec-card" onclick="openSchoolPersonnel()">' +
+      '<div><div class="ec-name">School Personnel</div><div class="ec-desc">Teachers and counselors \u2014 name, school, phone, and email. Entered once, reused across courses, recommendations, and the Common App.</div></div>' +
+      '<div class="ec-count">' + (TEACHERS.length || '—') + ' <span>on file</span></div>' +
     '</button>' +
     '<button class="ec-card" onclick="openTutoring()">' +
       '<div><div class="ec-name">Private Tutoring</div><div class="ec-desc">Subject, tutor, school year, description, skills gained, grade or certificate of completion</div></div>' +
@@ -4872,7 +4867,7 @@ function renderAcadBands() {
     '</button>';
   // v193: legacy "full Academics data-entry form" button removed - the stepped
   // cards above are now the only entry path.
-  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once \u2014 school, teachers, counselors, tutoring</div>';
+  const step1 = '<div class="ec-lbl" style="margin:2px 0 6px">Step 1 \u00b7 Set up once \u2014 school, personnel, tutoring</div>';
   const step2 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 2 \u00b7 Enter courses / subjects by year</div>';
   const step3 = '<div class="ec-lbl" style="margin:18px 0 6px">Step 3 \u00b7 Enter grades (report cards)</div>';
   document.getElementById('sections-container').innerHTML =
@@ -5526,6 +5521,30 @@ async function tutorEdit(id) {
     '<button class="save-btn" onclick="tutorSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openTutoring()">Cancel</button>' +
     '</div></div>';
+}
+
+function openSchoolPersonnel() {
+  // v301: Teachers and Counselors were two cards over ONE registry - the only
+  // difference is role. Merged into School Personnel so a parent doesn't have to
+  // know which bucket a person falls in before they can find them.
+  const all = tchSort(TEACHERS || []);
+  const teachers = all.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; });
+  const counselors = all.filter(function (t) { return (t.role || 'teacher') === 'counselor'; });
+  let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+                     { label: 'School Personnel' }]) +
+    '<div class="ec-bar">' +
+    '<button class="save-btn" onclick="TCH_ROLE=\'teacher\';teacherEdit(null)">Add teacher</button>' +
+    '<button class="save-btn" onclick="TCH_ROLE=\'counselor\';teacherEdit(null)">Add counselor</button>' +
+    '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
+    '</div>' +
+    '<div class="ec-desc" style="margin-bottom:10px">Everyone at the school who is named on an application \u2014 entered once, reused across courses, recommendations, and the Common App.</div>';
+  html += '<div class="ec-lbl" style="margin:2px 0 6px">Teachers</div>';
+  html += teachers.length ? teachers.map(teacherRow).join('')
+                          : '<div class="cr-waiting">No teachers yet.</div>';
+  html += '<div class="ec-lbl" style="margin:18px 0 6px">Counselors</div>';
+  html += counselors.length ? counselors.map(teacherRow).join('')
+                            : '<div class="cr-waiting">No counselors yet. The counselor submits the School Report and Mid-Year Report on the Common App.</div>';
+  document.getElementById('sections-container').innerHTML = html;
 }
 
 function tutCoursePick(code) {
