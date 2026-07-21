@@ -8647,39 +8647,15 @@ function ucaResumeCreate(code){
     if (jd)    parts.push('Description:\n'+jd);
     if (!parts.length && useAi2) parts.push('No specific target \u2014 produce the strongest general-purpose ' + (acad ? 'academic resume for admissions and scholarship review' : 'resume') + ' from this record.');
     if (parts.length && useAi2) {
-      showToast('Enhancing resume with AI\u2026','success');
-      try {
-        const r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/resume-tailor',
-          { resume_kind: code, job_description: parts.join('\n'), sections: secs.filter(function(s){return s.title!=='STUDENT';}) });
-        if (r.sections && r.sections.length) {
-          var stu = secs.find(function(s){return s.title==='STUDENT';});
-          var tgt = { title: acad?'TARGET PROGRAM':'TARGET POSITION', rows: [] };
-          if (pos) tgt.rows.push([acad?'Program':'Position', pos]);
-          if (org) tgt.rows.push([acad?'Institution':'Employer', org + (loc?(' \u00b7 '+loc):'') + (phone?(' \u00b7 '+phone):'')]);
-          if (ct)  tgt.rows.push(['Contact', ct]);
-          if (dead) tgt.rows.push(['Deadline', dead]);
-          secs = (stu?[stu]:[]).concat(tgt.rows.length?[tgt]:[], r.sections);
-          title += ' \u2014 ' + (pos||org||'tailored') + (pos&&org?(', '+org):'');
-        }
-      } catch(e){
-        var pm = String(e.message||'');
-        // v314: distinguish NO CARD ON FILE from a genuine decline. Both used to
-        // read "Card charge failed", which is wrong and unactionable when the
-        // real answer is "you have never added a card". The backend returns
-        // 402 payment_required: no card on file for the first case.
-        if (/no card on file|payment_required/.test(pm)) {
-          showToast('No card on file - AI enhancement needs one ($1.00 + tax). Showing the free standard resume.','error');
-          if (typeof openBillingPortal === 'function' &&
-              confirm('AI resume enhancement costs $1.00 + tax and needs a card on file.\n\nOpen billing now to add one?')) {
-            openBillingPortal();
-            return;                      // do not drop into the editor mid-redirect
-          }
-        } else if (/payment_failed|payment_unavailable/.test(pm)) {
-          showToast('Card was declined - AI enhancement skipped. ' + pm.replace(/^.*?:\s*/,'') + ' Showing the free standard resume.','error');
-        } else {
-          showToast('AI enhancement unavailable - using the free standard resume (no charge)','error');
-        }
-      }
+      // v314: DEFERRED. The LLM call (and therefore the $1.00 charge) used to
+      // fire here, at modal submit - before the parent ever saw the editor or
+      // pressed Generate. Money moved before the button that implies it.
+      // Now the target is stashed and the editor opens on the FREE structured
+      // resume; Generate spends. See ucaSaveInstance.
+      window.__UCAAI = { code: code, acad: acad, parts: parts,
+                         pos: pos, org: org, loc: loc, phone: phone, ct: ct, dead: dead };
+    } else {
+      window.__UCAAI = null;
     }
     ucaEditorWith(code, null, null, secs, title);
   };
@@ -8702,7 +8678,12 @@ async function ucaEditor(code, appId, instanceId){
     title = ucaFormName(code) + (APP ? (' \u2014 ' + (APP.common_name||APP.university_name)) : '');
   }
   window.__UCAED = { code: code, appId: appId, instanceId: instanceId };
-  var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">Generate</button>'
+  // v314: label the button with what it actually does. When an AI target is
+  // pending, Generate spends money - say so on the button rather than in a
+  // dialog the parent meets only after committing.
+  var aiPend = window.__UCAAI && window.__UCAAI.code === code && !instanceId;
+  var html = '<div class="ec-bar"><button class="save-btn" onclick="ucaSaveInstance()">'
+    + (aiPend ? 'Generate with AI \u2014 $1.00 + tax' : 'Generate') + '</button>'
     + '<button class="save-btn save-btn-ghost" onclick="renderUcaTopic(\'' + code + '\')">Cancel</button></div>'
     + '<div class="ec-form" style="max-width:820px">'
     + '<label class="ec-lbl">Title<input class="ec-in" id="uca-title" value="' + escapeHTML(title||'') + '"></label>';
@@ -8744,6 +8725,58 @@ function ucaCollectSecs(){
 async function ucaSaveInstance(){
   var secs = ucaCollectSecs();
   var e = window.__UCAED;
+  var ai = window.__UCAAI;
+
+  // v314: the AI pass runs HERE, on Generate, against whatever the parent has
+  // edited - not on the pristine build from modal submit. This is also the
+  // moment the $1.00 + tax charge lands, so the button that spends money is
+  // the button labelled with the price. The parent has already seen the free
+  // structured resume by this point and can Cancel without paying anything.
+  if (ai && ai.code === e.code && !e.instanceId) {
+    if (!confirm('Generate the AI-tailored resume now?\n\nThis charges $1.00 + tax to your card on file. Cancel to save the free standard resume instead.')) {
+      window.__UCAAI = null;             // fall through and save the free version
+    } else {
+      showToast('Generating with AI\u2026','success');
+      try {
+        const r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/resume-tailor',
+          { resume_kind: ai.code, job_description: ai.parts.join('\n'),
+            sections: secs.filter(function(s){return s.title!=='STUDENT';}) });
+        if (r.sections && r.sections.length) {
+          var stu = secs.find(function(s){return s.title==='STUDENT';});
+          var tgt = { title: ai.acad?'TARGET PROGRAM':'TARGET POSITION', rows: [] };
+          if (ai.pos) tgt.rows.push([ai.acad?'Program':'Position', ai.pos]);
+          if (ai.org) tgt.rows.push([ai.acad?'Institution':'Employer', ai.org + (ai.loc?(' \u00b7 '+ai.loc):'') + (ai.phone?(' \u00b7 '+ai.phone):'')]);
+          if (ai.ct)  tgt.rows.push(['Contact', ai.ct]);
+          if (ai.dead) tgt.rows.push(['Deadline', ai.dead]);
+          secs = (stu?[stu]:[]).concat(tgt.rows.length?[tgt]:[], r.sections);
+          var tEl = document.getElementById('uca-title');
+          if (tEl && (ai.pos || ai.org)) {
+            tEl.value = tEl.value + ' \u2014 ' + (ai.pos||ai.org||'tailored') + (ai.pos&&ai.org?(', '+ai.org):'');
+          }
+        }
+        window.__UCAAI = null;
+      } catch(err){
+        var pm = String(err.message||'');
+        // Distinguish NO CARD ON FILE from a genuine decline. Both used to read
+        // "charge failed", which is unactionable when the real answer is "you
+        // have never added a card". Backend: 402 payment_required: no card on file.
+        if (/no card on file|payment_required/.test(pm)) {
+          showToast('No card on file - AI needs one ($1.00 + tax). Saving the free standard resume.','error');
+          if (typeof openBillingPortal === 'function' &&
+              confirm('AI resume generation costs $1.00 + tax and needs a card on file.\n\nOpen billing now to add one? Your draft stays open.')) {
+            openBillingPortal();
+            return;                      // keep the editor; nothing charged, nothing saved
+          }
+        } else if (/payment_failed|payment_unavailable/.test(pm)) {
+          showToast('Card declined - saving the free standard resume. ' + pm.replace(/^.*?:\s*/,''),'error');
+        } else {
+          showToast('AI unavailable - saving the free standard resume (no charge)','error');
+        }
+        window.__UCAAI = null;
+      }
+    }
+  }
+
   var item = { form_code: e.code, application_id: e.appId, title: document.getElementById('uca-title').value.trim(), data: { sections: secs } };
   if (e.instanceId) item.id = e.instanceId;
   try {
