@@ -1887,7 +1887,16 @@ function addrFields(pfx, a) {
   var ctry = a.country || PROFILE_COUNTRY || 'US';
   return '<div class="field-grid">' +
     '<div class="field"><label>Postal / ZIP code</label>' + addrInput(pfx, 'zip_postal_code', a.zip_postal_code, 'Start here \u2014 fills city, state, county') + '</div>' +
-    '<div class="field"><label>Country</label><input id="' + pfx + '-country" type="text" list="country-dl" value="' + escapeHTML(countryName(ctry)) + '" placeholder="Start typing a country" onchange="onCountryChange(\'' + pfx + '\')"></div>' +
+    // v297: the Country box pointed at list="country-dl", but no datalist with
+    // that id was ever emitted - anywhere. So it rendered as a bare text box
+    // with no country list at all, and a parent had to know the exact spelling.
+    // The list is built per block (ids must be unique) from the same COUNTRIES
+    // table countryOptions() uses, so names round-trip through
+    // countryCodeFromName() on save.
+    '<div class="field"><label>Country</label><input id="' + pfx + '-country" type="text" list="' + pfx + '-country-dl" value="' + escapeHTML(countryName(ctry)) + '" placeholder="Start typing a country" onchange="onCountryChange(\'' + pfx + '\')">' +
+      '<datalist id="' + pfx + '-country-dl">' +
+        COUNTRIES.map(function (c) { return '<option value="' + escapeHTML(c[1]) + '">'; }).join('') +
+      '</datalist></div>' +
     '<div class="field"><label>Address line 1</label>' + addrInput(pfx, 'street_address', a.street_address, 'Street, house/building number') + '</div>' +
     '<div class="field"><label>Address line 2 (optional)</label>' + addrInput(pfx, 'street_address_line_2', a.street_address_line_2, 'Apt, unit, district') + '</div>' +
     '<div class="field"><label>City / Town</label>' + addrInput(pfx, 'city_town', a.city_town) + '</div>' +
