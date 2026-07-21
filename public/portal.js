@@ -994,6 +994,14 @@ function pssPick(i) {
   set('state_province', s.state_province);
   set('zip_postal_code', s.zip_postal_code);
   set('school_phone', s.phone);
+  // v291: keep the federal id. PSS ids carry a letter prefix (A1703455) so they
+  // cannot go in school_leaid, which the district cascade slices as digits.
+  set('nces_school_id', s.pss_id);
+  var idEl = document.querySelector('.ec-in[data-k="nces_school_id"]');
+  if (idEl) idEl.value = s.pss_id || '';
+  var idOut = document.getElementById('nces-id-out');
+  if (idOut) idOut.innerHTML = s.pss_id
+    ? 'NCES School ID: <b style="color:#201868">' + escapeHTML(s.pss_id) + '</b>' : '';
   const res = document.getElementById('pss-results');
   const q = document.getElementById('pss-q');
   if (q) q.value = s.name;
@@ -5401,11 +5409,15 @@ function openSchoolProfiles() {
 }
 
 function schoolRow(sc) {
-  const addr = [sc.street_address, sc.city_town, sc.state_province, sc.zip_postal_code].filter(Boolean).join(', ');
+  const addr = [sc.street_address, sc.street_address_line_2, sc.city_town, sc.state_province, sc.zip_postal_code].filter(Boolean).join(', ');
+  // v291: surface the federal id on the list row - it is what a registrar,
+  // Common App school lookup, or transcript request asks for.
+  const ncesId = sc.nces_school_id || sc.school_leaid || '';
   const cur = sc.is_current_school ? '<span class="ec-badge ec-badge-pub">Current</span>' : '';
   return '<div class="ec-row"><div>' +
     '<div class="ec-title">' + escapeHTML(sc.school_name || '(unnamed)') + '</div>' +
     '<div class="ec-meta">' + escapeHTML(addr) + '</div>' +
+    (ncesId ? '<div class="ec-meta">NCES School ID: ' + escapeHTML(ncesId) + '</div>' : '') +
     (sc.student_school_id ? '<div class="ec-meta">Student ID: ' + escapeHTML(sc.student_school_id) +
       (sc.district_name ? ' \u00b7 ' + escapeHTML(sc.district_name) : '') + '</div>' : '') +
     '<div class="ec-chips">' + cur + '</div>' +
@@ -5513,6 +5525,17 @@ function schoolEdit(id) {
     // v289: free-text name for Other - no directory can help, so just ask.
     '<div id="plain-box" style="display:none">' +
       ecField('school_name_plain', 'School name', sc.school_name) +
+    '</div>' +
+    // v291: federal school id, shown read-only. Public schools carry the
+    // 12-digit NCES/CCD ncessch in school_leaid; private schools carry the PSS
+    // id captured from the survey lookup.
+    '<input type="hidden" class="ec-in" data-k="nces_school_id" value="' +
+      escapeHTML(sc.nces_school_id || '') + '">' +
+    '<div id="nces-id-out" class="ec-hint" style="margin:-2px 0 12px">' +
+      ((sc.nces_school_id || sc.school_leaid)
+        ? 'NCES School ID: <b style="color:#201868">' +
+            escapeHTML(sc.nces_school_id || sc.school_leaid) + '</b>'
+        : '') +
     '</div>' +
     ecField('street_address', 'Street address', sc.street_address) +
     // v283: suite / building / unit line. student_school_enrollments already
@@ -5652,7 +5675,7 @@ async function schoolSave(id) {
     if (isNaN(n)) delete item[k]; else item[k] = n;
   });
   const SCHOOL_ALLOWED = ['id', 'school_name', 'school_leaid', 'school_ceeb_code', 'ceeb_code',
-    'district_leaid', 'district_name', 'student_school_id',
+    'district_leaid', 'district_name', 'student_school_id', 'nces_school_id',
     'school_type', 'street_address', 'street_address_line_2', 'city_town', 'state_province',
     'school_phone', 'school_fax', 'principal_name', 'principal_phone',
     'country', 'zip_postal_code', 'is_current_school', 'enrollment_kind', 'start_date', 'end_date',
