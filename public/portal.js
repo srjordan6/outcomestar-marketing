@@ -3180,9 +3180,13 @@ function renderSwimMeetForm() {
     '<label class="ec-lbl">End date<input class="rec-i" id="swm-d2" type="date"></label>' +
     '<label class="ec-lbl">Course *<select class="rec-i" id="swm-course"><option>SCY</option><option>LCM</option><option>SCM</option></select></label>' +
     '<label class="ec-lbl">Location \u2014 pool / venue<input class="rec-i" id="swm-loc" placeholder="Westside Aquatic Center"></label>' +
-    '<label class="ec-lbl">ZIP code<input class="rec-i" id="swm-zip" type="text" inputmode="numeric" maxlength="10" placeholder="Fills city + state"></label>' +
+    // v309: the swim meet block was the last US-locked address entry point -
+    // no country field, a 2-char uppercase State box, and a ZIP lookup that is
+    // US-only. Meets abroad now record properly.
+    '<label class="ec-lbl">Country<select class="rec-i" id="swm-country" onchange="swimMeetCountryChange()">' + countryOptions(PROFILE_COUNTRY || 'US') + '</select></label>' +
+    '<label class="ec-lbl" id="swm-zip-lbl">Postal code<input class="rec-i" id="swm-zip" type="text" maxlength="12" placeholder="Fills city + state"></label>' +
     '<label class="ec-lbl">City<input class="rec-i" id="swm-city" placeholder="Lewisville"></label>' +
-    '<label class="ec-lbl">State<input class="rec-i" id="swm-state" placeholder="TX" maxlength="2" style="text-transform:uppercase"></label>' +
+    '<label class="ec-lbl" id="swm-state-lbl">State / Province / Region<input class="rec-i" id="swm-state" placeholder="TX" maxlength="2" style="text-transform:uppercase"></label>' +
     '<label class="ec-lbl">Swimmer age at meet *<input class="rec-i" id="swm-age" type="number" min="4" max="25" placeholder="11"></label>' +
     '<label class="ec-lbl">Age group<input class="rec-i" id="swm-agegrp" placeholder="Boys 11-12"></label>' +
     '<label class="ec-lbl">Team<input class="rec-i" id="swm-team" placeholder="Iron Horse Aquatics"></label>' +
@@ -3207,13 +3211,45 @@ function renderSwimMeetForm() {
     '</div>';
   swimMeetAddRow(); swimMeetAddRow(); swimMeetAddRow();
   attachZipTrio(document.getElementById('swm-zip'), document.getElementById('swm-city'), document.getElementById('swm-state'), true);
+  swimMeetCountryChange();   // v309: apply the country's rules on open
+}
+
+function swimMeetCountryChange() {
+  // v309: US keeps the ZIP lookup and the 2-char uppercase state box. Everywhere
+  // else the postal lookup is suspended (via the __zipoff flag attachZipTrio's
+  // handler checks) and the region box takes free text of any length - a
+  // 2-char uppercase field cannot hold "Nordrhein-Westfalen".
+  const cEl = document.getElementById('swm-country');
+  const iso2 = cEl ? (cEl.value || 'US') : 'US';
+  const isUS = iso2 === 'US';
+  const zEl = document.getElementById('swm-zip');
+  const sEl = document.getElementById('swm-state');
+  if (zEl) {
+    zEl.__zipoff = !isUS;
+    zEl.setAttribute('placeholder', isUS ? 'Fills city + state' : 'Postal code');
+  }
+  if (sEl) {
+    if (isUS) {
+      sEl.setAttribute('maxlength', '2');
+      sEl.style.textTransform = 'uppercase';
+      sEl.setAttribute('placeholder', 'TX');
+    } else {
+      sEl.removeAttribute('maxlength');
+      sEl.style.textTransform = 'none';
+      sEl.setAttribute('placeholder', 'Region / province');
+    }
+  }
 }
 
 async function saveSwimMeet() {
   const g = id => (document.getElementById(id) || {}).value || '';
   const meet = g('swm-meet').trim(), d1 = g('swm-d1'), d2 = g('swm-d2'),
         course = g('swm-course'), loc = g('swm-loc').trim(), city = g('swm-city').trim(),
-        state = g('swm-state').trim().toUpperCase(), team = g('swm-team').trim(),
+        country = g('swm-country') || 'US',
+        // v309: uppercase ONLY for US state codes. Forcing it on a foreign region
+        // turns "Nordrhein-Westfalen" into shouting.
+        state = (country === 'US' ? g('swm-state').trim().toUpperCase() : g('swm-state').trim()),
+        team = g('swm-team').trim(),
         ageGrp = g('swm-agegrp').trim();
   const age = parseInt(g('swm-age'), 10);
   const isPub = !!(document.getElementById('swm-pub') || {}).checked;
@@ -3250,6 +3286,7 @@ async function saveSwimMeet() {
                       distance: dist, finals_time: r.time, finals_time_seconds: r.secs,
                       power_points: r.pts, place: r.place, time_standard: r.std, age: age,
                       age_group: ageGrp || null, team: team || null, location_zip: g('swm-zip').trim() || null,
+                      location_country: country || null,
                       entered_via: 'parent_portal_v208' };
     try {
       await apiPost('/focms/v1/events?upsert=true', {
