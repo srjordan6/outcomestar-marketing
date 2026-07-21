@@ -4637,10 +4637,16 @@ function ecEdit(id, presetProgCode) {
 }
 
 function ecIsSchoolProgram(code) {
-  // v308: keyed on the program TITLE starting with "School", not on the code -
-  // marching_band's title is "School Marching Band" and would be missed otherwise.
+  // v311: driven by affiliation_programs_catalog.school_based (22 programs
+  // marked so far - orchestra, band, choir, yearbook, student council, NHS,
+  // mock trial, robotics...). The v308 title-prefix test missed anything not
+  // literally named "School X": Yearbook Committee got a bare text box while
+  // School Choir got the picker. Title fallback kept for a stale cached
+  // catalog that predates the flag.
   const p = (EC_PROGRAMS || []).find(function (x) { return x.code === code; });
-  return !!(p && /^school\b/i.test(p.title || ''));
+  if (!p) return false;
+  if (typeof p.school_based === 'boolean') return p.school_based;
+  return /^school\b/i.test(p.title || '');
 }
 
 function ecOrgSchoolOptions(sel) {
