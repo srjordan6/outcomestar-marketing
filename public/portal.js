@@ -5786,19 +5786,27 @@ function schoolEdit(id) {
             escapeHTML(sc.nces_school_id || sc.school_leaid) + '</b>'
         : '') +
     '</div>' +
+    // v304: Country FIRST - it decides what the rest of the address means. The
+    // block below re-labels itself and swaps State for the country's own ISO
+    // 3166-2 subdivision list when a non-US country is picked.
+    '<label class="ec-lbl">Country<select class="ec-in" id="sc-country" data-k="country" onchange="schoolCountryChange()">' +
+      countryOptions(sc.country || PROFILE_COUNTRY || 'US') + '</select></label>' +
     ecField('street_address', 'Street address', sc.street_address) +
     // v283: suite / building / unit line. student_school_enrollments already
     // has street_address_line_2 - only the form was missing it, so campuses
     // with a suite or building number had nowhere to put it.
     ecField('street_address_line_2', 'Suite / building / unit (optional)', sc.street_address_line_2) +
     ecRowTwo(
-      ecField('zip_postal_code', 'ZIP code (fills city + state)', sc.zip_postal_code),
+      '<label class="ec-lbl" id="sc-zip-lbl">Postal code' +
+        '<input class="ec-in" data-k="zip_postal_code" id="sc-zip" type="text" value="' + escapeHTML(sc.zip_postal_code || '') + '"></label>',
       ecRowTwo(
         ecField('city_town', 'City', sc.city_town),
-        ecField('state_province', 'State', sc.state_province)
+        '<label class="ec-lbl" id="sc-state-lbl">State / Province / Region' +
+          '<span id="sc-state-wrap" data-value="' + escapeHTML(sc.state_province || '') + '">' +
+          '<input class="ec-in" data-k="state_province" id="sc-state" type="text" value="' + escapeHTML(sc.state_province || '') + '">' +
+          '</span></label>'
       )
     ) +
-    countryField('country', sc.country) +
     // v292: phones use the shared intl-tel-input control (country flag + dial
     // code + as-you-type formatting, persisted as E.164 like +19724039018).
     // These four were plain text boxes, which is why a phone could be saved as
@@ -5851,12 +5859,46 @@ function schoolEdit(id) {
     '<button class="save-btn" onclick="schoolSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="openSchoolProfiles()">Cancel</button>' +
     '</div></div>';
-  attachZipTrio(byKey('zip_postal_code'), byKey('city_town'), byKey('state_province'), !id);
+  // v304: /catalogs/zip is a US lookup, so the ZIP trio is wired only for US
+  // addresses. This also sets the labels and the subdivision control to match
+  // whatever country the record already carries.
+  schoolCountryChange(!id);
   initPhones();   // v292: bind the flag/dial-code control to the phone inputs
   // v285: reflect the saved type on open, so editing an existing private school
   // shows the PSS lookup instead of hiding it until the select is touched.
   schoolTypeChanged(sc.school_type || '');
   hideSiteBanner();
+}
+
+async function schoolCountryChange(defaultToHome) {
+  // v304: a school address means different things per country. US keeps the ZIP
+  // lookup that fills city and state; everywhere else gets "Postal code" plus the
+  // country's own ISO 3166-2 subdivisions, so an international campus can be
+  // recorded properly instead of being forced into US-shaped fields.
+  const cEl = document.getElementById('sc-country');
+  const iso2 = cEl ? (cEl.value || 'US') : 'US';
+  const isUS = iso2 === 'US';
+  const zipLbl = document.getElementById('sc-zip-lbl');
+  const stLbl = document.getElementById('sc-state-lbl');
+  const wrap = document.getElementById('sc-state-wrap');
+  const zEl = document.getElementById('sc-zip');
+  if (zipLbl && zipLbl.firstChild) zipLbl.firstChild.nodeValue = isUS ? 'ZIP code (fills city + state)' : 'Postal code';
+  if (stLbl && stLbl.firstChild) stLbl.firstChild.nodeValue = isUS ? 'State' : 'State / Province / Region';
+  if (isUS && zEl) attachZipTrio(zEl, byKey('city_town'), document.getElementById('sc-state'), !!defaultToHome);
+  if (!wrap) return;
+  const cur = wrap.getAttribute('data-value') || '';
+  const subs = await loadSubdivisions(iso2);
+  if (subs.length) {
+    wrap.innerHTML = '<select class="ec-in" data-k="state_province" id="sc-state">' +
+      '<option value=""></option>' +
+      subs.map(function (x) {
+        const sel = (x.code === cur || x.name === cur || x.code.split('-')[1] === cur) ? ' selected' : '';
+        return '<option value="' + escapeHTML(x.code) + '"' + sel + '>' + escapeHTML(x.name) + '</option>';
+      }).join('') + '</select>';
+  } else {
+    wrap.innerHTML = '<input class="ec-in" data-k="state_province" id="sc-state" type="text" value="' +
+      escapeHTML(cur) + '" placeholder="Region / City">';
+  }
 }
 
 async function schoolSave(id) {
