@@ -886,10 +886,24 @@ function schoolTypeChanged(v) {
   var box = document.getElementById('pss-box');
   var isPriv = (v === 'private' || v === 'parochial');
   if (box) box.style.display = isPriv ? 'block' : 'none';
+  // v286: hide the PUBLIC cascade itself when the type is private. Leaving the
+  // country/state/district/school selects on screen was the bug - a private
+  // school can never appear in them, so the parent is asked to drive a picker
+  // guaranteed to fail. The free-text name input (data-k school_name) stays
+  // visible, because that is the field the record is actually saved from.
+  ['.sp-country', '.sp-cascade'].forEach(function (sel) {
+    document.querySelectorAll('#sections-container ' + sel).forEach(function (el) {
+      el.style.display = isPriv ? 'none' : '';
+    });
+  });
+  document.querySelectorAll('#sections-container select[id^="sp"][id$="-school"], ' +
+                            '#sections-container [id^="sp"][id$="-hint"]').forEach(function (el) {
+    el.style.display = isPriv ? 'none' : '';
+  });
   if (!hint) return;
   if (isPriv) {
-    hint.textContent = 'Private and religious schools are not in the public-school directory above. ' +
-      'Search the federal private-school survey instead:';
+    hint.textContent = 'Private and religious schools are not in the public-school directory. ' +
+      'Search the federal private-school survey instead \u2014 or just type the name below.';
   } else if (v === 'home_school' || v === 'correspondence' || v === 'education_provider' || v === 'other') {
     hint.textContent = 'Type the name as it should appear on transcripts and applications.';
   } else {
@@ -5418,7 +5432,7 @@ function schoolEdit(id) {
     '<div id="school-type-hint" class="ec-hint" style="margin:-4px 0 6px"></div>' +
     // v285: private / parochial lookup, hidden until that type is chosen.
     '<div id="pss-box" style="display:none;margin:0 0 12px">' +
-      '<input class="ec-inp" id="pss-q" placeholder="Search private schools by name\u2026" ' +
+      '<input class="ec-in" id="pss-q" placeholder="Search private schools by name\u2026" ' +
         'oninput="pssInput(this.value)" style="width:100%">' +
       '<div id="pss-results"></div>' +
     '</div>' +
