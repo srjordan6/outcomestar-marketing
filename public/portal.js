@@ -1716,18 +1716,44 @@ function zipAttach(pfx) {
       setv('city_town', d.city);
       if (cEl) { cEl.value = 'United States'; }
       await onCountryChange(pfx);
+      // v298: the state control is a SELECT once subdivisions load, but a plain
+      // INPUT before that (and for countries with no subdivision list). The old
+      // code only assigned when it was a SELECT, so a ZIP could leave the state
+      // blank or stale - and a stale state sitting in the county box is exactly
+      // the mix-up this fixes.
       var stEl = document.getElementById(pfx + '-state_province');
-      if (stEl && stEl.tagName === 'SELECT') stEl.value = d.state_iso;
+      if (stEl) {
+        if (stEl.tagName === 'SELECT') {
+          stEl.value = d.state_iso;
+          if (!stEl.value) stEl.value = d.state;      // list keyed on bare code
+        } else {
+          stEl.value = d.state_iso || d.state || '';
+        }
+        var wrap = document.getElementById(pfx + '-state_wrap');
+        if (wrap) wrap.setAttribute('data-value', stEl.value);
+      }
       var cw = document.getElementById(pfx + '-county_wrap');
       if (cw) cw.style.display = '';
+      // v298: rebuild the county control from THIS zip every time. Reusing the
+      // previous control meant a stale county (or a value that is not a county
+      // at all) survived the lookup, because assigning to a SELECT whose option
+      // list no longer contains that value silently does nothing.
       var coEl = document.getElementById(pfx + '-county');
-      if (coEl && d.counties && d.counties.length) {
-        if (d.counties.length === 1) { coEl.value = d.counties[0]; }
-        else {
-          var sel = document.createElement('select'); sel.id = coEl.id;
-          sel.innerHTML = d.counties.map(function(c){ return '<option value="' + escapeHTML(c) + '">' + escapeHTML(c) + '</option>'; }).join('');
-          coEl.parentNode.replaceChild(sel, coEl);
+      var counties = (d.counties || []).filter(Boolean);
+      if (coEl) {
+        var replacement;
+        if (counties.length > 1) {
+          replacement = document.createElement('select');
+          replacement.innerHTML = counties.map(function(c){
+            return '<option value="' + escapeHTML(c) + '">' + escapeHTML(c) + '</option>';
+          }).join('');
+        } else {
+          replacement = document.createElement('input');
+          replacement.type = 'text';
+          replacement.value = counties.length ? counties[0] : '';
         }
+        replacement.id = coEl.id;
+        coEl.parentNode.replaceChild(replacement, coEl);
       }
     } catch (e) { /* unknown zip - leave as typed */ }
   };
