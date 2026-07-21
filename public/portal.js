@@ -384,6 +384,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       var bp = new URLSearchParams(location.search).get('billing');
       if (bp === 'success') { showToast('Payment complete - your plan is active', 'success'); history.replaceState(null, '', location.pathname); }
       else if (bp === 'cancelled') { showToast('Checkout cancelled', 'info'); history.replaceState(null, '', location.pathname); }
+      // v314b: return leg from Checkout mode=setup (card capture).
+      var cardp = new URLSearchParams(location.search).get('card');
+      if (cardp === 'saved') { showToast('Card saved - reopen your resume and press Generate', 'success'); history.replaceState(null, '', location.pathname); }
+      else if (cardp === 'cancelled') { showToast('Card entry cancelled - no card saved', 'info'); history.replaceState(null, '', location.pathname); }
     } catch (e) {}
   }
   if (getToken()) await resolveContext();
@@ -8733,7 +8737,25 @@ async function ucaSaveInstance(){
   // the button labelled with the price. The parent has already seen the free
   // structured resume by this point and can Cancel without paying anything.
   if (ai && ai.code === e.code && !e.instanceId) {
-    if (!confirm('Generate the AI-tailored resume now?\n\nThis charges $1.00 + tax to your card on file. Cancel to save the free standard resume instead.')) {
+    // v314b: preflight. Only mention billing to a parent who actually has no
+    // card - previously the add-card detour was offered on any payment error,
+    // including to people whose card was already on file.
+    var hasCard = true;
+    try {
+      const pmv = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/payment-method');
+      hasCard = !!pmv.has_card;
+    } catch (e2) { hasCard = true; }        // unknown -> attempt, let the charge decide
+
+    if (!hasCard) {
+      if (confirm('AI generation costs $1.00 + tax and there is no card on file.\n\nAdd a card now? Your draft stays open.')) {
+        try {
+          const ss = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/setup-session', {});
+          if (ss.url) { location.href = ss.url; return; }
+        } catch (e3) { showToast('Could not open card entry - ' + (e3.message||''), 'error'); }
+      }
+      showToast('Saving the free standard resume (no charge)','info');
+      window.__UCAAI = null;
+    } else if (!confirm('Generate the AI-tailored resume now?\n\nThis charges $1.00 + tax to your card on file. Cancel to save the free standard resume instead.')) {
       window.__UCAAI = null;             // fall through and save the free version
     } else {
       showToast('Generating with AI\u2026','success');
@@ -8761,11 +8783,15 @@ async function ucaSaveInstance(){
         // "charge failed", which is unactionable when the real answer is "you
         // have never added a card". Backend: 402 payment_required: no card on file.
         if (/no card on file|payment_required/.test(pm)) {
-          showToast('No card on file - AI needs one ($1.00 + tax). Saving the free standard resume.','error');
-          if (typeof openBillingPortal === 'function' &&
-              confirm('AI resume generation costs $1.00 + tax and needs a card on file.\n\nOpen billing now to add one? Your draft stays open.')) {
-            openBillingPortal();
-            return;                      // keep the editor; nothing charged, nothing saved
+          // Preflight said there was a card, or the lookup failed - either way
+          // send them to Checkout-setup, NOT the billing portal (which manages
+          // an existing subscription and can offer nothing to add a card).
+          showToast('No usable card on file - saving the free standard resume.','error');
+          if (confirm('The charge could not find a usable card.\n\nAdd one now? Your draft stays open.')) {
+            try {
+              const ss2 = await apiPost('/focms/v1/student/' + STUDENT_ID + '/billing/setup-session', {});
+              if (ss2.url) { location.href = ss2.url; return; }
+            } catch (e4) { showToast('Could not open card entry - ' + (e4.message||''), 'error'); }
           }
         } else if (/payment_failed|payment_unavailable/.test(pm)) {
           showToast('Card declined - saving the free standard resume. ' + pm.replace(/^.*?:\s*/,''),'error');
