@@ -265,6 +265,17 @@
   .ec-in { padding: 8px 10px; border: 1px solid #E3E7ED; border-radius: 6px; font-size: 13px; color: var(--navy); font-family: inherit; }
   .ec-in:focus { outline: none; border-color: var(--orange); }
   .ec-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+    /* v292: the phone control is an intl-tel-input wrapper around the input.
+       Without these it renders at the library's default width and a different
+       height from the fields beside it, so a two-column row looked ragged. */
+    .ec-lbl .iti { width: 100%; display: block; margin-top: 4px; }
+    .ec-lbl .iti input[type=tel] {
+      width: 100%; box-sizing: border-box; padding: 8px 10px;
+      border: 1px solid #E3E7ED; border-radius: 6px; font-size: 13px;
+      color: var(--navy); font-family: inherit; background: #fff; margin: 0;
+    }
+    .ec-lbl .iti input[type=tel]:focus { outline: none; border-color: var(--orange); }
+    .iti__country-list { z-index: 40; }
 
 
     .sp-row { display: grid; grid-template-columns: 150px 1fr; gap: 8px; }
@@ -534,7 +545,7 @@
 </footer>
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
-<script src="/portal.js?v=291"></script>
+<script src="/portal.js?v=292"></script>
 <!-- chatwoot-widget -->
 <style>
   #chatwoot-hint {

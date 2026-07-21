@@ -908,20 +908,26 @@ var PSS_LAST = [];
 var PSS_TIMER = null;
 async function pssLoadStates(preferred) {
   // v288: same state list the public cascade uses, so the two pickers agree.
+  // v292: with a hard-coded fallback - when the catalog call failed the select
+  // rendered empty, which looked like a broken control.
+  const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA',
+    'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND',
+    'OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
   const sel = document.getElementById('pss-state');
   if (!sel || sel.dataset.loaded) return;
+  let list = US_STATES;
   try {
     const d = await apiGet('/focms/v1/catalogs/k12/states?country=US');
-    sel.innerHTML = '<option value="">-- all states --</option>' +
-      (d.states || []).map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
-    sel.dataset.loaded = '1';
-    // Default to the state already known for this student, so a Texas family
-    // is not handed every campus in the country.
-    const want = preferred ||
-      (document.querySelector('.ec-in[data-k="state_province"]') || {}).value ||
-      (knownDistrict() || {}).state || '';
-    if (want) sel.value = want;
-  } catch (e) { /* leave as all-states; search still works */ }
+    if (d && d.states && d.states.length) list = d.states;
+  } catch (e) { /* fall back to the built-in list */ }
+  sel.innerHTML = '<option value="">-- all states --</option>' +
+    list.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+  sel.dataset.loaded = '1';
+  // Default to the state already known for this student, so a Texas family is
+  // not handed every campus in the country.
+  const stEl = document.querySelector('.ec-in[data-k="state_province"]');
+  const want = preferred || (stEl && stEl.value) || '';
+  if (want && list.indexOf(want) >= 0) sel.value = want;
 }
 
 function pssStateChanged() {
@@ -994,6 +1000,15 @@ function pssPick(i) {
   set('state_province', s.state_province);
   set('zip_postal_code', s.zip_postal_code);
   set('school_phone', s.phone);
+  // v292: the phone box is owned by intl-tel-input, so push the survey's number
+  // through the control rather than writing a data-k input that no longer exists.
+  var phEl = document.getElementById('sch-phone');
+  if (phEl && s.phone) {
+    var digits = String(s.phone).replace(/\D/g, '');
+    var e164 = digits.length === 10 ? '+1' + digits : (digits ? '+' + digits : '');
+    if (window.ITI && ITI['sch-phone']) { try { ITI['sch-phone'].setNumber(e164); } catch (e) { phEl.value = s.phone; } }
+    else { phEl.value = s.phone; }
+  }
   // v291: keep the federal id. PSS ids carry a letter prefix (A1703455) so they
   // cannot go in school_leaid, which the district cascade slices as digits.
   set('nces_school_id', s.pss_id);
@@ -4503,6 +4518,13 @@ function ecArea(key, label, val) {
   return '<label class="ec-lbl">' + label +
     '<textarea class="ec-in" data-k="' + key + '" rows="2">' + escapeHTML(val || '') + '</textarea></label>';
 }
+function ecPhoneField(label, idBase, value) {
+  // v292: label + shared phone control. Kept out of the data-k collector on
+  // purpose - intl-tel-input owns the input, and the E.164 value is read back
+  // with readPhone() at save time.
+  return '<label class="ec-lbl">' + label + phoneControl(idBase, value) + '</label>';
+}
+
 function ecRowTwo(a, b) { return '<div class="ec-two">' + a + b + '</div>'; }
 
 async function ecSave(id) {
@@ -5550,16 +5572,17 @@ function schoolEdit(id) {
       )
     ) +
     countryField('country', sc.country) +
-    // v289: the school's own contact block. Distinct from the counselor block
-    // below - a transcript request goes to the front office, a recommendation
-    // conversation goes to the principal.
+    // v292: phones use the shared intl-tel-input control (country flag + dial
+    // code + as-you-type formatting, persisted as E.164 like +19724039018).
+    // These four were plain text boxes, which is why a phone could be saved as
+    // an unbounded run of digits with no country or area code.
     ecRowTwo(
-      ecField('school_phone', 'School phone', sc.school_phone, false, 'tel'),
-      ecField('school_fax', 'School fax', sc.school_fax, false, 'tel')
+      ecPhoneField('School phone', 'sch-phone', sc.school_phone),
+      ecPhoneField('School fax', 'sch-fax', sc.school_fax)
     ) +
     ecRowTwo(
       ecField('principal_name', 'Principal', sc.principal_name),
-      ecField('principal_phone', 'Principal phone', sc.principal_phone, false, 'tel')
+      ecPhoneField('Principal phone', 'sch-prin-phone', sc.principal_phone)
     ) +
     // v193: counselor details live on the Counselors card, not here. A school can
     // change counselors, and the counselor needs their own record for the Common
@@ -5602,6 +5625,7 @@ function schoolEdit(id) {
     '<button class="save-btn save-btn-ghost" onclick="openSchoolProfiles()">Cancel</button>' +
     '</div></div>';
   attachZipTrio(byKey('zip_postal_code'), byKey('city_town'), byKey('state_province'), !id);
+  initPhones();   // v292: bind the flag/dial-code control to the phone inputs
   // v285: reflect the saved type on open, so editing an existing private school
   // shows the PSS lookup instead of hiding it until the select is touched.
   schoolTypeChanged(sc.school_type || '');
@@ -5658,6 +5682,11 @@ async function schoolSave(id) {
   // v289: reconcile the three possible name inputs into the one column. Whichever
   // block is visible for the chosen type wins; the hidden ones are scratch keys
   // the API does not know about and are dropped by the whitelist below.
+  // v292: phones come from the intl-tel-input controls, not the data-k sweep,
+  // and are stored E.164 so a number is unambiguous across countries.
+  item.school_phone = readPhone('sch-phone');
+  item.school_fax = readPhone('sch-fax');
+  item.principal_phone = readPhone('sch-prin-phone');
   if (item.school_name_plain) item.school_name = item.school_name_plain;
   delete item.school_name_plain;
   if (!item.school_name) {
