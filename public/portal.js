@@ -130,7 +130,7 @@ function identifyChatwoot(d){
     try{
       window.$chatwoot.setUser('tenant-' + (d.tenant_id || TENANT_ID), {
         name: d.tenant_name || 'outcomestar family',
-        email: sessionStorage.getItem('focms_email') || undefined
+        email: sessionGet('focms_email') || undefined
       });
       window.$chatwoot.setCustomAttributes({
         tenant_id: d.tenant_id || TENANT_ID,
@@ -163,13 +163,54 @@ const SESSION_1_TABLES = new Set(["students", "student", "student_personal_detai
 let currentPillar = null;
 let schemaCache = {};
 
+/* v313: SESSION STORE. The token lived in sessionStorage, which is scoped to a
+   single TAB. The header links (About / Insights / FAQ / Contact / Help) carry
+   target="_blank", so every one of them landed the parent in a fresh tab with
+   an empty sessionStorage - and any return trip through that tab demanded a
+   new sign-in. Same failure in an installed PWA, where the standalone window
+   can be torn down and rebuilt between launches.
+
+   The token now lives in localStorage so it survives tabs, windows and app
+   relaunches. The 30-minute inactivity rule is UNCHANGED and is now the sole
+   expiry: sessionAlive() refuses a token whose last-activity stamp is older
+   than the limit and clears it, so "idle 30 minutes = signed out" still holds
+   even after a browser restart. Net security change is narrow and deliberate -
+   the token outlives the browser session, but not the parent's inactivity. */
+var SESSION_KEYS = ['focms_token', 'focms_email', 'focms_last_activity',
+                    'focms_fresh_signup', 'focms_idle_signout'];
+function sessionGet(k) {
+  try { return localStorage.getItem(k) || sessionStorage.getItem(k); } catch (e) { return null; }
+}
+function sessionSet(k, v) {
+  try { localStorage.setItem(k, v); } catch (e) {}
+}
+function sessionDrop(k) {
+  try { localStorage.removeItem(k); } catch (e) {}
+  try { sessionStorage.removeItem(k); } catch (e) {}
+}
+function sessionClear() {
+  SESSION_KEYS.forEach(sessionDrop);
+  try { sessionStorage.clear(); } catch (e) {}
+}
+function sessionAlive() {
+  // Enforce the idle window at READ time, not just on the 60-second sweep -
+  // otherwise a token restored from localStorage after a browser restart would
+  // come back to life regardless of how long the parent had been away.
+  try {
+    var last = parseInt(sessionGet('focms_last_activity') || '0', 10);
+    if (last && (Date.now() - last) > IDLE_LIMIT_MS) { sessionClear(); return false; }
+  } catch (e) {}
+  return true;
+}
+
 function saveToken() {
   const t = document.getElementById('token-input').value.trim();
   if (!t) { showToast("Enter a token first", "error"); return; }
-  sessionStorage.setItem('focms_token', t);
+  sessionSet('focms_token', t);
+  sessionSet('focms_last_activity', String(Date.now()));
   document.getElementById('token-gate').classList.add('hidden');
 }
-function signOut() { sessionStorage.clear(); location.reload(); }
+function signOut() { sessionClear(); location.reload(); }
 /* v276: Billing & Plan (backend v0.12.155). Reads /billing/status, starts
    Stripe Checkout for plan/add-on choices, opens the Stripe customer portal
    for existing subscribers. Entitlement truth lives server-side via the
@@ -253,12 +294,12 @@ var IDLE_LIMIT_MS = 30 * 60 * 1000;
 var LAST_ACTIVITY = Date.now();
 (function idleGuard() {
   try {
-    var stored = parseInt(sessionStorage.getItem('focms_last_activity') || '0', 10);
+    var stored = parseInt(sessionGet('focms_last_activity') || '0', 10);
     if (stored) LAST_ACTIVITY = stored;
   } catch (e) {}
   var bump = function () {
     LAST_ACTIVITY = Date.now();
-    try { sessionStorage.setItem('focms_last_activity', String(LAST_ACTIVITY)); } catch (e) {}
+    sessionSet('focms_last_activity', String(LAST_ACTIVITY));   // v313: localStorage-backed
   };
   ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (ev) {
     window.addEventListener(ev, bump, { passive: true });
@@ -268,16 +309,16 @@ var LAST_ACTIVITY = Date.now();
     if (!getToken()) return;                       // not signed in - nothing to expire
     if (Date.now() - LAST_ACTIVITY < IDLE_LIMIT_MS) return;
     try {
-      sessionStorage.clear();
-      sessionStorage.setItem('focms_idle_signout', '1');
+      sessionClear();                                  // v313: clears both stores
+      sessionSet('focms_idle_signout', '1');
     } catch (e) {}
     location.reload();
   }, 60 * 1000);
   // login-screen notice after an idle sign-out
   document.addEventListener('DOMContentLoaded', function () {
     try {
-      if (sessionStorage.getItem('focms_idle_signout') !== '1') return;
-      sessionStorage.removeItem('focms_idle_signout');
+      if (sessionGet('focms_idle_signout') !== '1') return;
+      sessionDrop('focms_idle_signout');
       if (typeof showToast === 'function') showToast('Signed out after 30 minutes of inactivity', 'info');
     } catch (e) {}
   });
@@ -286,9 +327,9 @@ var LAST_ACTIVITY = Date.now();
 window.startTour = function(){ openWizard(1); };
 (function(){ // v139: adopt token handed off from signup via URL hash (#t=...)
   var m = location.hash.match(/[#&]t=([A-Za-z0-9_\-]+)/);
-  if (m) { sessionStorage.setItem('focms_token', m[1]); sessionStorage.setItem('focms_fresh_signup','1'); history.replaceState(null, '', location.pathname + location.search); }
+  if (m) { sessionSet('focms_token', m[1]); sessionSet('focms_fresh_signup','1'); sessionSet('focms_last_activity', String(Date.now())); history.replaceState(null, '', location.pathname + location.search); }
 })();
-function getToken() { return (sessionStorage.getItem('focms_token') || "").trim(); }
+function getToken() { return sessionAlive() ? (sessionGet('focms_token') || "").trim() : ""; }
 async function forgotPw() {
   var email = document.getElementById('login-email').value.trim();
   var err = document.getElementById('login-err');
@@ -326,8 +367,9 @@ async function doLogin() {
     });
     var d = await r.json();
     if (!r.ok) { err.textContent = (d.detail && d.detail.message) || 'Sign-in failed.'; err.style.display = 'block'; if (window.turnstile) turnstile.reset(); return; }
-    sessionStorage.setItem('focms_token', d.api_token);
-    try{ sessionStorage.setItem('focms_email', email); }catch(e){}
+    sessionSet('focms_token', d.api_token);
+    sessionSet('focms_last_activity', String(Date.now()));
+    try{ sessionSet('focms_email', email); }catch(e){}
     location.reload();
   } catch (e) { err.textContent = 'Network error - try again.'; err.style.display = 'block'; }
 }
@@ -513,7 +555,7 @@ function openWizard(step){
 }
 function closeWizard(){
   var ov=document.getElementById('wiz-overlay'); if(ov) ov.remove();
-  sessionStorage.removeItem('focms_fresh_signup');
+  sessionDrop('focms_fresh_signup');
   try{ localStorage.setItem('focms_onboarded_'+TENANT_ID,'1'); }catch(e){}
 }
 async function wizLoadThemes(){
