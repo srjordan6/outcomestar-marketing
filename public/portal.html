@@ -365,6 +365,60 @@
   .gap-cover-txt p { font-size:13px; color:var(--gray); }
   .gap-cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
   @media (max-width:720px){ .gap-cols{ grid-template-columns:1fr; } }
+
+  /* =======================================================================
+     v313 MOBILE. The portal was built desktop-first and had exactly one
+     media query, so on a phone the header nav pushed the page sideways and
+     every view inherited the horizontal scroll. Rules here are deliberately
+     !important: the header, its nav and several form grids carry INLINE
+     styles, which a plain stylesheet rule cannot beat.
+
+     Goal is no horizontal page scroll at any width. Wide content that
+     genuinely cannot shrink (data tables) scrolls INSIDE its own box rather
+     than dragging the page with it.
+     ==================================================================== */
+  @media (max-width:720px){
+    html, body { max-width:100%; overflow-x:hidden; }
+
+    /* Header: logo on one line, nav wrapping beneath it instead of running off
+       the right edge. */
+    header > div:first-child {
+      flex-wrap:wrap !important;
+      gap:8px !important;
+      padding:8px 12px !important;
+    }
+    header > div:first-child > a img { height:32px !important; }
+    header nav {
+      flex-wrap:wrap !important;
+      gap:10px 14px !important;
+      font-size:13px !important;
+      width:100%;
+      justify-content:flex-start !important;
+    }
+    #nav-chat { padding:5px 11px !important; }
+
+    .header-inner { padding-left:12px !important; padding-right:12px !important; }
+
+    /* Forms: one column, and 16px inputs so iOS Safari does not zoom the
+       viewport on focus (which is itself a cause of sideways drift). */
+    .field-grid { grid-template-columns:1fr !important; }
+    .ec-form input, .ec-form select, .ec-form textarea,
+    .rec-i, .ec-in { font-size:16px !important; max-width:100%; }
+
+    /* Two-column and label-column grids collapse; a 150px label track plus a
+       content column does not fit a 360px screen. */
+    .ec-two, .es-guide-grid, .sp-row, .sp-cascade { grid-template-columns:1fr !important; }
+
+    /* min-width floors are what actually force the overflow inside flex rows -
+       each of these was sized for a desktop column. */
+    .cr-title, .sps-name, .sps-body, .mrow-slider, .es-head-row .ec-lbl { min-width:0 !important; }
+
+    /* Anything intrinsically wide stays inside its own box. */
+    img, svg, video, canvas { max-width:100%; height:auto; }
+    table { display:block; width:100%; max-width:100%; overflow-x:auto; }
+    pre, code { white-space:pre-wrap; word-break:break-word; }
+    .crumbs, .ec-crumbs { flex-wrap:wrap; }
+  }
   .gap-col h4 { font-size:12px; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; }
   .gap-col.strong h4 { color:#059669; }
   .gap-col.gap h4 { color:var(--orange); }
