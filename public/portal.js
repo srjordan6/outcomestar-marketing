@@ -8663,10 +8663,21 @@ function ucaResumeCreate(code){
         }
       } catch(e){
         var pm = String(e.message||'');
-        if (/payment_failed|payment_required|payment_unavailable/.test(pm)) {
-          showToast('Card charge failed \u2014 AI enhancement skipped. ' + pm.replace(/^.*?:\s*/,'') + ' Showing the free standard resume.','error');
+        // v314: distinguish NO CARD ON FILE from a genuine decline. Both used to
+        // read "Card charge failed", which is wrong and unactionable when the
+        // real answer is "you have never added a card". The backend returns
+        // 402 payment_required: no card on file for the first case.
+        if (/no card on file|payment_required/.test(pm)) {
+          showToast('No card on file - AI enhancement needs one ($1.00 + tax). Showing the free standard resume.','error');
+          if (typeof openBillingPortal === 'function' &&
+              confirm('AI resume enhancement costs $1.00 + tax and needs a card on file.\n\nOpen billing now to add one?')) {
+            openBillingPortal();
+            return;                      // do not drop into the editor mid-redirect
+          }
+        } else if (/payment_failed|payment_unavailable/.test(pm)) {
+          showToast('Card was declined - AI enhancement skipped. ' + pm.replace(/^.*?:\s*/,'') + ' Showing the free standard resume.','error');
         } else {
-          showToast('AI enhancement unavailable \u2014 using the free standard resume (no charge)','error');
+          showToast('AI enhancement unavailable - using the free standard resume (no charge)','error');
         }
       }
     }
