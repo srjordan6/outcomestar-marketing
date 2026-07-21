@@ -5106,6 +5106,9 @@ async function courseEdit(id) {
   const gradeRow = isPre ? '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts.join('') + '</select></label>'
     : ecRowTwo('<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts.join('') + '</select></label>', subjectBlock);
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+            { label: 'Courses', go: 'renderAcadBands()' },
+            { label: id ? (c.course_name || 'Edit course') : 'Add course' }]) +
     (isPre ? ecField('course_name', 'Activity name', c.course_name, true) : '') +
     gradeRow +
     (isPre ? '' :
@@ -5264,7 +5267,9 @@ async function openTutoring() {
 }
 
 function renderTutoringList() {
-  let html = '<div class="ec-bar">' +
+  hideSiteBanner();
+  let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' }, { label: 'Tutoring' }]) +
+    '<div class="ec-bar">' +
     '<button class="save-btn" onclick="tutorEdit(null)">Add tutoring</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>' +
@@ -5313,6 +5318,9 @@ async function tutorEdit(id) {
       '<option value="' + n + '"' + (c.grade_level == n ? ' selected' : '') + '>' +
       (n === 0 ? 'Kindergarten' : 'Grade ' + n) + '</option>').join('');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+            { label: 'Tutoring', go: 'renderTutoringList()' },
+            { label: id ? (c.course_name || 'Edit') : 'Add tutoring' }]) +
     '<input type="hidden" class="ec-in" data-k="course_type" value="private_tutoring">' +
     ecField('course_name', 'Course / tutoring focus', c.course_name, true) +
     ecRowTwo(
@@ -5688,7 +5696,10 @@ async function openReportCards(gradeFilter) {
   }
   const rows = (RC_GRADE_FILTER == null) ? REPORT_CARDS : REPORT_CARDS.filter(r => r.grade_level === RC_GRADE_FILTER);
   const heading = (RC_GRADE_FILTER == null) ? 'All report cards' : (GRADE_LABELS[RC_GRADE_FILTER] || ('Grade ' + RC_GRADE_FILTER));
-  let html = '<div class="ec-bar">' +
+  let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+                     { label: 'Report cards', go: RC_GRADE_FILTER == null ? null : 'openReportCards()' },
+                     RC_GRADE_FILTER == null ? null : { label: heading }].filter(Boolean)) +
+    '<div class="ec-bar">' +
     '<button class="save-btn" onclick="rcEdit(null)">Add report card</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>' +
@@ -7003,6 +7014,9 @@ function rcEdit(id) {
   setTimeout(rcRecalc, 0);
   const urls = (rc.evidence_urls || []).join(', ');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+            { label: 'Report cards', go: 'openReportCards()' },
+            { label: id ? (rc.school_year || 'Edit report card') : 'Add report card' }]) +
     // v199: paste the report card and it fills the form for review.
     '<div style="border:1px solid var(--orange);background:#FFF7EF;border-radius:10px;padding:12px 14px;margin-bottom:14px">' +
       '<div style="font-family:Lora,serif;color:var(--navy);font-weight:600;margin-bottom:4px">Paste the report card</div>' +
@@ -7203,6 +7217,9 @@ function yrEdit(id, gradeSeed) {
   const schoolOpts = '<option value="">-- pick from School Profiles --</option>' +
     SCHOOLS.map(sc => '<option value="' + sc.id + '"' + (yr.school_id === sc.id ? ' selected' : '') + '>' + escapeHTML(sc.school_name) + '</option>').join('');
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+            { label: 'School years', go: 'renderAcadBands()' },
+            { label: id ? ((GRADE_LABELS[yr.grade_level] || 'Edit') + ' record') : 'Add school year' }]) +
     '<div class="ec-hint" style="margin-bottom:10px">One record per <b>grade year</b>. A student who attends the same school for several years gets one record per year \u2014 that is what carries that year\u2019s teachers, attendance, and grades. The school itself is only entered once, under School Profile.</div>' +
     ecRowTwo(
       '<label class="ec-lbl">Grade level *<select class="ec-in" data-k="grade_level">' + gradeOpts.join('') + '</select></label>',
@@ -7326,9 +7343,11 @@ function tchDisplay(t) {
 }
 
 function openTeachers() {
+  hideSiteBanner();
   TCH_ROLE = 'teacher';
   const rows = tchSort(TEACHERS.filter(function (t) { return (t.role || 'teacher') !== 'counselor'; }));
-  let html = '<div class="ec-bar">' +
+  let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' }, { label: 'Teachers' }]) +
+    '<div class="ec-bar">' +
     '<button class="save-btn" onclick="teacherEdit(null)">Add teacher</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>';
@@ -7342,9 +7361,11 @@ function openTeachers() {
 let TCH_ROLE = 'teacher';
 
 function openCounselors() {
+  hideSiteBanner();
   TCH_ROLE = 'counselor';
   const rows = tchSort(TEACHERS.filter(function (t) { return (t.role || 'teacher') === 'counselor'; }));
-  let html = '<div class="ec-bar">' +
+  let html = crumbs([{ label: 'Academics', go: 'renderAcadBands()' }, { label: 'Counselors' }]) +
+    '<div class="ec-bar">' +
     '<button class="save-btn" onclick="teacherEdit(null)">Add counselor</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderAcadBands()">Back to Academics</button>' +
     '</div>' +
@@ -8800,6 +8821,10 @@ function teacherEdit(id) {
   if (!t) return;
   if (!t.school_name && CURRENT_SCHOOL && CURRENT_SCHOOL.school_name) t.school_name = CURRENT_SCHOOL.school_name;
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
+    crumbs([{ label: 'Academics', go: 'renderAcadBands()' },
+            { label: (t.role === 'counselor' || TCH_ROLE === 'counselor') ? 'Counselors' : 'Teachers',
+              go: (t.role === 'counselor' || TCH_ROLE === 'counselor') ? 'openCounselors()' : 'openTeachers()' },
+            { label: id ? (tchDisplay(t) || 'Edit') : ((t.role === 'counselor' || TCH_ROLE === 'counselor') ? 'Add counselor' : 'Add teacher') }]) +
     ecRowTwo(
       ecField('first_name', 'First name', t.first_name || ((t.teacher_name || '').split(' ')[0] || ''), true),
       ecField('last_name', 'Last name', t.last_name || ((t.teacher_name || '').split(' ').slice(1).join(' ')), true)
