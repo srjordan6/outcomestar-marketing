@@ -892,6 +892,7 @@ function schoolTypeChanged(v) {
   // question twice. The PSS search field below IS the school-name field.
   if (ccd) ccd.style.display = isPriv ? 'none' : '';
   if (box) box.style.display = isPriv ? 'block' : 'none';
+  if (isPriv) pssLoadStates(null);
   if (!hint) return;
   if (isPriv) {
     hint.textContent = '';
@@ -904,6 +905,29 @@ function schoolTypeChanged(v) {
 
 var PSS_LAST = [];
 var PSS_TIMER = null;
+async function pssLoadStates(preferred) {
+  // v288: same state list the public cascade uses, so the two pickers agree.
+  const sel = document.getElementById('pss-state');
+  if (!sel || sel.dataset.loaded) return;
+  try {
+    const d = await apiGet('/focms/v1/catalogs/k12/states?country=US');
+    sel.innerHTML = '<option value="">-- all states --</option>' +
+      (d.states || []).map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+    sel.dataset.loaded = '1';
+    // Default to the state already known for this student, so a Texas family
+    // is not handed every campus in the country.
+    const want = preferred ||
+      (document.querySelector('.ec-in[data-k="state_province"]') || {}).value ||
+      (knownDistrict() || {}).state || '';
+    if (want) sel.value = want;
+  } catch (e) { /* leave as all-states; search still works */ }
+}
+
+function pssStateChanged() {
+  const q = document.getElementById('pss-q');
+  if (q && q.value.trim().length >= 3) pssSearch(q.value);
+}
+
 function pssInput(val) {
   // v287: the search box doubles as the school-name field, so whatever is typed
   // is already saved even if the federal survey has no match. Picking a result
@@ -921,7 +945,7 @@ async function pssSearch(q) {
   if (q.length < 3) { res.innerHTML = ''; return; }
   // Narrow by the state already on the form when there is one - NCES wants a
   // FIPS code but the API maps the postal abbreviation for us.
-  const stEl = document.querySelector('.ec-in[data-k="state_province"]');
+  const stEl = document.getElementById('pss-state');
   const st = stEl && stEl.value ? stEl.value.trim() : '';
   res.innerHTML = '<div class="ec-hint">Searching\u2026</div>';
   try {
@@ -5455,6 +5479,12 @@ function schoolEdit(id) {
       '<label class="ec-lbl">School name' +
       '<input class="ec-in" id="pss-q" placeholder="Start typing the school name\u2026" ' +
         'autocomplete="off" oninput="pssInput(this.value)" value="' + escapeHTML(sc.school_name || '') + '">' +
+      '</label>' +
+      // v288: state narrows the private search the same way the public cascade
+      // narrows by state. Without it "fusion" returns every campus nationwide.
+      '<label class="ec-lbl">State' +
+      '<select id="pss-state" onchange="pssStateChanged()">' +
+        '<option value="">-- all states --</option></select>' +
       '</label>' +
       '<div class="ec-hint">Matches come from the federal private-school survey. ' +
         'No match? What you type is still saved.</div>' +
