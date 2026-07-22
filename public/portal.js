@@ -8641,6 +8641,70 @@ async function reportData(){
   window.__RPTDATA = Object.assign({}, d, { mil: mil, acad: acad, sk: sk, sb: sb, pi: pi });
   return window.__RPTDATA;
 }
+// Comprehensive Student Report, built from the same /full-dump payload the
+// Complete Record Dump uses, so it is complete by construction (every populated
+// table appears) and never goes stale. Unlike the raw dump: empty tables and
+// empty columns are skipped, system fields are hidden, and high-volume tables
+// (swim races, daily logs) are summarized by type for readability.
+var _RPT_HIDE_COLS = { id:1, tenant_id:1, student_id:1, created_by:1, updated_by:1,
+  deleted_by:1, deleted_at:1, created_at:1, updated_at:1, source_system:1, source_id:1,
+  visibility:1, visibility_locked:1, visibility_lock_reason:1, public_description:1,
+  affiliation_id:1, related_event_id:1, achieved_at_event_id:1 };
+var _RPT_SUMMARIZE = { events:1, personal_records:1 };
+var _RPT_TITLE_COLS = ['title','course_name','organization_name','company_name',
+  'school_name','instrument','test_name','recommender_name','reference_name',
+  'reference_full_name','essay_title','award_name','skill_title','milestone_title',
+  'custom_title','university_name','name','first_name'];
+
+function _rptRowTitle(obj){
+  for (var i=0;i<_RPT_TITLE_COLS.length;i++){ var c=_RPT_TITLE_COLS[i]; if (obj[c]) return String(obj[c]); }
+  return null;
+}
+function _rptObj(cols, row){ var o={}; cols.forEach(function(c,i){ o[c]=row[i]; }); return o; }
+
+function buildDumpBackedReport(dump){
+  var secs = [];
+  var pillars = (dump && dump.pillars) || [];
+  pillars.forEach(function(p){
+    (p.tables || []).forEach(function(t){
+      var cols = t.columns || [], rows = t.rows || [];
+      if (!rows.length) return;                       // skip empty tables
+      var name = _dumpTitleCase(t.table);
+
+      if (_RPT_SUMMARIZE[t.table]){                    // summarize high-volume tables
+        var byType = {};
+        rows.forEach(function(r){
+          var o=_rptObj(cols,r); var k=o.event_type||o.record_kind||'record';
+          (byType[k]=byType[k]||[]).push(o);
+        });
+        var sr=[];
+        Object.keys(byType).sort().forEach(function(k){
+          var list=byType[k];
+          sr.push([_dumpTitleCase(k), String(list.length)+(list.length===1?' record':' records')]);
+        });
+        secs.push({ title:(p.pillar+' \u2014 '+name).toUpperCase(), rows:sr });
+        return;
+      }
+
+      var outRows=[]; var multi = rows.length>1;
+      rows.forEach(function(r, ri){
+        var o=_rptObj(cols,r);
+        var ttl=_rptRowTitle(o);
+        if (multi) outRows.push(['\u2500\u2500\u2500', ttl || ('Record '+(ri+1)+' of '+rows.length)]);
+        else if (ttl) outRows.push(['Name', ttl]);
+        cols.forEach(function(c){
+          if (_RPT_HIDE_COLS[c]) return;
+          var v=_dumpFmt(o[c]);
+          if (v==='') return;                          // only show columns with data
+          outRows.push([_dumpTitleCase(c), v]);
+        });
+      });
+      if (outRows.length) secs.push({ title:(p.pillar+' \u2014 '+name).toUpperCase(), rows:outRows });
+    });
+  });
+  return secs.filter(function(x){ return x.rows.length; });
+}
+
 function buildReportSections(d){
   function S(t, rows){ return { title: t, rows: (rows||[]).filter(function(r){ return r[1]!=null && r[1]!==''; }) }; }
   var p = d.personal || {}, secs = [];
@@ -8796,8 +8860,15 @@ function ucaReportCreate(code){
   if (code === 'report_full'){
     (async function(){
       showToast('Gathering everything on file\u2026','success');
-      const d = await reportData();
-      var secs = buildReportSections(d);
+      var secs;
+      try {
+        var dump = await apiGet('/focms/v1/student/' + STUDENT_ID + '/full-dump');
+        secs = buildDumpBackedReport(dump);
+      } catch(e){
+        // fallback to the legacy curated builder if the dump endpoint is down
+        var d = await reportData();
+        secs = buildReportSections(d);
+      }
       ucaEditorWith(code, null, null, secs, 'Comprehensive Student Report \u2014 ' + studentDisplayName() + ' \u2014 ' + new Date().toLocaleDateString());
     })();
     return;
