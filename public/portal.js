@@ -329,13 +329,28 @@ async function billingShowInner() {
     return '<div style="background:#fff;border:1px solid ' + (isCur ? 'var(--orange)' : '#E5E7EB') + ';border-radius:14px;padding:14px 16px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">' +
       '<div><div class="ec-title">' + escapeHTML(p.title) + '</div>' +
       '<div class="ec-meta">' + billingFmt(p.amount_cents) + ' / ' + escapeHTML(p.billing_interval || 'year') +
-      (p.storage_gb ? ' \u00b7 ' + p.storage_gb + ' GB storage' : '') + '</div></div>' +
+      (isAddon && p.storage_gb ? ' \u00b7 +' + p.storage_gb + ' GB storage' : '') + '</div></div>' +
       (owned ? '<span class="ec-meta" style="margin-top:0;color:var(--orange);font-weight:600">Active</span>'
              : '<button class="save-btn" onclick="billingCheckout(\'' + p.plan_code + '\')">' + actionLabel + '</button>') + '</div>';
   }
+  // v326 (2026-07-22): show the parent their actual total storage. Everyone
+  // gets a 1 GB base floor; each active add-on stacks on top. Previously the UI
+  // showed each plan's raw storage_gb, which made a paid grade plan read as
+  // '1 GB' (same as free) and add-ons read as flat totals rather than additions.
+  var baseGb = 1, addonGb = 0, addonParts = [];
+  (d.subscriptions || []).forEach(function(sub){
+    if (sub.status !== 'active' && sub.status !== 'trialing') return;
+    var gb = sub.storage_gb || 0;
+    if (sub.plan_code.indexOf('addon_') === 0) { addonGb += gb; if (gb) addonParts.push('+' + gb + ' GB ' + (sub.title||'').replace(/ Storage Add-on.*/, '')); }
+  });
+  var totalGb = baseGb + addonGb;
+  html += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:14px 16px;margin-top:12px">' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14px;margin-bottom:2px">Your storage</div>' +
+    '<div class="ec-title">' + totalGb + ' GB total</div>' +
+    '<div class="ec-meta">' + baseGb + ' GB base' + (addonParts.length ? ' \u00b7 ' + addonParts.join(' \u00b7 ') : '') + '</div></div>';
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Plans</div>' + core.map(planCard).join('');
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Storage add-ons</div>' + addons.map(planCard).join('');
-  html += '<div class="ec-notes" style="margin-top:14px">Kindergarten\u2013Grade 5 stays free (1 GB). Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted, and you can export everything as a ZIP free, any time. Update your card any time with the button above.</div>';
+  html += '<div class="ec-notes" style="margin-top:14px">Every plan includes 1 GB; storage add-ons stack on top (e.g. 1 GB + Keepsake 10 GB = 11 GB). Kindergarten\u2013Grade 5 stays free. Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted, and you can export everything as a ZIP free, any time. Update your card any time with the button above.</div>';
   c.innerHTML = html;
 }
 async function billingCheckout(planCode) {
