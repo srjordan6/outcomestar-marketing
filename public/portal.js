@@ -11458,6 +11458,7 @@ const FIT_OPTS = ['reach','target','likely','safety'];
 
 function renderTargetsList() {
   const rows = HE_TARGETS;
+  ecCrumbHtml([{ label: 'All pillars', go: 'ecClearCrumb();renderPillars()' }, { label: 'Higher Education', go: 'renderHeSections()' }, { label: 'Target Schools' }]);
   let html = '<div class="ec-bar"><button class="save-btn" onclick="targetEdit(null)">Add target school</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
   if (!rows.length) {
@@ -11492,6 +11493,52 @@ function targetRow(t) {
     '<button onclick="targetDelete(\'' + t.id + '\')">Delete</button></div></div>';
 }
 
+// v337b: build the ranked <select> grouped into US News National Universities
+// and National Liberal Arts Colleges, each ordered #1-ascending, with any
+// unranked schools last. Options carry data-* so onchange can fill the panel.
+function _heUnivOptionLabel(u) {
+  const rank = (u.us_news_rank_national || u.us_news_rank_liberal_arts || u.us_news_rank);
+  return (u.common_name || u.name) + (rank ? ' (#' + rank + ')' : '');
+}
+function _heUnivRankedOptions(selectedLeaid) {
+  const cat = UNIV_CATALOG || [];
+  const natl = cat.filter(u => u.us_news_rank_national != null)
+                  .sort((a,b) => a.us_news_rank_national - b.us_news_rank_national);
+  const la   = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null)
+                  .sort((a,b) => a.us_news_rank_liberal_arts - b.us_news_rank_liberal_arts);
+  const opt = u => '<option value="' + u.leaid + '"' +
+      (selectedLeaid === u.leaid ? ' selected' : '') + '>' +
+      escapeHTML(_heUnivOptionLabel(u)) + '</option>';
+  let html = '<option value="">-- pick a university --</option>';
+  if (natl.length) html += '<optgroup label="US News National Universities">' + natl.map(opt).join('') + '</optgroup>';
+  if (la.length)   html += '<optgroup label="US News National Liberal Arts Colleges">' + la.map(opt).join('') + '</optgroup>';
+  return html;
+}
+function _heUnivByLeaid(leaid) {
+  return (UNIV_CATALOG || []).find(u => u.leaid === leaid) || null;
+}
+// The admissions-office panel: filled from the catalog row on select.
+function _heAdmissionsPanel(u) {
+  if (!u) return '<div class="ec-help" id="he-adm-panel" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
+  const rows = [];
+  if (u.admissions_address) rows.push('<div><b>Address:</b> ' + escapeHTML(u.admissions_address) + '</div>');
+  if (u.admissions_phone)   rows.push('<div><b>Phone:</b> ' + escapeHTML(u.admissions_phone) + '</div>');
+  if (u.admissions_email)   rows.push('<div><b>Email:</b> <a href="mailto:' + encodeURIComponent(u.admissions_email) + '">' + escapeHTML(u.admissions_email) + '</a></div>');
+  const url = u.admissions_url || u.website;
+  if (url) rows.push('<div><b>Website:</b> <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a></div>');
+  const head = '<div style="font-weight:600;margin-bottom:4px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>';
+  const body = rows.length ? rows.join('') :
+    '<div style="color:#7A8A9E">Contact details not on file yet. They fill automatically from the College Scorecard refresh.</div>';
+  return '<div class="ec-panel" id="he-adm-panel" style="margin:6px 0 14px;padding:10px 12px;border:1px solid #E3E7EF;border-radius:8px;background:#F7F9FC">' + head + body + '</div>';
+}
+// onchange handler wired on the ranked select AND after a search pick.
+function targetUnivChanged() {
+  const sel = document.querySelector('.ec-in[data-k="university_leaid"]');
+  const leaid = sel ? sel.value : '';
+  const panel = document.getElementById('he-adm-panel');
+  if (panel) panel.outerHTML = _heAdmissionsPanel(leaid ? _heUnivByLeaid(leaid) : null);
+}
+
 async function targetEdit(id) {
   const t = id ? HE_TARGETS.find(x => x.id === id) : { pathways_pursuing: [] };
   if (!t) return;
@@ -11499,28 +11546,38 @@ async function targetEdit(id) {
   setTimeout(function(){
     var sel=document.querySelector('.ec-in[data-k="university_leaid"]');
     if (sel && UNIV_CATALOG && UNIV_CATALOG.length) {
-      sel.innerHTML='<option value="">-- pick a university --</option>'+UNIV_CATALOG.map(function(u){var lb=(u.common_name||u.name)+(u.us_news_rank?' (#'+u.us_news_rank+')':'');return '<option value="'+u.leaid+'">'+escapeHTML(lb)+'</option>';}).join('');
+      sel.innerHTML = _heUnivRankedOptions(t.university_leaid);
+      // reflect any preselected school in the admissions panel
+      targetUnivChanged();
     }
   }, 80);
-  const univOpts = '<option value="">-- pick a university --</option>' +
-    (UNIV_CATALOG || []).map(u => {
-      const label = (u.common_name || u.name) + (u.us_news_rank ? ' (#' + u.us_news_rank + ')' : '');
-      return '<option value="' + u.leaid + '"' + (t.university_leaid === u.leaid ? ' selected' : '') + '>' + escapeHTML(label) + '</option>';
-    }).join('');
+  const univOpts = _heUnivRankedOptions(t.university_leaid);
   const fitOpts = '<option value="">-- pick fit --</option>' +
     FIT_OPTS.map(f => '<option value="' + f + '"' + (t.fit_category === f ? ' selected' : '') + '>' + f + '</option>').join('');
   const pathChecks = PATHWAY_OPTS.map(p =>
     '<label class="ec-check"><input type="checkbox" class="ec-in ec-path" data-code="' + p.code + '"' +
     ((t.pathways_pursuing || []).includes(p.code) ? ' checked' : '') + '> ' + p.label + '</label>').join('');
+  // Field-meaning helper text (Fit / Priority / Interest).
+  const fitHelp = '<div class="ec-help" style="margin:-6px 0 12px;font-size:12px;color:#5A6473">' +
+    '<b>Fit</b> \u2014 how likely admission is: <b>Reach</b> (admit rate well below your profile / a stretch), ' +
+    '<b>Target</b> (your profile matches the typical admit), <b>Likely</b> (you\u2019re above the typical admit), ' +
+    '<b>Safety</b> (very high confidence). &nbsp;\u00b7&nbsp; ' +
+    '<b>Priority (1\u201313)</b> \u2014 rank this school on your own list, 1 = top choice. &nbsp;\u00b7&nbsp; ' +
+    '<b>Interest level (1\u20135)</b> \u2014 how excited the student is, 5 = dream school.</div>';
+  const preU = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
+  ecCrumbHtml([{ label: 'All pillars', go: 'ecClearCrumb();renderPillars()' }, { label: 'Higher Education', go: 'renderHeSections()' }, { label: 'Target Schools' }]);
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     '<label class="ec-lbl">University * (search or pick below)</label>' +
     schoolPickerField({ key: 'university_search', label: 'Search colleges (IPEDS)', value: '', level: 'college' }) +
-    '<label class="ec-lbl">Or pick from ranked list<select class="ec-in" data-k="university_leaid">' + univOpts + '</select></label>' +
+    '<label class="ec-lbl">Or pick from ranked list (US News, #1 first)' +
+    '<select class="ec-in" data-k="university_leaid" onchange="targetUnivChanged()">' + univOpts + '</select></label>' +
+    _heAdmissionsPanel(preU) +
     ecRowTwo(
       '<label class="ec-lbl">Fit category<select class="ec-in" data-k="fit_category">' + fitOpts + '</select></label>',
       ecField('priority', 'Priority (1-13)', t.priority, false, 'number')
     ) +
     ecField('interest_level', 'Interest level (1-5)', t.interest_level, false, 'number') +
+    fitHelp +
     ecField('program_of_interest', 'Program / major of interest', t.program_of_interest) +
     '<label class="ec-lbl">Pathways being pursued</label>' +
     '<div class="ec-paths">' + pathChecks + '</div>' +
