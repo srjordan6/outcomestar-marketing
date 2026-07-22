@@ -11181,6 +11181,8 @@ function testTypeChanged(preScores, preComposite){
       c.testing_windows.map(w=>escapeHTML((w.label?w.label+': ':'')+_fmtD(w.start)+' \u2013 '+_fmtD(w.end))).join('; ')+'</div>';
   }
   if(c.schedule_note) r += '<div style="margin-top:6px;color:#4A5568;font-style:italic">'+escapeHTML(c.schedule_note)+'</div>';
+  if(c.registration_info) r += '<details style="margin-top:8px"><summary style="cursor:pointer;color:#201868;font-weight:600">How to register &amp; what you\u2019ll need</summary><div style="margin-top:6px;color:#4A5568">'+escapeHTML(c.registration_info)+'</div></details>';
+  if(c.benefits) r += '<details style="margin-top:6px"><summary style="cursor:pointer;color:#201868;font-weight:600">What this test gives you</summary><div style="margin-top:6px;color:#4A5568">'+escapeHTML(c.benefits)+'</div></details>';
   r += '</div>';
   if(ref) ref.innerHTML = r;
   // ---- conditional score fields ----
@@ -11196,7 +11198,13 @@ function testTypeChanged(preScores, preComposite){
     }
     const isText = (f.type==='text');
     const hint = (f.min!=null&&f.max!=null)?(' ('+f.min+'\u2013'+f.max+')'):'';
-    rows.push(ecField('sf_'+f.key, f.label+hint, val, false, isText?'text':'number'));
+    if(!isText){
+      const mn = (f.min!=null)?f.min:0;
+      const mx = (f.max!=null)?(' max="'+f.max+'"'):'';
+      rows.push('<label class="ec-lbl">'+escapeHTML(f.label+hint)+'<input class="ec-in" data-k="sf_'+f.key+'" type="number" min="'+mn+'"'+mx+' step="1" value="'+escapeHTML(val==null?'':String(val))+'"></label>');
+    } else {
+      rows.push(ecField('sf_'+f.key, f.label+hint, val, false, 'text'));
+    }
   });
   // lay out two-per-row
   for(let i=0;i<rows.length;i+=2){ h += rows[i+1] ? ecRowTwo(rows[i],rows[i+1]) : rows[i]; }
@@ -11222,11 +11230,19 @@ async function testSave(id){
     const el=document.querySelector('[data-k="sf_'+f.key+'"]'); if(!el)return;
     const v=(el.value||'').trim(); if(!v)return;
     const isStr = (f.type==='text'||f.type==='select');
-    const num=isStr?v:parseInt(v,10);
-    item.section_scores[f.key]=num;
-    // mirror the headline score into composite_score so reports/showcase keep working
-    if(f.key==='total'||f.key==='composite'){ item.composite_score=isStr?null:parseInt(v,10); }
+    if(!isStr){
+      const num=parseInt(v,10);
+      if(isNaN(num)){ return; }
+      if(f.min!=null && num<f.min){ item._badRange=f.label+' cannot be below '+f.min; return; }
+      if(f.max!=null && num>f.max){ item._badRange=f.label+' cannot exceed '+f.max; return; }
+      item.section_scores[f.key]=num;
+      if(f.key==='total'||f.key==='composite'){ item.composite_score=num; }
+    } else {
+      item.section_scores[f.key]=v;
+    }
   });
+  if(item._badRange){ showToast(item._badRange,'error'); return; }
+  delete item._badRange;
   try{ await apiPost('/focms/v1/student/'+STUDENT_ID+'/college-tests',{items:[item]});
     const d=await apiGet('/focms/v1/student/'+STUDENT_ID+'/college-tests'); HE_TESTS=d.tests||[]; renderTestsList(); showToast('Saved','success');
   }catch(e){showToast(e.message,'error');}
