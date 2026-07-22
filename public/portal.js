@@ -8834,6 +8834,40 @@ function ucaDumpHtml(dump){
   return h;
 }
 
+// Render a curated sections array (title + [key,value] rows) straight to a
+// print/PDF window with a sticky top toolbar. No editor.
+function ucaSecsPrint(title, secs){
+  var w = window.open('', '_blank');
+  if (!w){ showToast('Allow pop-ups to open the report','error'); return; }
+  var body = '<div class="dp-h1">'+ucaEsc(title)+'</div><div class="dp-rule"></div>'
+    + '<div class="dp-meta">Prepared from FOCMS records \u00b7 outcomestar.app \u00b7 '+new Date().toLocaleDateString()+'</div>';
+  (secs||[]).forEach(function(sec){
+    if (!(sec.rows||[]).length) return;
+    body += '<div class="dp-tbl">'+ucaEsc(sec.title)+'</div><div class="dp-tblline"></div>';
+    sec.rows.forEach(function(r){
+      var k=r[0], v=(r[1]==null?'':String(r[1]));
+      if (k==='\u2500\u2500\u2500'){ body += '<div class="dp-rech">'+ucaEsc(v)+'</div>'; return; }
+      body += '<div class="dp-kv"><div class="dp-k">'+ucaEsc(k)+'</div><div class="dp-v">'+ucaEsc(v).replace(/\n/g,'<br>')+'</div></div>';
+    });
+  });
+  body += '<div class="dp-foot">outcomestar.app \u00b7 prepared from FOCMS records</div>';
+  w.document.write('<!DOCTYPE html><html><head><title>'+ucaEsc(title)+'</title>'
+    + '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">'
+    + '<style>body{font-family:Poppins,Arial,sans-serif;color:#333;font-size:11px;line-height:1.5;margin:0;padding:0}'
+    + '.dp-wrap{max-width:820px;margin:0 auto;padding:24px 48px 40px}'
+    + '.dp-bar{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #E3E7ED;padding:10px 48px;display:flex;justify-content:flex-end;gap:8px}'
+    + '.dp-btn{font-family:Poppins;background:#201868;color:#fff;border:0;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer}'
+    + '.dp-btn.ghost{background:#fff;color:#201868;border:1px solid #201868}'
+    + _DUMP_CSS + '</style></head><body>'
+    + '<div class="dp-bar dp-noprint"><button class="dp-btn ghost" onclick="window.close()">Close</button>'
+    + '<button class="dp-btn" onclick="window.print()">Print / Save as PDF</button></div>'
+    + '<div class="dp-wrap">'+body+'</div>'
+    + '<style>@media print{.dp-noprint{display:none}.dp-wrap{padding:0 12px}}</style>'
+    + '</body></html>');
+  w.document.close();
+  showToast('Report ready','success');
+}
+
 function ucaDumpPrint(dump){
   var w = window.open('', '_blank');
   if (!w){ showToast('Allow pop-ups to open the record dump','error'); return; }
@@ -8865,11 +8899,11 @@ function ucaReportCreate(code){
         var dump = await apiGet('/focms/v1/student/' + STUDENT_ID + '/full-dump');
         secs = buildDumpBackedReport(dump);
       } catch(e){
-        // fallback to the legacy curated builder if the dump endpoint is down
         var d = await reportData();
         secs = buildReportSections(d);
       }
-      ucaEditorWith(code, null, null, secs, 'Comprehensive Student Report \u2014 ' + studentDisplayName() + ' \u2014 ' + new Date().toLocaleDateString());
+      // Go straight to a print/PDF window \u2014 no editable row list.
+      ucaSecsPrint('Comprehensive Student Report \u2014 ' + studentDisplayName(), secs);
     })();
     return;
   }
