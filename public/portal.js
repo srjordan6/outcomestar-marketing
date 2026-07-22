@@ -6787,7 +6787,7 @@ function schoolPickerFieldLegacy(opts) {
   const recentOpts = SCHOOLS.map(sc => '<option value="' + escapeHTML(sc.school_name) + '">').join('');
   const cVal = opts.country || PROFILE_COUNTRY || 'US';
   return '<label class="ec-lbl">' + escapeHTML(label) +
-    '<div class="sp-row">' +
+    '<div class="sp-row' + (opts.hideCountry ? ' sp-solo' : '') + '">' +
     (opts.hideCountry
       ? '<input type="hidden" class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" value="US">'
       : '<select class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" onchange="spCountryChange(\'' + id + '\')">' + countryOptions(cVal) + '</select>') +
@@ -11505,9 +11505,10 @@ function _heUnivOptionLabel(u) {
 }
 function _heUnivRankedOptions(selectedLeaid) {
   const cat = UNIV_CATALOG || [];
-  const natl = cat.filter(u => u.us_news_rank_national != null)
-                  .sort((a,b) => a.us_news_rank_national - b.us_news_rank_national);
-  const la   = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null)
+  const rk = u => (u.us_news_rank_national != null ? u.us_news_rank_national : u.us_news_rank);
+  const natl = cat.filter(u => rk(u) != null)
+                  .sort((a,b) => rk(a) - rk(b));
+  const la   = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null && u.us_news_rank == null)
                   .sort((a,b) => a.us_news_rank_liberal_arts - b.us_news_rank_liberal_arts);
   const opt = u => '<option value="' + u.leaid + '"' +
       (selectedLeaid === u.leaid ? ' selected' : '') + '>' +
@@ -11548,8 +11549,10 @@ function targetUnivChanged() {
   const sel = document.querySelector('.ec-in[data-k="university_leaid"]');
   const leaid = sel ? sel.value : '';
   if (leaid) { try { for (var k in SP_STATE) delete SP_STATE[k]; } catch (e) {} var inp = document.querySelector('.sp-name'); if (inp) inp.value = ''; }
+  var _u = leaid ? _heUnivByLeaid(leaid) : null;
   const panel = document.getElementById('he-adm-panel');
-  if (panel) panel.outerHTML = _heAdmissionsPanel(leaid ? _heUnivByLeaid(leaid) : null);
+  if (panel) panel.outerHTML = _heAdmissionsPanel(_u);
+  if (_u) _hePrefillPublicDesc(_u);
 }
 function heOnSearchPick(id, sc) {
   var sel = document.querySelector('.ec-in[data-k="university_leaid"]');
@@ -11560,10 +11563,11 @@ function heOnSearchPick(id, sc) {
   }
   var u = (sc && sc.leaid) ? _heUnivByLeaid(String(sc.leaid)) : null;
   if (!u && sc && sc.name) {
-    u = { common_name: sc.name, admissions_address: [sc.street, sc.city, sc.state, sc.zip].filter(Boolean).join(', '), admissions_phone: sc.phone || '' };
+    u = { common_name: sc.name, city: sc.city || '', state: sc.state || '', admissions_address: [sc.street, sc.city, sc.state, sc.zip].filter(Boolean).join(', '), admissions_phone: sc.phone || '' };
   }
   var panel = document.getElementById('he-adm-panel');
   if (panel) panel.outerHTML = _heAdmissionsPanel(u);
+  _hePrefillPublicDesc(u);
 }
 function heMajorsField(value) {
   var cat = CIP_CATALOG || [];
@@ -11582,19 +11586,115 @@ function heMajorsField(value) {
     '<div class="ec-hint">Ctrl/Cmd-click to select more than one.</div></label>';
 }
 
+/* ===== v340: majors table + hooks/blockers dropdowns + auto public description ===== */
+var HE_PICK = {};
+var HOOK_OPTS = [
+  { group: 'Academic & Intellectual Hooks', items: ['Underrepresented Major / Niche Field Interest','Deep Spike (Focused Expertise)','Intellectual Vitality & Research','Feeder School Track Record','Full Curriculum Maxing'] },
+  { group: 'Institutional & Demographic Hooks', items: ['Recruited Athlete Status','Legacy Connection','Geographic Diversity','First-Generation College Student','Socioeconomic Diversity','Institutional Donor / VIP Priority'] },
+  { group: 'Talent & Demonstrated Alignment', items: ['Specialized Performing / Fine Arts Talent','Binding Early Decision (ED) Commitment','High Demonstrated Interest','Overarching Community Impact'] },
+  { group: 'Curriculum & Program Structure', items: ['Open Curriculum Flexibility','Accelerated Pathway Options','Direct-Admit Majors','Interdisciplinary Flexibility','Undergraduate-First Focus'] },
+  { group: 'Career Outcomes & Network', items: ['High Target-School Status for Industry Recruiting','Formal Co-op Programs','Geographic Industry Proximity','High Post-Grad Job Placement Rates','Extensive Alumni Network Loyalty'] },
+  { group: 'Academic Resources & Research', items: ['Guaranteed Undergraduate Research Funding','Renowned Faculty & Mentorship Access','State-of-the-Art Facilities','Study Abroad Infrastructure','Niche Specialized Accreditation'] },
+  { group: 'Financial & Practical Advantages', items: ['Need-Blind / No-Loan Financial Aid Policies','In-State Tuition & Reciprocity Programs','Generous Merit-Based Scholarships','Low Cost of Living Area','Four-Year Graduation Guarantees'] },
+  { group: 'Campus Life, Culture & Environment', items: ['Vibrant Campus Traditions & School Spirit','Campus Safety & Infrastructure','Diversity & Inclusivity (SES & Cultural)','Ideal Location & Climate','Modern Housing & Dining Facilities'] },
+  { group: 'Health, Support & Student Wellbeing', items: ['Comprehensive Academic Support Services','Robust Mental Health & Wellness Resources','Active Student Organization Ecosystem','Small Class Sizes / Seminar Formats','Robust Entrepreneurship Incubators'] },
+  { group: 'Strategic Post-Graduate Positioning', items: ['High Pre-Med / Pre-Law Acceptance Rates','Formal Committee Letter System','Institutional Feeder Network to Top Grad Programs','Feeder Status for National Fellowships','Lifetime Institutional Brand Recognition'] }
+];
+var BLOCKER_OPTS = [
+  { group: 'Financial & Economic Risks', items: ['Unmanageable Debt-to-Income Ratio','Front-Loaded Financial Aid','High Tuition Increase Rate','Unaffordable Regional Cost of Living','Punitive Merit Aid Maintenance Conditions','Hidden Programmatic Fees','Institutional Financial Instability'] },
+  { group: 'Academic & Accreditation Red Flags', items: ['Lack of Institutional Regional Accreditation','Missing Programmatic Accreditation','Low First-Year Retention Rate','Abysmal Four-Year Graduation Rate','High Adjunct-to-Tenured Faculty Ratio','Impacted / Capped Majors','Outdated Curriculum & Tools','Overreliance on Massive Lecture Halls'] },
+  { group: 'Career, Placement & ROI Risks', items: ['Underperforming Career Services Office','High Graduate Underemployment Rates','Weak Local/Regional Job Market','Low / Unresponsive Alumni Network','Lack of Institutional Feeder Status','High Default Rate on Student Loans'] },
+  { group: 'Personal Fit, Mental Health & Social Blockers', items: ['Overwhelming Campus Isolation / Suitcase Campus','Toxic or Single-Dimensional Social Culture','Extreme Geographic or Climate Mismatch','Poor Mental Health & Counseling Infrastructure','Lack of Diversity & Cultural Inclusion','Distance from Personal Support Networks','Incompatible Political or Cultural Campus Climate'] },
+  { group: 'Infrastructure, Campus Health & Safety', items: ['High Campus / Neighborhood Crime Rates','Deteriorating Housing Infrastructure','Substandard Dining Services','Inadequate Disability & Accessibility Services (ADA)','Outdated Library and Tech Facilities'] },
+  { group: 'Strategic, Operational & Policy Blockers', items: ['Restrictive Credit Transfer Policies','High Percentage of Part-Time / Commuter Students','Rigid General Education Core Curriculum','High Administrative Friction / Bureaucracy','Uncertain Work Visa / International Student Support','Inadequate Athletic / Recreational Facilities','Poor Academic Advising Systems'] },
+  { group: 'Personal Motivation & Decision-Making Red Flags', items: ['Choosing Solely for a High School Partner / Friend','Selecting Based on Prestige / Ranking Alone','Chasing Athletic Fandom Over Academics','Pressure from Family Expectations','Impulsive Choice Based on Campus Appearance','Ignoring Better Financial Offers','Sunk Cost Fallacy','Applying to a Major Out of Trendiness','Settling for a School You Intend to Immediately Transfer Out Of','Lack of a Clear Why This School Alignment'] }
+];
+function _heSplit(v) { return String(v || '').split(';').map(function (x) { return x.trim(); }).filter(Boolean); }
+function heMajorOptions() {
+  var cat = CIP_CATALOG || [];
+  return cat.map(function (m) { return m.title || m.name || ''; }).filter(Boolean);
+}
+function _heGroupedOpts(options) {
+  if (!options || !options.length) return '';
+  var out = '<option value="">-- choose --</option>';
+  if (typeof options[0] === 'string') {
+    out += options.map(function (t) { return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>'; }).join('');
+  } else {
+    out += options.map(function (g) {
+      return '<optgroup label="' + escapeHTML(g.group) + '">' +
+        g.items.map(function (t) { return '<option value="' + escapeHTML(t) + '">' + escapeHTML(t) + '</option>'; }).join('') + '</optgroup>';
+    }).join('');
+  }
+  return out;
+}
+function heListField(key, label, options, style) {
+  window.__HE_OPTS = window.__HE_OPTS || {};
+  window.__HE_OPTS[key] = options;
+  return '<label class="ec-lbl">' + escapeHTML(label) +
+    '<div class="he-list-row"><select class="ec-in he-list-sel" id="he-sel-' + key + '">' + _heGroupedOpts(options) + '</select>' +
+    '<button type="button" class="save-btn he-add-btn" onclick="heListAdd(\'' + key + '\')">Add</button></div>' +
+    '<div id="he-list-' + key + '" class="he-list" data-style="' + (style || 'chips') + '"></div></label>';
+}
+function heListRender(key) {
+  var box = document.getElementById('he-list-' + key);
+  if (!box) return;
+  var arr = (HE_PICK && HE_PICK[key]) || [];
+  var style = box.getAttribute('data-style') || 'chips';
+  if (!arr.length) { box.innerHTML = '<div class="ec-hint" style="margin-top:4px">None added yet.</div>'; return; }
+  if (style === 'table') {
+    box.innerHTML = '<table class="he-tbl"><tbody>' + arr.map(function (v, i) {
+      return '<tr><td>' + escapeHTML(v) + '</td><td style="text-align:right;width:1%"><button type="button" class="he-x" onclick="heListRemove(\'' + key + '\',' + i + ')">&times;</button></td></tr>';
+    }).join('') + '</tbody></table>';
+  } else {
+    box.innerHTML = arr.map(function (v, i) {
+      return '<span class="he-chip">' + escapeHTML(v) + '<button type="button" class="he-x" onclick="heListRemove(\'' + key + '\',' + i + ')">&times;</button></span>';
+    }).join('');
+  }
+}
+function heListAdd(key) {
+  var sel = document.getElementById('he-sel-' + key);
+  if (!sel || !sel.value) return;
+  HE_PICK[key] = HE_PICK[key] || [];
+  if (HE_PICK[key].indexOf(sel.value) === -1) HE_PICK[key].push(sel.value);
+  sel.value = '';
+  heListRender(key);
+}
+function heListRemove(key, i) {
+  if (HE_PICK[key]) { HE_PICK[key].splice(i, 1); heListRender(key); }
+}
+function heComposePublicDesc(u) {
+  if (!u) return '';
+  var name = u.common_name || u.name || 'This university';
+  var loc = [u.city, u.state].filter(Boolean).join(', ');
+  var out = name + (loc ? ' is located in ' + loc + '.' : '.');
+  if (u.admission_rate != null) { var r = Number(u.admission_rate); if (r > 0 && r <= 1) r = r * 100; out += ' Acceptance rate about ' + Math.round(r) + '%.'; }
+  if (u.sat_25 && u.sat_75) out += ' Middle-50% SAT ' + u.sat_25 + '\u2013' + u.sat_75 + '.';
+  if (u.act_25 && u.act_75) out += ' ACT ' + u.act_25 + '\u2013' + u.act_75 + '.';
+  var coa = u.cost_attendance || u.cost_of_attendance;
+  if (coa) out += ' Estimated cost of attendance $' + Number(coa).toLocaleString() + '/yr.';
+  else if (u.tuition) out += ' Tuition $' + Number(u.tuition).toLocaleString() + '/yr.';
+  return out;
+}
+function _hePrefillPublicDesc(u) {
+  var ta = document.querySelector('.ec-in[data-k="public_description"]');
+  if (ta && !ta.value.trim() && u) ta.value = heComposePublicDesc(u);
+}
 async function targetEdit(id) {
   const t = id ? HE_TARGETS.find(x => x.id === id) : { pathways_pursuing: [] };
   if (!t) return;
   window.__spPickHook = heOnSearchPick;
+  HE_PICK = { program_of_interest: _heSplit(t.program_of_interest), advantages: _heSplit(t.advantages), blockers: _heSplit(t.blockers) };
   if (!UNIV_CATALOG || !UNIV_CATALOG.length) { try { await heLoadUniversities(); } catch(e){} }
   try { await heLoadCip(); } catch (e) {}
   setTimeout(function(){
     var sel=document.querySelector('.ec-in[data-k="university_leaid"]');
     if (sel && UNIV_CATALOG && UNIV_CATALOG.length) {
       sel.innerHTML = _heUnivRankedOptions(t.university_leaid);
-      // reflect any preselected school in the admissions panel
       targetUnivChanged();
     }
+    heListRender('program_of_interest'); heListRender('advantages'); heListRender('blockers');
+    var preU = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
+    if (preU) _hePrefillPublicDesc(preU);
   }, 80);
   const univOpts = _heUnivRankedOptions(t.university_leaid);
   const fitOpts = '<option value="">-- pick fit --</option>' +
@@ -11623,14 +11723,12 @@ async function targetEdit(id) {
     ) +
     ecField('interest_level', 'Interest level (1-5)', t.interest_level, false, 'number') +
     fitHelp +
-    heMajorsField(t.program_of_interest) +
-    '<label class="ec-lbl">Pathways being pursued</label>' +
-    '<div class="ec-paths">' + pathChecks + '</div>' +
+    heListField('program_of_interest', 'Majors of interest (track several from this college)', heMajorOptions(), 'table') +
     ecArea('why_interested', 'Why interested', t.why_interested) +
-    ecArea('advantages', 'Advantages / hooks', t.advantages) +
-    ecArea('blockers', 'Blockers / risks', t.blockers) +
+    heListField('advantages', 'Advantages / hooks', HOOK_OPTS, 'chips') +
+    heListField('blockers', 'Blockers / risks', BLOCKER_OPTS, 'chips') +
     ecArea('notes', 'Notes (private)', t.notes) +
-    ecArea('public_description', 'Public description', t.public_description) +
+    ecArea('public_description', 'Public description (auto-fills from school data; editable)', t.public_description) +
     showcaseField(t.show_on_showcase) +
     '<div class="ec-bar"><button class="save-btn" onclick="targetSave(\'' + (id || '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderTargetsList()">Cancel</button></div></div>';
@@ -11650,11 +11748,10 @@ async function targetSave(id) {
   document.querySelectorAll('.ec-path').forEach(el => {
     if (el.checked) item.pathways_pursuing.push(el.dataset.code);
   });
-  var mSel = document.getElementById('he-majors');
-  if (mSel) {
-    var picks = Array.prototype.filter.call(mSel.options, function (o) { return o.selected; }).map(function (o) { return o.value; });
-    if (picks.length) item.program_of_interest = picks.join('; '); else delete item.program_of_interest;
-  }
+  ['program_of_interest', 'advantages', 'blockers'].forEach(function (k) {
+    var arr = (HE_PICK && HE_PICK[k]) || [];
+    if (arr.length) item[k] = arr.join('; '); else delete item[k];
+  });
   const pk = spLastPicked();
   if (pk && pk.leaid) item.university_leaid = pk.leaid;
   delete item.university_search;

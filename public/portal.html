@@ -458,7 +458,19 @@
   input[type=search].ec-in{-webkit-appearance:textfield;appearance:textfield;}
 </style>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-</head>
+<style>
+.sp-row.sp-solo{grid-template-columns:1fr;}
+.sp-name{width:100%;box-sizing:border-box;}
+.he-list-row{display:flex;gap:8px;margin-top:4px;}
+.he-list-row .he-list-sel{flex:1;}
+.he-add-btn{white-space:nowrap;}
+.he-list{margin-top:6px;}
+.he-chip{display:inline-flex;align-items:center;gap:6px;background:#EEF0F6;color:#201868;border-radius:14px;padding:3px 10px;margin:3px 4px 0 0;font-size:12px;}
+.he-tbl{width:100%;border-collapse:collapse;margin-top:4px;}
+.he-tbl td{border-bottom:1px solid #E3E7EF;padding:6px 8px;font-size:13px;color:#201868;}
+.he-x{border:0;background:transparent;color:#7A8A9E;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;}
+.he-x:hover{color:#F07800;}
+</style></head>
 <body>
 
 <div id="token-gate" class="token-gate">
@@ -535,7 +547,7 @@
 </footer>
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
-<script src="/portal.js?v=339"></script>
+<script src="/portal.js?v=340"></script>
 <!-- chatwoot-widget -->
 <style>
   #chatwoot-hint {
