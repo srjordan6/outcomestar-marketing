@@ -299,7 +299,7 @@ async function billingShowInner() {
       '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14px;margin-bottom:4px">Payment method</div>' +
       '<div class="ec-title">' + (notCfg ? 'Online payments are not configured on this server'
                                             : (ok ? 'Card on file' : 'No card on file')) + '</div>' +
-      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '')) +
+      '<div class="ec-meta">' + (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '') +
         (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') +
       '</div>' +
       (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card.</div>') +
