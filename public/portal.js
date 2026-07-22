@@ -8775,11 +8775,18 @@ function ucaDumpPrint(dump){
   if (!w){ showToast('Allow pop-ups to open the record dump','error'); return; }
   w.document.write('<!DOCTYPE html><html><head><title>Complete Record Dump \u2014 '+ucaEsc(studentDisplayName())+'</title>'
     + '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">'
-    + '<style>body{font-family:Poppins,Arial,sans-serif;color:#333;font-size:11px;line-height:1.5;margin:0 auto;max-width:820px;padding:40px 48px}'
+    + '<style>body{font-family:Poppins,Arial,sans-serif;color:#333;font-size:11px;line-height:1.5;margin:0;padding:0}'
+    + '.dp-wrap{max-width:820px;margin:0 auto;padding:24px 48px 40px}'
+    + '.dp-bar{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #E3E7ED;padding:10px 48px;display:flex;justify-content:flex-end;gap:8px}'
+    + '.dp-btn{font-family:Poppins;background:#201868;color:#fff;border:0;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer}'
+    + '.dp-btn.ghost{background:#fff;color:#201868;border:1px solid #201868}'
     + _DUMP_CSS + '</style></head><body>'
+    + '<div class="dp-bar dp-noprint"><button class="dp-btn ghost" onclick="window.close()">Close</button>'
+    + '<button class="dp-btn" onclick="window.print()">Print / Save as PDF</button></div>'
+    + '<div class="dp-wrap">'
     + ucaDumpHtml(dump)
-    + '<div style="margin-top:20px;text-align:center" class="dp-noprint"><button onclick="window.print()" style="font-family:Poppins;background:#201868;color:#fff;border:0;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer">Print / Save as PDF</button></div>'
-    + '<style>@media print{.dp-noprint{display:none}}</style>'
+    + '</div>'
+    + '<style>@media print{.dp-noprint{display:none}.dp-wrap{padding:0 12px}}</style>'
     + '</body></html>');
   w.document.close();
   showToast('Record dump ready','success');
