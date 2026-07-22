@@ -281,28 +281,37 @@ async function billingShowInner() {
   var pmInfo = null;
   try { pmInfo = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/payment-method'); } catch (e) { pmInfo = null; }
   var html = '';
-  if (pmInfo) {
-    var ok = !!pmInfo.has_card;
-    var notCfg = pmInfo.configured === false;
-    html += '<div style="background:#fff;border:1px solid ' + (ok ? '#E5E7EB' : 'var(--orange)') + ';border-radius:14px;padding:16px 18px;margin-top:12px">' +
-      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Card on file</div>' +
-      '<div class="ec-title">' + (notCfg ? 'Online payments are not configured on this server'
-                                          : (ok ? 'Yes - a card is saved and can be charged' : 'No card saved')) + '</div>' +
-      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '')) +
-        (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') + '</div>' +
-      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the plan-management link goes to the subscription portal, which cannot add a first card.</div>') +
-      (notCfg ? '' : '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
-        (ok ? 'Replace card' : 'Add a card') + '</button>' +
-        (ok ? '' : '<button class="save-btn save-btn-ghost" onclick="billingReconcile()">Re-check Stripe</button>') +
-        '</div>') + '</div>';
-  }
-  html += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
-    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Current plan</div>' +
-    '<div class="ec-title">' + escapeHTML(cp.title || 'Free plan') + '</div>' +
-    '<div class="ec-meta">Status: ' + escapeHTML(cp.status || 'active') +
-    (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') + '</div>' +
-    '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Invoices \u00b7 cancel plan</button></div>' +
+  // v324: single-panel billing summary.
+  // Previous UI stacked "Card on file" and "Current plan" as two boxes with
+  // separate action buttons, which read as two different payment surfaces
+  // (they aren't). One panel now, ordered plan -> payment -> account links.
+  var ok = pmInfo ? !!pmInfo.has_card : false;
+  var notCfg = pmInfo ? (pmInfo.configured === false) : false;
+  var accentColor = (pmInfo && !ok && !notCfg) ? 'var(--orange)' : '#E5E7EB';
+  html += '<div style="background:#fff;border:1px solid ' + accentColor + ';border-radius:14px;padding:18px 20px;margin-top:12px">' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:2px">' +
+      escapeHTML(cp.title || 'Free plan') + '</div>' +
+    '<div class="ec-meta" style="margin-bottom:14px">Status: ' + escapeHTML(cp.status || 'active') +
+      (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') +
     '</div>';
+  if (pmInfo) {
+    html += '<div style="border-top:1px solid #F1F3F5;padding-top:12px;margin-bottom:10px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14px;margin-bottom:4px">Payment method</div>' +
+      '<div class="ec-title">' + (notCfg ? 'Online payments are not configured on this server'
+                                            : (ok ? 'Card on file' : 'No card on file')) + '</div>' +
+      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '')) +
+        (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') +
+      '</div>' +
+      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card.</div>') +
+      '</div>';
+  }
+  html += '<div class="ec-bar" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px">';
+  if (pmInfo && !notCfg) {
+    html += '<button class="save-btn" onclick="billingAddCard()">' + (ok ? 'Replace card' : 'Add a card') + '</button>';
+    if (!ok) html += '<button class="save-btn save-btn-ghost" onclick="billingReconcile()">Re-check Stripe</button>';
+  }
+  html += '<button class="save-btn save-btn-ghost" onclick="billingPortal()">Invoices \u00b7 cancel plan</button>';
+  html += '</div></div>';
   if (!d.configured) {
     html += '<div class="cr-waiting" style="margin-top:12px">Online payments are being set up. Plans shown below will be purchasable shortly.</div>';
   }
