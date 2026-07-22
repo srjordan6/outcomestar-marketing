@@ -8662,6 +8662,43 @@ function _rptRowTitle(obj){
 }
 function _rptObj(cols, row){ var o={}; cols.forEach(function(c,i){ o[c]=row[i]; }); return o; }
 
+// Keys that hold visibility/publish flags, not record content \u2014 never shown.
+var _RPT_FLAT_SKIP = { public:1, public_fields:1, visibility:1, locked:1,
+  visibility_locked:1, _meta:1 };
+// Flatten a value into [label, text] rows. Nested objects expand with a
+// "Parent \u00b7 Child" label; pure flag objects and nulls are dropped. This turns
+// raw JSONB columns (details, phones, religion\u2026) into readable rows instead of
+// dumping JSON.
+function _rptFlatten(label, v, out){
+  if (v === null || v === undefined || v === '') return;
+  if (Array.isArray(v)){
+    if (!v.length) return;
+    var allScalar = v.every(function(x){ return x===null || typeof x!=='object'; });
+    if (allScalar){
+      var joined = v.filter(function(x){return x!==null && x!=='';}).join(', ');
+      if (joined!=='') out.push([label, joined]);
+    } else {
+      v.forEach(function(x,i){ _rptFlatten(label+' '+(i+1), x, out); });
+    }
+    return;
+  }
+  if (typeof v === 'object'){
+    Object.keys(v).forEach(function(k){
+      if (_RPT_FLAT_SKIP[k]) return;
+      var sub = v[k];
+      // drop objects that are entirely boolean flags (visibility toggles)
+      if (sub && typeof sub==='object' && !Array.isArray(sub)){
+        var vals=Object.keys(sub).map(function(kk){return sub[kk];});
+        if (vals.length && vals.every(function(x){return typeof x==='boolean';})) return;
+      }
+      _rptFlatten(label + ' \u00b7 ' + _dumpTitleCase(k), sub, out);
+    });
+    return;
+  }
+  if (typeof v === 'boolean'){ out.push([label, v?'Yes':'No']); return; }
+  out.push([label, String(v)]);
+}
+
 function buildDumpBackedReport(dump){
   var secs = [];
   var pillars = (dump && dump.pillars) || [];
@@ -8694,7 +8731,13 @@ function buildDumpBackedReport(dump){
         else if (ttl) outRows.push(['Name', ttl]);
         cols.forEach(function(c){
           if (_RPT_HIDE_COLS[c]) return;
-          var v=_dumpFmt(o[c]);
+          var raw=o[c];
+          if (raw!==null && typeof raw==='object'){
+            // JSONB / array column -> flatten into readable sub-rows
+            _rptFlatten(_dumpTitleCase(c), raw, outRows);
+            return;
+          }
+          var v=_dumpFmt(raw);
           if (v==='') return;                          // only show columns with data
           outRows.push([_dumpTitleCase(c), v]);
         });
@@ -8940,7 +8983,6 @@ function ucaReportCreate(code){
       +'<label class="ec-lbl">From date (optional)<input class="rec-i" id="uc-from" type="date"></label>'
       +'<label class="ec-lbl">To date (optional)<input class="rec-i" id="uc-to" type="date"></label>'
       +'<label class="ec-lbl">Notes to include at the top (optional)<textarea class="rec-i" id="uc-notes" rows="3"></textarea></label>'
-      +'<label style="font-size:13px;display:flex;gap:8px;align-items:center;margin:6px 0 4px"><input type="checkbox" id="uc-ai"> Add AI-written overview (uses the AI service)</label>'
       +'<div class="rec-bar"><button class="save-btn" id="uc-rd-go">Build report</button>'
       +'<button class="save-btn save-btn-ghost" onclick="this.closest(\'.rec-ov\').remove()">Cancel</button></div></div>';
     document.body.appendChild(ov);
@@ -8950,7 +8992,6 @@ function ucaReportCreate(code){
       var rt=document.getElementById('uc-rt').value.trim();
       var from=document.getElementById('uc-from').value, to=document.getElementById('uc-to').value;
       var notes=document.getElementById('uc-notes').value.trim();
-      var useAI=document.getElementById('uc-ai').checked;
       var picked=[]; document.querySelectorAll('.uc-cs:checked').forEach(function(c){ picked.push(parseInt(c.dataset.i,10)); });
       ov.remove();
       var dateRe=/(\d{4}-\d{2}-\d{2})/;
@@ -8964,16 +9005,7 @@ function ucaReportCreate(code){
       var secs = picked.map(function(i){ var s=all[i]; return { title:s.title, rows:s.rows.filter(function(r){return inRange(r[1]);}) }; })
                        .filter(function(s){ return s.rows.length; });
       if (notes) secs.unshift({ title:'NOTES', rows:[['Note', notes]] });
-      if (useAI){
-        showToast('Writing overview\u2026','success');
-        try {
-          const r = await apiPost('/focms/v1/student/' + STUDENT_ID + '/report-compose',
-            { title: rt, instructions: 'Write ONLY an OVERVIEW section summarizing this report data.'+(notes?(' Context: '+notes):''), sections: secs });
-          var ovw=(r.sections||[]).find(function(s){return /OVERVIEW/i.test(s.title);});
-          if (ovw) secs.unshift(ovw);
-        } catch(e){ showToast('AI overview unavailable \u2014 report built without it','error'); }
-      }
-      ucaEditorWith(code, null, null, secs, rt || ('Custom Report \u2014 ' + new Date().toLocaleDateString()));
+      ucaSecsPrint(rt || ('Custom Report \u2014 ' + studentDisplayName()), secs);
     };
   })();
 }
