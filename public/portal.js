@@ -11136,7 +11136,7 @@ function _heCatalogByCode(code){ return (HE_CATALOG||[]).find(x=>x.test_code===c
 function _heCatalogByName(name){ return (HE_CATALOG||[]).find(x=>x.display_name===name || x.test_code===name) || null; }
 
 function testEdit(id){
-  const t = id ? HE_TESTS.find(x=>x.id===id) : { is_planned:true };
+  const t = id ? HE_TESTS.find(x=>x.id===id) : { is_planned:true, test_date: new Date().toISOString().slice(0,10) };
   if(!t)return;
   // resolve the catalog entry for an existing record by its stored test_type (display_name)
   const cur = t.test_type ? _heCatalogByName(t.test_type) : null;
