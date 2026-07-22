@@ -10415,12 +10415,12 @@ async function refDelete(id) {
 
 /* ============ v33: Higher Education pillar ============ */
 const HE_SECTIONS = [
-  { code: 'targets',     label: 'Target Schools',            desc: '13 canonical universities + custom targets' },
-  { code: 'applications', label: 'Applications & Deadlines', desc: 'ED, EA, RD, rolling; portal credentials' },
-  { code: 'essays',      label: 'Essays',                    desc: 'Personal statement + supplemental prompts', enabled: true },
-  { code: 'recommenders', label: 'Recommenders',             desc: 'Teachers, counselor, external references', enabled: true },
-  { code: 'financial',   label: 'Financial Aid',             desc: 'FAFSA, CSS Profile, merit scholarships', enabled: true },
-  { code: 'testing',     label: 'Standardized Testing',      desc: 'SAT/ACT dates, scores, superscores', enabled: true }
+  { code: 'testing',     label: 'Standardized Testing',      desc: 'SAT/ACT dates, scores, superscores', timing: 'Spring of Junior Year \u2192 Oct\u2013Nov of Senior Year', seq: 1, enabled: true },
+  { code: 'targets',     label: 'Target Schools',            desc: '13 canonical universities + custom targets', timing: 'Apr\u2013May Junior Year \u2192 August before Senior Year', seq: 2 },
+  { code: 'recommenders', label: 'Recommenders',             desc: 'Teachers, counselor, external references', timing: 'May\u2013June Junior Year \u2192 Sep\u2013Oct Senior Year', seq: 3, enabled: true },
+  { code: 'essays',      label: 'Essays',                    desc: 'Personal statement + supplemental prompts', timing: 'Summer before Senior Year \u2192 Nov\u2013Dec Senior Year', seq: 4, enabled: true },
+  { code: 'applications', label: 'Applications & Deadlines', desc: 'ED, EA, RD, rolling; portal credentials', timing: 'August Senior Year \u2192 January (Regular Decision)', seq: 5 },
+  { code: 'financial',   label: 'Financial Aid',             desc: 'FAFSA, CSS Profile, merit scholarships', timing: 'Oct 1 Senior Year \u2192 Feb\u2013Mar Senior Year', seq: 6, enabled: true }
 ];
 let HE_TARGETS = [];
 let HE_APPS = [];
@@ -10500,12 +10500,68 @@ function renderHeSections() {
   const cards = HE_SECTIONS.map(t => {
     const disabled = t.enabled === false;
     const click = disabled ? '' : ' onclick="openHeSection(\'' + t.code + '\')"';
+    const seqBadge = t.seq ? '<span class="he-seq">' + t.seq + '</span>' : '';
+    const timing = t.timing ? '<div class="he-timing">' + t.timing + '</div>' : '';
     return '<button class="ec-card' + (disabled ? ' disabled' : '') + '"' + click + '>' +
-      '<div><div class="ec-name">' + t.label + (disabled ? ' <span class="ec-badge">Coming soon</span>' : '') + '</div><div class="ec-desc">' + t.desc + '</div></div>' +
-      '<div class="ec-count">' + (counts[t.code] != null ? counts[t.code] : '—') + ' <span>' + (disabled ? 'session 2' : 'on record') + '</span></div>' +
+      '<div><div class="ec-name">' + seqBadge + t.label + (disabled ? ' <span class="ec-badge">Coming soon</span>' : '') + '</div>' + timing + '<div class="ec-desc">' + t.desc + '</div></div>' +
+      '<div class="ec-count">' + (counts[t.code] != null ? counts[t.code] : '\u2014') + ' <span>' + (disabled ? 'session 2' : 'on record') + '</span></div>' +
       '</button>';
   }).join('');
-  document.getElementById('sections-container').innerHTML = '<div class="ec-grid">' + cards + '</div>';
+  document.getElementById('sections-container').innerHTML =
+    '<style>' +
+    '.he-seq{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#201868;color:#fff;font-size:12px;font-weight:700;margin-right:8px;vertical-align:middle;font-family:Poppins,sans-serif}' +
+    '.he-timing{font-size:12px;color:#F07800;font-weight:600;margin:2px 0 2px}' +
+    '.he-tl{margin-top:28px;background:#fff;border:1px solid #E3E7ED;border-radius:12px;padding:20px 24px}' +
+    '.he-tl h3{font-family:Lora,Georgia,serif;color:#201868;font-size:20px;margin:0 0 4px}' +
+    '.he-tl p.sub{color:#7A8A9E;font-size:13px;margin:0 0 16px}' +
+    '.he-step{display:flex;gap:14px;padding:12px 0;border-top:1px solid #EEF0F4}' +
+    '.he-step:first-of-type{border-top:0}' +
+    '.he-step .n{flex:none;width:26px;height:26px;border-radius:50%;background:#201868;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:Poppins,sans-serif}' +
+    '.he-step .b{flex:1}' +
+    '.he-step .t{font-weight:600;color:#201868;font-size:15px}' +
+    '.he-step .d{font-size:12px;color:#F07800;font-weight:600;margin:2px 0 4px}' +
+    '.he-step .w{font-size:13px;color:#4A5568;line-height:1.5}' +
+    '.he-tbl{width:100%;border-collapse:collapse;margin-top:18px;font-size:12.5px}' +
+    '.he-tbl th{text-align:left;color:#201868;font-weight:600;border-bottom:2px solid #F07800;padding:6px 8px}' +
+    '.he-tbl td{padding:6px 8px;border-bottom:1px solid #EEF0F4;color:#4A5568}' +
+    '.he-tbl td:first-child{font-weight:600;color:#201868}' +
+    '</style>' +
+    '<div class="ec-grid">' + cards + '</div>' + heTimelineHtml();
+}
+
+function heTimelineHtml() {
+  var steps = [
+    { n:1, t:'Standardized Testing (SAT / ACT)', d:'Start: Spring of Junior Year (Mar\u2013May) \u00b7 Stop: Fall of Senior Year (Oct\u2013Nov)',
+      w:'Test scores early let you realistically define reach, target, and safety schools \u2014 and leave room for a retake.' },
+    { n:2, t:'Target Schools', d:'Start: Spring of Junior Year (Apr\u2013May) \u00b7 Stop: Late summer before Senior Year (Aug)',
+      w:'With preliminary scores and GPA trends in hand, finalize your list. That locks in the exact essay prompts and deadline rules for the next steps.' },
+    { n:3, t:'Recommenders (Letters of Recommendation)', d:'Start: End of Junior Year (May\u2013Jun) \u00b7 Stop: Early Fall of Senior Year (Sep\u2013Oct)',
+      w:'Ask teachers before summer break so they have time to write thoughtful letters. Early fall is for the brag sheet and official portal requests.' },
+    { n:4, t:'Essays (Personal Statement + Supplementals)', d:'Start: Summer before Senior Year (Jun\u2013Jul) \u00b7 Stop: Late Fall / Winter (Nov\u2013Dec)',
+      w:'The Common App opens August 1. Drafting over the summer prevents a fall pileup when schoolwork and deadlines stack up.' },
+    { n:5, t:'Applications & Deadlines', d:'Start: August of Senior Year (portals open) \u00b7 Stop: January (Regular Decision)',
+      w:'Fill in background info and portal credentials as portals open. ED/EA are typically due Nov 1\u201315; RD runs Dec 1\u2013Jan 15.' },
+    { n:6, t:'Financial Aid (FAFSA / CSS Profile)', d:'Start: October 1 of Senior Year \u00b7 Stop: February\u2013March of Senior Year',
+      w:'Aid relies on your final school list to distribute reports. Submitting as early as possible after Oct 1 maximizes merit and need-based aid.' }
+  ];
+  var rows = [
+    ['Standardized Testing','1st','Spring (Junior Year)','Oct / Nov (Senior Year)'],
+    ['Target Schools','2nd','Apr / May (Junior Year)','August (Before Senior Year)'],
+    ['Recommenders','3rd','May / June (Junior Year)','Sep / Oct (Senior Year)'],
+    ['Essays','4th','June / July (Summer)','Nov / Dec (Senior Year)'],
+    ['Applications & Deadlines','5th','August 1 (Senior Year)','Nov (EA/ED) \u2013 Jan (RD)'],
+    ['Financial Aid','6th','October 1 (Senior Year)','Jan \u2013 Mar (Senior Year)']
+  ];
+  var h = '<div class="he-tl"><h3>Recommended Sequence & Timeline</h3>' +
+    '<p class="sub">The order that turns "get into a great college" from a lottery into a portfolio.</p>';
+  h += steps.map(function(s){
+    return '<div class="he-step"><div class="n">' + s.n + '</div><div class="b">' +
+      '<div class="t">' + s.t + '</div><div class="d">' + s.d + '</div><div class="w">' + s.w + '</div></div></div>';
+  }).join('');
+  h += '<table class="he-tbl"><thead><tr><th>Track</th><th>Order</th><th>Typical Start</th><th>Typical Stop</th></tr></thead><tbody>' +
+    rows.map(function(r){ return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>'; }).join('') +
+    '</tbody></table></div>';
+  return h;
 }
 
 function openHeSection(code) {
