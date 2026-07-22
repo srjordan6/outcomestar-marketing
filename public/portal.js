@@ -290,7 +290,7 @@ async function billingShowInner() {
                                           : (ok ? 'Yes - a card is saved and can be charged' : 'No card saved')) + '</div>' +
       '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '')) +
         (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') + '</div>' +
-      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the "Update payment method" link goes to the subscription portal, which cannot add a first card.</div>') +
+      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the plan-management link goes to the subscription portal, which cannot add a first card.</div>') +
       (notCfg ? '' : '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
         (ok ? 'Replace card' : 'Add a card') + '</button>' +
         (ok ? '' : '<button class="save-btn save-btn-ghost" onclick="billingReconcile()">Re-check Stripe</button>') +
@@ -301,7 +301,7 @@ async function billingShowInner() {
     '<div class="ec-title">' + escapeHTML(cp.title || 'Free plan') + '</div>' +
     '<div class="ec-meta">Status: ' + escapeHTML(cp.status || 'active') +
     (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') + '</div>' +
-    '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Update payment method \u00b7 invoices \u00b7 cancel</button></div>' +
+    '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Invoices \u00b7 cancel plan</button></div>' +
     '</div>';
   if (!d.configured) {
     html += '<div class="cr-waiting" style="margin-top:12px">Online payments are being set up. Plans shown below will be purchasable shortly.</div>';
