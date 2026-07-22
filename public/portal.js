@@ -8660,6 +8660,18 @@ function _rptRowTitle(obj){
   for (var i=0;i<_RPT_TITLE_COLS.length;i++){ var c=_RPT_TITLE_COLS[i]; if (obj[c]) return String(obj[c]); }
   return null;
 }
+// asyncpg returns jsonb columns as JSON *strings*, not parsed objects. Coerce a
+// value into a real object/array if it is a JSON-looking string, so the
+// flattener can expand it instead of the raw string printing verbatim.
+function _rptCoerce(v){
+  if (typeof v !== 'string') return v;
+  var s = v.trim();
+  if (s.length < 2) return v;
+  var a = s.charAt(0), b = s.charAt(s.length-1);
+  if (!((a==='{' && b==='}') || (a==='[' && b===']'))) return v;
+  try { return JSON.parse(s); } catch(e){ return v; }
+}
+
 function _rptObj(cols, row){ var o={}; cols.forEach(function(c,i){ o[c]=row[i]; }); return o; }
 
 // Keys that hold visibility/publish flags, not record content \u2014 never shown.
@@ -8731,7 +8743,7 @@ function buildDumpBackedReport(dump){
         else if (ttl) outRows.push(['Name', ttl]);
         cols.forEach(function(c){
           if (_RPT_HIDE_COLS[c]) return;
-          var raw=o[c];
+          var raw=_rptCoerce(o[c]);
           if (raw!==null && typeof raw==='object'){
             // JSONB / array column -> flatten into readable sub-rows
             _rptFlatten(_dumpTitleCase(c), raw, outRows);
@@ -8831,6 +8843,7 @@ var _DUMP_CSS =
   +'@media print{.dp-foot{display:none}.dp-pillar,.dp-tbl{page-break-after:avoid}}';
 
 function _dumpKV(k, v){
+  v = _rptCoerce(v);
   if (v !== null && typeof v === 'object'){
     // JSONB / array -> flatten to readable sub-rows instead of raw JSON
     var out = []; _rptFlatten(_dumpTitleCase(k), v, out);
@@ -8896,7 +8909,7 @@ function ucaSecsPrint(title, secs){
     if (!(sec.rows||[]).length) return;
     body += '<div class="dp-tbl">'+ucaEsc(sec.title)+'</div><div class="dp-tblline"></div>';
     sec.rows.forEach(function(r){
-      var k=r[0], raw=r[1];
+      var k=r[0], raw=_rptCoerce(r[1]);
       if (k==='\u2500\u2500\u2500'){ body += '<div class="dp-rech">'+ucaEsc(raw==null?'':String(raw))+'</div>'; return; }
       if (raw!==null && typeof raw==='object'){
         // safety net: never print an object as JSON \u2014 flatten it
