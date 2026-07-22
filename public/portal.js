@@ -11188,8 +11188,13 @@ function testTypeChanged(preScores, preComposite){
   let h = '<div style="font-size:12px;color:#7A8A9E;font-weight:600;margin:2px 0 6px">Scores'+(c.total_range?(' ('+escapeHTML(c.total_range)+')'):'')+'</div>';
   const rows = [];
   fields.forEach(f=>{
-    const isText = (f.type==='text');
     const val = (ss && ss[f.key]!=null) ? ss[f.key] : '';
+    if(f.type==='select' && f.options && f.options.length){
+      const opts = '<option value="">Select\u2026</option>' + f.options.map(o=>'<option value="'+escapeHTML(o)+'"'+(String(val)===o?' selected':'')+'>'+escapeHTML(o)+'</option>').join('');
+      rows.push('<label class="ec-lbl">'+escapeHTML(f.label)+'<select class="ec-in" data-k="sf_'+f.key+'">'+opts+'</select></label>');
+      return;
+    }
+    const isText = (f.type==='text');
     const hint = (f.min!=null&&f.max!=null)?(' ('+f.min+'\u2013'+f.max+')'):'';
     rows.push(ecField('sf_'+f.key, f.label+hint, val, false, isText?'text':'number'));
   });
@@ -11216,10 +11221,11 @@ async function testSave(id){
   (c.score_fields||[]).forEach(f=>{
     const el=document.querySelector('[data-k="sf_'+f.key+'"]'); if(!el)return;
     const v=(el.value||'').trim(); if(!v)return;
-    const num=(f.type==='text')?v:parseInt(v,10);
+    const isStr = (f.type==='text'||f.type==='select');
+    const num=isStr?v:parseInt(v,10);
     item.section_scores[f.key]=num;
     // mirror the headline score into composite_score so reports/showcase keep working
-    if(f.key==='total'||f.key==='composite'){ item.composite_score=(f.type==='text')?null:parseInt(v,10); }
+    if(f.key==='total'||f.key==='composite'){ item.composite_score=isStr?null:parseInt(v,10); }
   });
   try{ await apiPost('/focms/v1/student/'+STUDENT_ID+'/college-tests',{items:[item]});
     const d=await apiGet('/focms/v1/student/'+STUDENT_ID+'/college-tests'); HE_TESTS=d.tests||[]; renderTestsList(); showToast('Saved','success');
