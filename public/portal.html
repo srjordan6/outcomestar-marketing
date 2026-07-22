@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -25,7 +25,7 @@
     });
   }
 </script>
-<title>Family portal · outcomestar</title>
+<title>Family portal Â· outcomestar</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/intlTelInput.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -594,7 +594,7 @@
     <div style="display:flex;gap:10px;align-items:center">
       <select id="lang-picker" onchange="setTenantLang(this.value)" style="padding:6px 10px;border:1px solid #E3E7ED;border-radius:8px;font-size:13px;color:var(--navy);background:#fff">
         <option value="en-US">English</option>
-        <option value="es-ES">Español</option>
+        <option value="es-ES">EspaÃ±ol</option>
       </select>
       <button onclick="signOut()" class="header-signout">Sign out</button>
     </div>
@@ -611,7 +611,7 @@
   </div>
 
   <div id="view-pillar" class="hidden">
-    <button onclick="backToPillars()" class="back-link">← All pillars</button>
+    <button onclick="backToPillars()" class="back-link">â† All pillars</button>
     <div id="pillar-crumbtrail"></div>
     <div class="pillar-view-header">
       <h1 id="pillar-view-title" class="pillar-view-title"></h1>
@@ -628,7 +628,7 @@
 </footer>
 <!-- v169 (2026-07-09): thin shell. All portal JS now loads from /portal.js.
      Fixes the inline-script parsing trap (unclosed blocks) that killed doLogin. -->
-<script src="/portal.js?v=332"></script>
+<script src="/portal.js?v=333"></script>
 <!-- chatwoot-widget -->
 <style>
   #chatwoot-hint {
@@ -701,7 +701,7 @@
   };
   })(document, "script");
 
-  // Bubble label hint — shows once per session
+  // Bubble label hint â€” shows once per session
   (function () {
     var SESSION_KEY = "chatwoot_hint_shown";
     if (sessionStorage.getItem(SESSION_KEY)) return;
@@ -733,5 +733,6 @@
 </script>
 </body>
 </html>
+
 
 

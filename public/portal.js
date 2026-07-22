@@ -10490,12 +10490,14 @@ async function openHigherEducation() {
     HE_FINAID = fa.financial_aid || [];
     HE_TESTS = ts.tests || [];
     HE_VIEW = null;
+    if (!HE_CATALOG) { try { const cat = await apiGet('/focms/v1/catalogs/test-catalog'); HE_CATALOG = cat.tests || []; } catch(e) { HE_CATALOG = []; } }
     await heLoadUniversities();
     renderHeSections();
   } catch (e) { c.innerHTML = '<div class="save-status err">' + escapeHTML(e.message) + '</div>'; }
 }
 
 function renderHeSections() {
+  ecCrumbHtml([{ label: 'All pillars', go: 'ecClearCrumb();renderPillars()' }, { label: 'Higher Education' }]);
   const counts = { targets: HE_TARGETS.length, applications: HE_APPS.length, essays: HE_ESSAYS.length, recommenders: HE_RECS.length, financial: HE_FINAID.length, testing: HE_TESTS.length };
   const cards = HE_SECTIONS.map(t => {
     const disabled = t.enabled === false;
@@ -10575,6 +10577,7 @@ function openHeSection(code) {
 }
 
 let HE_ESSAYS = [], HE_RECS = [], HE_FINAID = [], HE_TESTS = [];
+let HE_CATALOG = null;
 
 /* ---- Essays ---- */
 async function renderEssaysList() {
@@ -11118,6 +11121,7 @@ async function finaidDelete(id){ if(!confirm('Delete this item?'))return;
 
 /* ---- Standardized Testing ---- */
 function renderTestsList() {
+  ecCrumbHtml([{ label: 'All pillars', go: 'ecClearCrumb();renderPillars()' }, { label: 'Higher Education', go: 'renderHeSections()' }, { label: 'Standardized Testing' }]);
   let html = '<div class="ec-bar"><button class="save-btn" onclick="testEdit(null)">Add test</button><button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
   if (!HE_TESTS.length) html += '<div class="cr-waiting">No tests yet. Add a planned SAT/ACT date or a score.</div>';
   else html += HE_TESTS.map(t => {
@@ -11128,37 +11132,95 @@ function renderTestsList() {
   }).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
+function _heCatalogByCode(code){ return (HE_CATALOG||[]).find(x=>x.test_code===code) || null; }
+function _heCatalogByName(name){ return (HE_CATALOG||[]).find(x=>x.display_name===name || x.test_code===name) || null; }
+
 function testEdit(id){
   const t = id ? HE_TESTS.find(x=>x.id===id) : { is_planned:true };
   if(!t)return;
-  const typeOpts=['','SAT','ACT','PSAT/NMSQT','PSAT 8/9','SAT Subject','AP','CLT','TOEFL','IELTS','Duolingo'].map(v=>'<option value="'+v+'"'+(t.test_type===v?' selected':'')+'>'+(v||'\u2014')+'</option>').join('');
-  const ss = t.section_scores || {};
+  // resolve the catalog entry for an existing record by its stored test_type (display_name)
+  const cur = t.test_type ? _heCatalogByName(t.test_type) : null;
+  const curCode = cur ? cur.test_code : '';
+  const opts = '<option value="">Select a test\u2026</option>' +
+    (HE_CATALOG||[]).map(c=>'<option value="'+c.test_code+'"'+(curCode===c.test_code?' selected':'')+'>'+escapeHTML(c.display_name)+'</option>').join('');
   document.getElementById('sections-container').innerHTML='<div class="ec-form">'+
-    '<label class="ec-lbl">Test type *<select class="ec-in" data-k="test_type">'+typeOpts+'</select></label>'+
+    '<label class="ec-lbl">Test *<select class="ec-in" data-k="test_code" id="t-code-sel" onchange="testTypeChanged()">'+opts+'</select></label>'+
+    '<div id="t-ref"></div>'+
     ecRowTwo(ecField('test_date','Test date',t.test_date,false,'date'),ecField('registration_deadline','Registration deadline',t.registration_deadline,false,'date'))+
     '<label class="ec-check"><input type="checkbox" class="ec-in" data-k="is_planned"'+(t.is_planned?' checked':'')+'> Planned (not yet taken)</label>'+
     '<label class="ec-check"><input type="checkbox" class="ec-in" data-k="is_superscore"'+(t.is_superscore?' checked':'')+'> This is a superscore</label>'+
-    ecRowTwo(ecField('composite_score','Composite score',t.composite_score,false,'number'),ecField('percentile','Percentile',t.percentile,false,'number'))+
-    ecRowTwo(ecField('sec_ebrw','SAT EBRW / ACT English',ss.ebrw||ss.english||'',false,'number'),ecField('sec_math','Math',ss.math||'',false,'number'))+
-    ecRowTwo(ecField('sec_reading','ACT Reading',ss.reading||'',false,'number'),ecField('sec_science','ACT Science',ss.science||'',false,'number'))+
-    ecField('superscore_composite','Superscore composite',t.superscore_composite,false,'number')+
+    '<div id="t-scores"></div>'+
+    ecField('percentile','Percentile',t.percentile,false,'number')+
     ecField('registration_status','Registration status',t.registration_status)+
     ecArea('notes','Notes',t.notes)+
     showcaseField(t.show_on_showcase)+
     '<div class="ec-bar"><button class="save-btn" onclick="testSave(\''+(id||'')+'\')">Save</button><button class="save-btn save-btn-ghost" onclick="renderTestsList()">Cancel</button></div></div>';
+  // render reference + conditional score fields for the current selection
+  testTypeChanged(t.section_scores || {}, t.composite_score);
 }
+
+function testTypeChanged(preScores, preComposite){
+  const sel = document.getElementById('t-code-sel'); if(!sel) return;
+  const c = _heCatalogByCode(sel.value);
+  const ref = document.getElementById('t-ref');
+  const box = document.getElementById('t-scores');
+  const ss = preScores || {};
+  if(!c){ if(ref) ref.innerHTML=''; if(box) box.innerHTML=''; return; }
+  // ---- reference panel ----
+  let r = '<div style="background:#F1F0FA;border:1px solid #E3E7ED;border-radius:10px;padding:12px 14px;margin:4px 0 12px;font-size:13px;line-height:1.5">';
+  if(c.target_grade) r += '<div><strong style="color:#201868">Target grade:</strong> '+escapeHTML(c.target_grade)+'</div>';
+  if(c.purpose) r += '<div style="margin-top:4px;color:#4A5568">'+escapeHTML(c.purpose)+'</div>';
+  if(c.exam_dates && c.exam_dates.length){
+    r += '<div style="margin-top:8px"><strong style="color:#201868">Official '+escapeHTML(c.display_name)+' dates ('+escapeHTML(c.catalog_year||'')+'):</strong></div>';
+    r += '<table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:12px"><tr style="color:#7A8A9E"><td>Exam date</td><td>Reg. deadline</td><td>Late deadline</td></tr>'+
+      c.exam_dates.map(d=>'<tr><td style="padding:2px 0;color:#201868;font-weight:600">'+escapeHTML(_fmtD(d.exam_date))+'</td><td style="color:#4A5568">'+escapeHTML(_fmtD(d.reg_deadline))+'</td><td style="color:#4A5568">'+escapeHTML(_fmtD(d.late_deadline))+'</td></tr>').join('')+
+      '</table>';
+  }
+  if(c.testing_windows && c.testing_windows.length){
+    r += '<div style="margin-top:8px"><strong style="color:#201868">Testing window'+(c.testing_windows.length>1?'s':'')+':</strong> '+
+      c.testing_windows.map(w=>escapeHTML((w.label?w.label+': ':'')+_fmtD(w.start)+' \u2013 '+_fmtD(w.end))).join('; ')+'</div>';
+  }
+  if(c.schedule_note) r += '<div style="margin-top:6px;color:#4A5568;font-style:italic">'+escapeHTML(c.schedule_note)+'</div>';
+  r += '</div>';
+  if(ref) ref.innerHTML = r;
+  // ---- conditional score fields ----
+  const fields = c.score_fields || [];
+  let h = '<div style="font-size:12px;color:#7A8A9E;font-weight:600;margin:2px 0 6px">Scores'+(c.total_range?(' ('+escapeHTML(c.total_range)+')'):'')+'</div>';
+  const rows = [];
+  fields.forEach(f=>{
+    const isText = (f.type==='text');
+    const val = (ss && ss[f.key]!=null) ? ss[f.key] : '';
+    const hint = (f.min!=null&&f.max!=null)?(' ('+f.min+'\u2013'+f.max+')'):'';
+    rows.push(ecField('sf_'+f.key, f.label+hint, val, false, isText?'text':'number'));
+  });
+  // lay out two-per-row
+  for(let i=0;i<rows.length;i+=2){ h += rows[i+1] ? ecRowTwo(rows[i],rows[i+1]) : rows[i]; }
+  if(box) box.innerHTML = h;
+}
+
+function _fmtD(s){ if(!s) return '\u2014'; const p=String(s).split('-'); if(p.length!==3) return s; return p[1]+'/'+p[2]+'/'+p[0]; }
+
 async function testSave(id){
-  const item={ section_scores:{} }; if(id)item.id=id;
-  document.querySelectorAll('.ec-in').forEach(el=>{const k=el.dataset.k;if(!k)return;
+  const sel=document.getElementById('t-code-sel');
+  const c = sel ? _heCatalogByCode(sel.value) : null;
+  if(!c){ showToast('Select a test','error'); return; }
+  const item={ section_scores:{}, test_type:c.display_name }; if(id)item.id=id;
+  // static fields
+  document.querySelectorAll('.ec-in').forEach(el=>{const k=el.dataset.k;if(!k||k==='test_code')return;
+    if(k.indexOf('sf_')===0)return;
     if(el.type==='checkbox'){item[k]=el.checked;return;}
     if(k==='show_on_showcase'){item.show_on_showcase=el.checked;return;}
     const v=(el.value||'').trim();
-    if(k==='sec_ebrw'){if(v)item.section_scores.ebrw=parseInt(v,10);return;}
-    if(k==='sec_math'){if(v)item.section_scores.math=parseInt(v,10);return;}
-    if(k==='sec_reading'){if(v)item.section_scores.reading=parseInt(v,10);return;}
-    if(k==='sec_science'){if(v)item.section_scores.science=parseInt(v,10);return;}
     if(v)item[k]=(el.type==='number')?parseInt(v,10):v;});
-  if(!item.test_type){showToast('Test type required','error');return;}
+  // dynamic score fields (data-k = sf_<key>)
+  (c.score_fields||[]).forEach(f=>{
+    const el=document.querySelector('[data-k="sf_'+f.key+'"]'); if(!el)return;
+    const v=(el.value||'').trim(); if(!v)return;
+    const num=(f.type==='text')?v:parseInt(v,10);
+    item.section_scores[f.key]=num;
+    // mirror the headline score into composite_score so reports/showcase keep working
+    if(f.key==='total'||f.key==='composite'){ item.composite_score=(f.type==='text')?null:parseInt(v,10); }
+  });
   try{ await apiPost('/focms/v1/student/'+STUDENT_ID+'/college-tests',{items:[item]});
     const d=await apiGet('/focms/v1/student/'+STUDENT_ID+'/college-tests'); HE_TESTS=d.tests||[]; renderTestsList(); showToast('Saved','success');
   }catch(e){showToast(e.message,'error');}
