@@ -9147,6 +9147,101 @@ function ucaResumeBody(x){
   h += '<div class="endfoot">prepared from FOCMS records \u00b7 outcomestar.app</div>';
   return h;
 }
+// ==========================================================================
+// v322 (2026-07-22): elite resume renderer, GATED PREVIEW.
+// ==========================================================================
+// The default renderer above (RESUME_CSS / ucaResumeBody) is UNCHANGED.
+// v322 is exposed as sibling symbols (RESUME_CSS_V322 / ucaResumeBodyV322)
+// and only chosen when the URL carries ?resume=v322, persisted per-tab in
+// sessionStorage. This is deliberate after the v322-live push broke sign-in
+// under unclear circumstances - keeping the new work fully opt-in makes it
+// impossible to re-break the login path while iterating on typography.
+//
+// Spec: 0.75" margins, single-column ATS-safe, 22pt Lora name in navy, 13pt
+// small-caps H2 with +1.5pt tracking, 10.75pt Poppins subheads, 10.25pt body
+// at 1.22 line-height, #222 body colour (never pure black), pipe-separated
+// contact ribbon, thin dividers + orange accent segments, grid-aligned right
+// dates. Native selectable text - no images, no sidebars, no icons.
+// Deviation from spec: body stays Poppins (brand system-wide) rather than
+// Lora serif; Lora is reserved for headings.
+
+var RESUME_CSS_V322 = 'body{font-family:"Poppins","Helvetica Neue",Arial,sans-serif;color:#222222;font-size:10.25pt;line-height:1.22;margin:0;padding:0.75in 0.75in}'
+ +'.rn322{font-family:"Lora",Georgia,serif;font-size:22pt;font-weight:700;color:#201868;letter-spacing:-.005em;line-height:1.12;margin:0 0 4px}'
+ +'.rc322{font-size:9.5pt;color:#334155;margin:0 0 14px;letter-spacing:.01em}'
+ +'.rc322 .sep{color:#CBD5E1;margin:0 8px}'
+ +'.rhr322{border:0;border-top:0.5pt solid #CBD5E1;margin:10px 0 12px}'
+ +'.rtg322{font-size:10pt;font-style:italic;color:#334155;border-left:2px solid #F07800;padding:5px 12px;margin:0 0 12px;background:#FAF7F1}'
+ +'.rsec322{font-family:"Lora",Georgia,serif;font-size:13pt;font-weight:600;color:#1A365D;text-transform:uppercase;letter-spacing:.14em;padding-bottom:3px;margin:14px 0 6px;page-break-after:avoid;border-bottom:0.5pt solid #CBD5E1;position:relative}'
+ +'.rsec322::after{content:"";position:absolute;left:0;bottom:-1.5pt;width:44px;border-bottom:1.5pt solid #F07800}'
+ +'.rsum322{margin:0 0 4px;color:#222222;text-align:justify}'
+ +'.rsk322{columns:2;-webkit-columns:2;column-gap:26px;margin:2px 0 6px;padding-left:16px;font-size:10pt;color:#222222}'
+ +'.rsk322 li{margin:0 0 3.5pt;break-inside:avoid;padding-right:6px}'
+ +'.rbl322{margin:2px 0 8px;padding-left:16px;color:#222222}'
+ +'.rbl322 li{margin:0 0 3.5pt}'
+ +'.re322{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;margin:0 0 4pt;page-break-inside:avoid;align-items:baseline}'
+ +'.rt322{font-size:10.75pt;font-weight:600;color:#222222}'
+ +'.rd322{color:#334155;font-size:9.75pt;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}'
+ +'.ef322{margin-top:22px;text-align:center;font-size:8pt;color:#7A8A9E}'
+ +'@media print{body{padding:0.75in}.ef322{display:none}a{color:inherit;text-decoration:none}}';
+function ucaResumeBodyV322(x){
+  var V=ucaVals(x), h='';
+  var name = V.v('legal name') || (typeof studentDisplayName === 'function' ? studentDisplayName() : '') || 'Student';
+  var city = V.v('current city') || V.v('city') || '';
+  var st   = V.v('current state') || V.v('state') || '';
+  var email= V.v('email') || '';
+  var phone= V.v('phone') || '';
+  var link = V.v('linkedin') || V.v('portfolio') || V.v('website') || '';
+  var parts = [];
+  if (city || st) parts.push([city, st].filter(Boolean).join(', '));
+  if (phone) parts.push(phone);
+  if (email) parts.push(email);
+  if (link)  parts.push(link);
+  if (!parts.length) parts = [V.v('email'), V.v('phone'), V.v('current school')].filter(Boolean);
+  h += '<div class="rn322">'+ucaEsc(name)+'</div>';
+  h += '<div class="rc322">'+parts.map(ucaEsc).join('<span class="sep">|</span>')+'</div>';
+  h += '<hr class="rhr322">';
+  (x.data.sections||[]).forEach(function(sec){
+    if (sec.title==='STUDENT' || sec.title==='APPLICATION') return;
+    if (sec.title==='TARGET POSITION' || sec.title==='TARGET PROGRAM') {
+      var t=(sec.rows||[]).map(function(r){return r[1];}).filter(Boolean).join(' \u00b7 ');
+      if (t) h += '<div class="rtg322">'+ucaEsc(t)+'</div>';
+      return;
+    }
+    if (!(sec.rows||[]).length) return;
+    h += '<div class="rsec322">'+ucaEsc(sec.title)+'</div>';
+    var tt=String(sec.title||'').toUpperCase();
+    if (tt.indexOf('SUMMARY')>=0) {
+      h += '<div class="rsum322">'+sec.rows.map(function(r){return ucaEsc(r[1]||r[0]);}).join(' ')+'</div>';
+    } else if (tt.indexOf('COMPETENC')>=0 || tt==='SKILLS' || tt==='SPECIAL SKILLS' || tt.indexOf('CORE')>=0 || tt.indexOf('TECHNICAL')>=0) {
+      h += '<ul class="rsk322">'+sec.rows.map(function(r){ return '<li>'+ucaEsc(r[1]||r[0])+'</li>'; }).join('')+'</ul>';
+    } else {
+      sec.rows.forEach(function(r){
+        var d=String(r[1]==null?'':r[1]);
+        if (d.indexOf('\n')>=0) {
+          var lines=d.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+          var meta=(/^[-\u2022]/.test(lines[0]))?'':lines.shift();
+          h += '<div class="re322"><span class="rt322">'+ucaEsc(r[0])+'</span><span class="rd322">'+ucaEsc(meta)+'</span></div>';
+          var bl=lines.map(function(s){return s.replace(/^[-\u2022]\s*/,'');});
+          if (bl.length) h += '<ul class="rbl322">'+bl.map(function(s){return '<li>'+ucaEsc(s)+'</li>';}).join('')+'</ul>';
+        } else {
+          h += '<div class="re322"><span class="rt322">'+ucaEsc(r[0])+'</span><span class="rd322">'+ucaEsc(d)+'</span></div>';
+        }
+      });
+    }
+  });
+  h += '<div class="ef322">prepared from FOCMS records \u00b7 outcomestar.app</div>';
+  return h;
+}
+function ucaResumeV322Enabled(){
+  try {
+    var qs = new URLSearchParams(location.search).get('resume');
+    if (qs === 'v322') { sessionStorage.setItem('resumeStyle','v322'); return true; }
+    if (qs === 'v1')   { sessionStorage.removeItem('resumeStyle'); return false; }
+    return sessionStorage.getItem('resumeStyle') === 'v322';
+  } catch (e) { return false; }
+}
+function ucaResumeCss(){  return ucaResumeV322Enabled() ? RESUME_CSS_V322 : RESUME_CSS; }
+function ucaResumeRender(x){ return ucaResumeV322Enabled() ? ucaResumeBodyV322(x) : ucaResumeBody(x); }
 function ucaIsResume(code){ return code==='resume_academic' || code==='resume_career'; }
 function ucaIsReport(code){ return code==='report_full' || code==='report_custom'; }
 var REPORT_CSS = 'body{font-family:Poppins,Arial,sans-serif;color:#4A5563;font-size:11px;line-height:1.55;margin:0;padding:40px 50px}'
@@ -9372,7 +9467,7 @@ var UCA_CSS = 'body{font-family:Georgia,\'Times New Roman\',serif;color:#1a1a2e;
  +'@media print{.endfoot{display:none}.pgfoot{display:block;position:fixed;bottom:5px;left:0;right:0;text-align:center;font-family:Poppins,Arial,sans-serif;font-size:7.5px;color:#7A8A9E}}';
 function ucaFullDoc(x){
   if (ucaIsReport(x.form_code)) return ucaReportBody(x);
-  if (ucaIsResume(x.form_code)) return ucaResumeBody(x);
+  if (ucaIsResume(x.form_code)) return ucaResumeRender(x);
   var ot=ucaOfficialTitle(x.form_code);
   return '<div class="mast"><div class="wm"><span class="u">universal</span><span class="c">college application</span></div>'
     +'<div class="ft">'+ucaEsc(ot)+'</div></div><div class="rule"></div>'
@@ -9389,7 +9484,7 @@ function ucaPrintX(x){
   var w=window.open('','_blank');
   w.document.write('<!DOCTYPE html><html><head><title>'+ucaEsc(x.title)+'</title>'
     +'<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">'
-    +'<style>'+(ucaIsReport(x.form_code)?REPORT_CSS:(ucaIsResume(x.form_code)?RESUME_CSS:UCA_CSS))+' body{max-width:760px;margin:0 auto}</style></head><body>'
+    +'<style>'+(ucaIsReport(x.form_code)?REPORT_CSS:(ucaIsResume(x.form_code)?ucaResumeCss():UCA_CSS))+' body{max-width:760px;margin:0 auto}</style></head><body>'
     + ucaFullDoc(x)
     +'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<' + '\/script></body></html>');
   w.document.close();
@@ -9402,7 +9497,7 @@ function ucaPdfX(x){
   function run(){
     var host=document.createElement('div');
     host.style.cssText='position:absolute;left:-10000px;top:0;width:816px;background:#fff';
-    host.innerHTML='<style>'+(ucaIsReport(x.form_code)?REPORT_CSS:(ucaIsResume(x.form_code)?RESUME_CSS:UCA_CSS))+' body{padding:0}</style><div id="uca-pdf-root" style="width:816px;background:#fff;padding:6px 10px">'+ucaFullDoc(x)+'</div>';
+    host.innerHTML='<style>'+(ucaIsReport(x.form_code)?REPORT_CSS:(ucaIsResume(x.form_code)?ucaResumeCss():UCA_CSS))+' body{padding:0}</style><div id="uca-pdf-root" style="width:816px;background:#fff;padding:6px 10px">'+ucaFullDoc(x)+'</div>';
     document.body.appendChild(host);
     var root=host.querySelector('#uca-pdf-root');
     html2canvas(root,{scale:2,backgroundColor:'#ffffff'}).then(function(canvas){
