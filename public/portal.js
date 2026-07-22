@@ -1,3 +1,5 @@
+Portal · JS
+Syntax highlighting has been disabled due to code size.
 /* ===========================================================================
  * portal.js — outcomestar.app family portal (single-file client).
  * Loaded by portal.html with a ?v=N cache-buster that MUST be bumped on every
@@ -9096,30 +9098,59 @@ function uEval(sigLabel, changeNote){
     + uTx('Your signature indicates that all information on this form is factually true and honestly presented and that you are the person submitting this form.')
     + uSig(sigLabel||'Signature of counselor');
 }
-var RESUME_CSS = 'body{font-family:Georgia,\'Times New Roman\',serif;color:#111;font-size:11.5px;line-height:1.45;margin:0;padding:40px 52px}'
- +'.rname{font-size:25px;font-weight:700;text-align:center;letter-spacing:.01em}'
- +'.rcontact{text-align:center;font-size:10px;color:#333;margin:3px 0 14px}'
- +'.rtarget{text-align:center;font-size:10.5px;font-style:italic;color:#222;margin:-8px 0 12px}'
- +'.rsec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;border-bottom:1px solid #111;padding-bottom:2px;margin:15px 0 7px}'
- +'.rsum{margin:0 0 4px;text-align:justify}'
- +'.rskills{columns:3;-webkit-columns:3;margin:2px 0 6px;padding-left:16px;font-size:10.5px}'
- +'.rskills li{margin:0 0 2px;break-inside:avoid}'
- +'.rbul{margin:1px 0 8px;padding-left:18px}'
- +'.rbul li{margin:0 0 2px}'
- +'.rent{display:flex;justify-content:space-between;gap:14px;margin:0 0 6px;page-break-inside:avoid}'
- +'.rt{font-weight:700}'
- +'.rd{color:#333}'
- +'.endfoot{margin-top:22px;text-align:center;font-size:8px;color:#888;font-family:Arial,sans-serif}'
- +'@media print{.endfoot{display:none}}';
+// v322 (2026-07-22): elite resume renderer.
+// Spec: 0.75" margins, single-column ATS-safe, 22pt Lora name in navy, 13pt
+// small-caps H2 with +1.5pt tracking, 10.75pt Poppins subheads, 10.25pt body
+// at 1.22 line-height, #222 body colour (never pure black), pipe-separated
+// contact ribbon, thin dividers + orange accent segments, grid-aligned right
+// dates. Native selectable text - no images, no sidebars, no icons.
+// Deviation from spec: body stays Poppins (brand system-wide) rather than Lora
+// serif; Lora is reserved for headings. This preserves visual consistency with
+// the marketing site, portal, and reports renderer.
+var RESUME_CSS = 'body{font-family:"Poppins","Helvetica Neue",Arial,sans-serif;color:#222222;font-size:10.25pt;line-height:1.22;margin:0;padding:0.75in 0.75in}'
+ +'.rname{font-family:"Lora",Georgia,serif;font-size:22pt;font-weight:700;color:#201868;letter-spacing:-.005em;line-height:1.12;margin:0 0 4px}'
+ +'.rcontact{font-size:9.5pt;color:#334155;margin:0 0 14px;letter-spacing:.01em}'
+ +'.rcontact .sep{color:#CBD5E1;margin:0 8px}'
+ +'.rheadrule{border:0;border-top:0.5pt solid #CBD5E1;margin:10px 0 12px}'
+ +'.rtarget{font-size:10pt;font-style:italic;color:#334155;border-left:2px solid #F07800;padding:5px 12px;margin:0 0 12px;background:#FAF7F1}'
+ +'.rsec{font-family:"Lora",Georgia,serif;font-size:13pt;font-weight:600;color:#1A365D;text-transform:uppercase;letter-spacing:.14em;padding-bottom:3px;margin:14px 0 6px;page-break-after:avoid;border-bottom:0.5pt solid #CBD5E1;position:relative}'
+ +'.rsec::after{content:"";position:absolute;left:0;bottom:-1.5pt;width:44px;border-bottom:1.5pt solid #F07800}'
+ +'.rsum{margin:0 0 4px;color:#222222;text-align:justify}'
+ +'.rskills{columns:2;-webkit-columns:2;column-gap:26px;margin:2px 0 6px;padding-left:16px;font-size:10pt;color:#222222}'
+ +'.rskills li{margin:0 0 3.5pt;break-inside:avoid;padding-right:6px}'
+ +'.rbul{margin:2px 0 8px;padding-left:16px;color:#222222}'
+ +'.rbul li{margin:0 0 3.5pt}'
+ +'.rent{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;margin:0 0 4pt;page-break-inside:avoid;align-items:baseline}'
+ +'.rt{font-size:10.75pt;font-weight:600;color:#222222}'
+ +'.rd{color:#334155;font-size:9.75pt;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}'
+ +'.endfoot{margin-top:22px;text-align:center;font-size:8pt;color:#7A8A9E}'
+ +'@media print{body{padding:0.75in}.endfoot{display:none}a{color:inherit;text-decoration:none}}';
 function ucaResumeBody(x){
   var V=ucaVals(x), h='';
-  h += '<div class="rname">'+ucaEsc(V.v('legal name')||'')+'</div>'
-    + '<div class="rcontact">'+[V.v('email'),V.v('phone'),V.v('current school')].filter(Boolean).map(ucaEsc).join(' \u00b7 ')+'</div>';
+  var name = V.v('legal name') || (typeof studentDisplayName === 'function' ? studentDisplayName() : '') || 'Student';
+  var city = V.v('current city') || V.v('city') || '';
+  var st   = V.v('current state') || V.v('state') || '';
+  var email= V.v('email') || '';
+  var phone= V.v('phone') || '';
+  var link = V.v('linkedin') || V.v('portfolio') || V.v('website') || '';
+  var contactParts = [];
+  if (city || st) contactParts.push([city, st].filter(Boolean).join(', '));
+  if (phone) contactParts.push(phone);
+  if (email) contactParts.push(email);
+  if (link)  contactParts.push(link);
+  if (!contactParts.length) {
+    // Fall back to whatever the original record provided rather than emit a
+    // blank contact line, which would leave the header adrift.
+    contactParts = [V.v('email'), V.v('phone'), V.v('current school')].filter(Boolean);
+  }
+  h += '<div class="rname">'+ucaEsc(name)+'</div>';
+  h += '<div class="rcontact">'+contactParts.map(ucaEsc).join('<span class="sep">|</span>')+'</div>';
+  h += '<hr class="rheadrule">';
   (x.data.sections||[]).forEach(function(sec){
     if (sec.title==='STUDENT' || sec.title==='APPLICATION') return;
     if (sec.title==='TARGET POSITION' || sec.title==='TARGET PROGRAM') {
       var t=(sec.rows||[]).map(function(r){return r[1];}).filter(Boolean).join(' \u00b7 ');
-      if (t) h += '<div class="rtarget">'+ucaEsc((sec.rows[0]?sec.rows[0][1]:'')? '' : '')+ucaEsc(t)+'</div>';
+      if (t) h += '<div class="rtarget">'+ucaEsc(t)+'</div>';
       return;
     }
     if (!(sec.rows||[]).length) return;
@@ -9127,7 +9158,7 @@ function ucaResumeBody(x){
     var tt=String(sec.title||'').toUpperCase();
     if (tt.indexOf('SUMMARY')>=0) {
       h += '<div class="rsum">'+sec.rows.map(function(r){return ucaEsc(r[1]||r[0]);}).join(' ')+'</div>';
-    } else if (tt.indexOf('COMPETENC')>=0 || tt==='SKILLS' || tt==='SPECIAL SKILLS') {
+    } else if (tt.indexOf('COMPETENC')>=0 || tt==='SKILLS' || tt==='SPECIAL SKILLS' || tt.indexOf('CORE')>=0 || tt.indexOf('TECHNICAL')>=0) {
       h += '<ul class="rskills">'+sec.rows.map(function(r){ return '<li>'+ucaEsc(r[1]||r[0])+'</li>'; }).join('')+'</ul>';
     } else {
       sec.rows.forEach(function(r){
@@ -11798,3 +11829,32 @@ async function ecPhotoUpload(inputEl, catCode) {
     }
   } catch (e) { /* ignore */ }
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
