@@ -6788,7 +6788,9 @@ function schoolPickerFieldLegacy(opts) {
   const cVal = opts.country || PROFILE_COUNTRY || 'US';
   return '<label class="ec-lbl">' + escapeHTML(label) +
     '<div class="sp-row">' +
-    '<select class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" onchange="spCountryChange(\'' + id + '\')">' + countryOptions(cVal) + '</select>' +
+    (opts.hideCountry
+      ? '<input type="hidden" class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" value="US">'
+      : '<select class="ec-in sp-country" data-k="' + opts.key + '_country" id="' + id + '-country" onchange="spCountryChange(\'' + id + '\')">' + countryOptions(cVal) + '</select>') +
     '<input class="ec-in sp-name" data-k="' + opts.key + '" id="' + id + '-input" type="text" ' +
     'autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" ' +
     'name="school-' + id + '-nofill" data-1p-ignore data-lpignore="true" data-form-type="other" ' +
@@ -7293,6 +7295,7 @@ function spPick(id, payload) {
   const box = document.getElementById(id + '-results');
   if (box) box.innerHTML = '<div class="doe-picked">Selected: ' + escapeHTML(sc.name) +
     (sc.city ? ' - ' + escapeHTML([sc.city, sc.state].filter(Boolean).join(', ')) : '') + '</div>';
+  if (typeof window.__spPickHook === 'function') { try { window.__spPickHook(id, sc); } catch (e) {} }
 }
 
 // Return the last-picked school across any picker on the current form (for write-back)
@@ -11518,31 +11521,73 @@ function _heUnivByLeaid(leaid) {
   return (UNIV_CATALOG || []).find(u => u.leaid === leaid) || null;
 }
 // The admissions-office panel: filled from the catalog row on select.
+function _heAddressLines(addr) {
+  if (!addr) return '';
+  var parts = String(addr).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+  if (parts.length <= 1) return escapeHTML(addr);
+  return escapeHTML(parts[0]) + '<br>' + escapeHTML(parts.slice(1).join(', '));
+}
 function _heAdmissionsPanel(u) {
   if (!u) return '<div class="ec-help" id="he-adm-panel" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
-  const rows = [];
-  if (u.admissions_address) rows.push('<div><b>Address:</b> ' + escapeHTML(u.admissions_address) + '</div>');
-  if (u.admissions_phone)   rows.push('<div><b>Phone:</b> ' + escapeHTML(u.admissions_phone) + '</div>');
-  if (u.admissions_email)   rows.push('<div><b>Email:</b> <a href="mailto:' + encodeURIComponent(u.admissions_email) + '">' + escapeHTML(u.admissions_email) + '</a></div>');
-  const url = u.admissions_url || u.website;
-  if (url) rows.push('<div><b>Website:</b> <a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a></div>');
-  const head = '<div style="font-weight:600;margin-bottom:4px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>';
-  const body = rows.length ? rows.join('') :
-    '<div style="color:#7A8A9E">Contact details not on file yet. They fill automatically from the College Scorecard refresh.</div>';
+  var muted = 'color:#7A8A9E';
+  var na = '<span style="' + muted + '">not on file</span>';
+  var addr  = u.admissions_address ? _heAddressLines(u.admissions_address) : na;
+  var phone = u.admissions_phone ? escapeHTML(u.admissions_phone) : na;
+  var email = u.admissions_email ? '<a href="mailto:' + encodeURIComponent(u.admissions_email) + '">' + escapeHTML(u.admissions_email) + '</a>' : na;
+  var url = u.admissions_url || u.website;
+  var web = url ? '<a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a>' : na;
+  var head = '<div style="font-weight:600;margin-bottom:4px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>';
+  var body = '<div><b>Address:</b> ' + addr + '</div>' +
+             '<div><b>Phone:</b> ' + phone + '</div>' +
+             '<div><b>Email:</b> ' + email + '</div>' +
+             '<div><b>Website:</b> ' + web + '</div>';
   return '<div class="ec-panel" id="he-adm-panel" style="margin:6px 0 14px;padding:10px 12px;border:1px solid #E3E7EF;border-radius:8px;background:#F7F9FC">' + head + body + '</div>';
 }
 // onchange handler wired on the ranked select AND after a search pick.
 function targetUnivChanged() {
   const sel = document.querySelector('.ec-in[data-k="university_leaid"]');
   const leaid = sel ? sel.value : '';
+  if (leaid) { try { for (var k in SP_STATE) delete SP_STATE[k]; } catch (e) {} var inp = document.querySelector('.sp-name'); if (inp) inp.value = ''; }
   const panel = document.getElementById('he-adm-panel');
   if (panel) panel.outerHTML = _heAdmissionsPanel(leaid ? _heUnivByLeaid(leaid) : null);
+}
+function heOnSearchPick(id, sc) {
+  var sel = document.querySelector('.ec-in[data-k="university_leaid"]');
+  if (sel) {
+    var leaid = sc && sc.leaid ? String(sc.leaid) : '';
+    var has = leaid && Array.prototype.some.call(sel.options, function (o) { return o.value === leaid; });
+    sel.value = has ? leaid : '';
+  }
+  var u = (sc && sc.leaid) ? _heUnivByLeaid(String(sc.leaid)) : null;
+  if (!u && sc && sc.name) {
+    u = { common_name: sc.name, admissions_address: [sc.street, sc.city, sc.state, sc.zip].filter(Boolean).join(', '), admissions_phone: sc.phone || '' };
+  }
+  var panel = document.getElementById('he-adm-panel');
+  if (panel) panel.outerHTML = _heAdmissionsPanel(u);
+}
+function heMajorsField(value) {
+  var cat = CIP_CATALOG || [];
+  if (!cat.length) return ecField('program_of_interest', 'Program / major of interest', value);
+  var selected = String(value || '').split(';').map(function (x) { return x.trim(); }).filter(Boolean);
+  var selSet = {}; selected.forEach(function (x) { selSet[x.toLowerCase()] = 1; });
+  function optFor(m) { var t = m.title || m.name || ''; return '<option value="' + escapeHTML(t) + '"' + (selSet[t.toLowerCase()] ? ' selected' : '') + '>' + escapeHTML(t) + '</option>'; }
+  var hasFam = cat.some(function (m) { return m.family || m.family_name; });
+  var opts;
+  if (hasFam) {
+    var groups = {}; cat.forEach(function (m) { var f = m.family || m.family_name || 'Other'; (groups[f] = groups[f] || []).push(m); });
+    opts = Object.keys(groups).sort().map(function (f) { return '<optgroup label="' + escapeHTML(f) + '">' + groups[f].map(optFor).join('') + '</optgroup>'; }).join('');
+  } else { opts = cat.map(optFor).join(''); }
+  return '<label class="ec-lbl">Programs / majors of interest (pick one or more)' +
+    '<select class="he-majors-sel" id="he-majors" multiple size="8" style="height:auto;width:100%">' + opts + '</select>' +
+    '<div class="ec-hint">Ctrl/Cmd-click to select more than one.</div></label>';
 }
 
 async function targetEdit(id) {
   const t = id ? HE_TARGETS.find(x => x.id === id) : { pathways_pursuing: [] };
   if (!t) return;
+  window.__spPickHook = heOnSearchPick;
   if (!UNIV_CATALOG || !UNIV_CATALOG.length) { try { await heLoadUniversities(); } catch(e){} }
+  try { await heLoadCip(); } catch (e) {}
   setTimeout(function(){
     var sel=document.querySelector('.ec-in[data-k="university_leaid"]');
     if (sel && UNIV_CATALOG && UNIV_CATALOG.length) {
@@ -11568,7 +11613,7 @@ async function targetEdit(id) {
   ecCrumbHtml([{ label: 'All pillars', go: 'ecClearCrumb();renderPillars()' }, { label: 'Higher Education', go: 'renderHeSections()' }, { label: 'Target Schools' }]);
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     '<label class="ec-lbl">University * (search or pick below)</label>' +
-    schoolPickerField({ key: 'university_search', label: 'Search colleges (IPEDS)', value: '', level: 'college' }) +
+    schoolPickerField({ key: 'university_search', label: 'Search colleges (IPEDS)', value: '', level: 'college', hideCountry: true }) +
     '<label class="ec-lbl">Or pick from ranked list (US News, #1 first)' +
     '<select class="ec-in" data-k="university_leaid" onchange="targetUnivChanged()">' + univOpts + '</select></label>' +
     _heAdmissionsPanel(preU) +
@@ -11578,7 +11623,7 @@ async function targetEdit(id) {
     ) +
     ecField('interest_level', 'Interest level (1-5)', t.interest_level, false, 'number') +
     fitHelp +
-    ecField('program_of_interest', 'Program / major of interest', t.program_of_interest) +
+    heMajorsField(t.program_of_interest) +
     '<label class="ec-lbl">Pathways being pursued</label>' +
     '<div class="ec-paths">' + pathChecks + '</div>' +
     ecArea('why_interested', 'Why interested', t.why_interested) +
@@ -11605,6 +11650,11 @@ async function targetSave(id) {
   document.querySelectorAll('.ec-path').forEach(el => {
     if (el.checked) item.pathways_pursuing.push(el.dataset.code);
   });
+  var mSel = document.getElementById('he-majors');
+  if (mSel) {
+    var picks = Array.prototype.filter.call(mSel.options, function (o) { return o.selected; }).map(function (o) { return o.value; });
+    if (picks.length) item.program_of_interest = picks.join('; '); else delete item.program_of_interest;
+  }
   const pk = spLastPicked();
   if (pk && pk.leaid) item.university_leaid = pk.leaid;
   delete item.university_search;
