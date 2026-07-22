@@ -8887,14 +8887,21 @@ function ucaReportCreate(code){
   }
   (async function(){
     showToast('Gathering everything on file\u2026','success');
-    const d = await reportData();
-    var all = buildReportSections(d);
+    var all;
+    try {
+      var dump = await apiGet('/focms/v1/student/' + STUDENT_ID + '/full-dump');
+      all = buildDumpBackedReport(dump);
+    } catch(e){
+      var d = await reportData();
+      all = buildReportSections(d);
+    }
     var ov=document.createElement('div'); ov.className='rec-ov';
     ov.innerHTML='<div class="rec-modal" style="max-width:700px"><div class="rec-mtitle">Build a custom report</div>'
       +'<label class="ec-lbl">Report title<input class="rec-i" id="uc-rt" placeholder="e.g. Swimming Progress Report for Coach"></label>'
-      +'<div class="ec-lbl" style="margin:8px 0 4px">Include sections</div>'
-      +'<div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:10px">'
-      + all.map(function(s,i){ return '<label style="font-size:13px;display:inline-flex;gap:6px;align-items:center;width:47%"><input type="checkbox" class="uc-cs" data-i="'+i+'" checked> '+s.title+' ('+s.rows.length+')</label>'; }).join('')
+      +'<div class="ec-lbl" style="margin:8px 0 4px">Include sections \u2014 everything with data is on by default; uncheck anything you don\u2019t want.</div>'
+      +'<div style="display:flex;gap:6px;margin-bottom:6px"><button type="button" class="save-btn save-btn-ghost" style="padding:4px 12px;font-size:12px" id="uc-all">Select all</button><button type="button" class="save-btn save-btn-ghost" style="padding:4px 12px;font-size:12px" id="uc-none">Clear all</button></div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:10px;max-height:320px;overflow:auto">'
+      + all.map(function(s,i){ return '<label style="font-size:13px;display:inline-flex;gap:6px;align-items:center;width:47%"><input type="checkbox" class="uc-cs" data-i="'+i+'" checked> '+ucaEsc(s.title)+' ('+s.rows.length+')</label>'; }).join('')
       +'</div>'
       +'<label class="ec-lbl">From date (optional)<input class="rec-i" id="uc-from" type="date"></label>'
       +'<label class="ec-lbl">To date (optional)<input class="rec-i" id="uc-to" type="date"></label>'
@@ -8903,6 +8910,8 @@ function ucaReportCreate(code){
       +'<div class="rec-bar"><button class="save-btn" id="uc-rd-go">Build report</button>'
       +'<button class="save-btn save-btn-ghost" onclick="this.closest(\'.rec-ov\').remove()">Cancel</button></div></div>';
     document.body.appendChild(ov);
+    document.getElementById('uc-all').onclick = function(){ document.querySelectorAll('.uc-cs').forEach(function(c){ c.checked=true; }); };
+    document.getElementById('uc-none').onclick = function(){ document.querySelectorAll('.uc-cs').forEach(function(c){ c.checked=false; }); };
     document.getElementById('uc-rd-go').onclick = async function(){
       var rt=document.getElementById('uc-rt').value.trim();
       var from=document.getElementById('uc-from').value, to=document.getElementById('uc-to').value;
