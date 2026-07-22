@@ -350,7 +350,7 @@ async function billingShowInner() {
     '<div class="ec-meta">' + baseGb + ' GB base' + (addonParts.length ? ' \u00b7 ' + addonParts.join(' \u00b7 ') : '') + '</div></div>';
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Plans</div>' + core.map(planCard).join('');
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Storage add-ons</div>' + addons.map(planCard).join('');
-  html += '<div class="ec-notes" style="margin-top:14px">Every plan includes 1 GB; storage add-ons stack on top (e.g. 1 GB + Keepsake 10 GB = 11 GB). Kindergarten\u2013Grade 5 stays free. Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted, and you can export everything as a ZIP free, any time. Update your card any time with the button above.</div>';
+  html += '<div class="ec-notes" style="margin-top:14px">Every plan includes 1 GB; storage add-ons stack on top (e.g. 1 GB + Keepsake 10 GB = 11 GB). Kindergarten\u2013Grade 5 stays free. Cards are processed by Stripe; card numbers never touch outcomestar.app. Plans renew annually with a 90-day grace period after lapse before any file deletion \u2014 records are never deleted. You can view and print everything in the system at any time. Update your card any time with the button above.</div>';
   c.innerHTML = html;
 }
 async function billingCheckout(planCode) {
