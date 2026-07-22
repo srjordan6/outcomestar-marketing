@@ -8226,6 +8226,7 @@ const RESUME_FORMS = [
 ];
 const REPORT_FORMS = [
   ['report_full','Comprehensive Student Report','Everything on file: profile, family, academics, coursework, tests, skills, milestones, activities, employment, swimming, essays, recommenders'],
+  ['report_dump','Complete Record Dump','Absolutely everything on file for this student \u2014 every record in every category, nothing summarized or held back. Grouped by pillar; empty categories are shown too.'],
   ['report_custom','Custom Report','Describe what you need \u2014 the report is composed from everything in the system']
 ];
 function ucaBackTarget(code){
@@ -8681,6 +8682,109 @@ function buildReportSections(d){
   secs.push(S('REFERENCES', d.refs.map(function(r){ return [r.reference_name||r.name, [r.relationship, r.contact_email||r.email].filter(Boolean).join(' \u00b7 ')]; })));
   return secs.filter(function(x){ return x.rows.length; });
 }
+// ---- Complete Record Dump -------------------------------------------------
+// Converts the backend /full-dump payload (pillars -> tables -> {columns,rows})
+// into the flat editor "sections" shape. Nothing is summarized: every table is
+// shown (empty ones labelled), every row is shown, every column is shown.
+function _dumpTitleCase(s){
+  return String(s||'').replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+}
+function _dumpFmt(v){
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (Array.isArray(v)){
+    if (!v.length) return '';
+    return v.map(function(x){ return (x && typeof x === 'object') ? JSON.stringify(x) : String(x); }).join(', ');
+  }
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+// Columns that carry no reader value \u2014 shown last, in a muted "system fields"
+// block, so the dump is still complete but the substantive data leads.
+var _DUMP_SYS_COLS = ['id','tenant_id','student_id','created_by','updated_by',
+  'deleted_by','deleted_at','source_system','source_id','visibility_lock_reason'];
+var _DUMP_CSS =
+   '.dp-h1{font-family:Lora,Georgia,serif;color:#201868;font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0}'
+  +'.dp-rule{width:120px;border-bottom:3px solid #F07800;margin:6px 0 4px}'
+  +'.dp-meta{font-size:10px;color:#7A8A9E;margin:0 0 6px}'
+  +'.dp-note{font-size:10px;color:#7A8A9E;margin:0 0 18px}'
+  +'.dp-pillar{font-family:Lora,Georgia,serif;color:#201868;font-size:20px;font-weight:600;margin:26px 0 2px;padding-top:8px;border-top:2px solid #201868;page-break-after:avoid}'
+  +'.dp-tbl{font-family:Lora,Georgia,serif;color:#201868;font-size:14px;font-weight:600;margin:16px 0 2px;page-break-after:avoid}'
+  +'.dp-tblline{border-bottom:2px solid #F07800;width:54px;margin:0 0 6px}'
+  +'.dp-empty{font-size:11px;color:#9AA6B4;font-style:italic;margin:2px 0 8px}'
+  +'.dp-rec{margin:0 0 10px;padding:0 0 6px;border-bottom:1px solid #E3E7ED;page-break-inside:avoid}'
+  +'.dp-rech{font-size:9px;font-weight:700;color:#F07800;text-transform:uppercase;letter-spacing:.06em;margin:6px 0 3px}'
+  +'.dp-kv{display:flex;gap:12px;padding:1.5px 0}'
+  +'.dp-k{width:210px;flex:none;font-size:9px;font-weight:600;color:#201868;text-transform:uppercase;letter-spacing:.04em;padding-top:1px}'
+  +'.dp-v{flex:1;color:#333;font-size:11px;word-break:break-word}'
+  +'.dp-vempty{color:#B8C0CB}'
+  +'.dp-sys{margin-top:4px}'
+  +'.dp-syslbl{font-size:8px;color:#9AA6B4;text-transform:uppercase;letter-spacing:.05em;margin:2px 0 1px}'
+  +'.dp-foot{margin-top:26px;text-align:center;font-size:8px;color:#7A8A9E}'
+  +'@media print{.dp-foot{display:none}.dp-pillar,.dp-tbl{page-break-after:avoid}}';
+
+function _dumpKV(k, v){
+  var val = _dumpFmt(v);
+  var cls = val === '' ? 'dp-v dp-vempty' : 'dp-v';
+  if (val === '') val = '\u2014';
+  return '<div class="dp-kv"><div class="dp-k">'+ucaEsc(_dumpTitleCase(k))+'</div><div class="'+cls+'">'+ucaEsc(val).replace(/\n/g,'<br>')+'</div></div>';
+}
+
+function ucaDumpHtml(dump){
+  var pillars = (dump && dump.pillars) || [];
+  var h = '<div class="dp-h1">Complete Record Dump \u2014 '+ucaEsc(studentDisplayName())+'</div><div class="dp-rule"></div>'
+    + '<div class="dp-meta">Prepared from FOCMS records \u00b7 outcomestar.app \u00b7 '
+      + (dump && dump.generated_at ? new Date(dump.generated_at).toLocaleString() : new Date().toLocaleString())+'</div>'
+    + '<div class="dp-note">Every record on file for this student, grouped by pillar. '
+      + ((dump && dump.table_count) != null ? dump.table_count : 0)+' categories \u00b7 '
+      + ((dump && dump.total_rows) != null ? dump.total_rows : 0)+' records. '
+      + 'Empty categories are shown so nothing is hidden. '
+      + (dump && dump.excluded_tables && dump.excluded_tables.length
+          ? 'Internal-only categories are omitted by policy: '+dump.excluded_tables.map(_dumpTitleCase).join(', ')+'.'
+          : '')
+    + '</div>';
+  pillars.forEach(function(p){
+    h += '<div class="dp-pillar">'+ucaEsc(p.pillar||'')+'</div>';
+    (p.tables || []).forEach(function(t){
+      var cols = t.columns || [], rows = t.rows || [];
+      h += '<div class="dp-tbl">'+ucaEsc(_dumpTitleCase(t.table))+' \u00b7 '+rows.length+(rows.length===1?' record':' records')+'</div><div class="dp-tblline"></div>';
+      if (!rows.length){ h += '<div class="dp-empty">No records on file.</div>'; return; }
+      var sysSet = {}; _DUMP_SYS_COLS.forEach(function(c){ sysSet[c]=1; });
+      rows.forEach(function(r, ri){
+        h += '<div class="dp-rec">';
+        if (rows.length > 1) h += '<div class="dp-rech">Record '+(ri+1)+' of '+rows.length+'</div>';
+        // substantive columns first
+        cols.forEach(function(c, ci){ if (!sysSet[c]) h += _dumpKV(c, r[ci]); });
+        // system fields, muted, last \u2014 still shown (hold back nothing)
+        var sys = cols.map(function(c,ci){return [c,ci];}).filter(function(p2){return sysSet[p2[0]];});
+        if (sys.length){
+          h += '<div class="dp-sys"><div class="dp-syslbl">System fields</div>';
+          sys.forEach(function(p2){ h += _dumpKV(p2[0], r[p2[1]]); });
+          h += '</div>';
+        }
+        h += '</div>';
+      });
+    });
+  });
+  h += '<div class="dp-foot">outcomestar.app \u00b7 prepared from FOCMS records</div>';
+  return h;
+}
+
+function ucaDumpPrint(dump){
+  var w = window.open('', '_blank');
+  if (!w){ showToast('Allow pop-ups to open the record dump','error'); return; }
+  w.document.write('<!DOCTYPE html><html><head><title>Complete Record Dump \u2014 '+ucaEsc(studentDisplayName())+'</title>'
+    + '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Lora:wght@500;600&display=swap" rel="stylesheet">'
+    + '<style>body{font-family:Poppins,Arial,sans-serif;color:#333;font-size:11px;line-height:1.5;margin:0 auto;max-width:820px;padding:40px 48px}'
+    + _DUMP_CSS + '</style></head><body>'
+    + ucaDumpHtml(dump)
+    + '<div style="margin-top:20px;text-align:center" class="dp-noprint"><button onclick="window.print()" style="font-family:Poppins;background:#201868;color:#fff;border:0;border-radius:8px;padding:9px 20px;font-size:13px;cursor:pointer">Print / Save as PDF</button></div>'
+    + '<style>@media print{.dp-noprint{display:none}}</style>'
+    + '</body></html>');
+  w.document.close();
+  showToast('Record dump ready','success');
+}
+
 function ucaReportCreate(code){
   if (code === 'report_full'){
     (async function(){
@@ -8688,6 +8792,18 @@ function ucaReportCreate(code){
       const d = await reportData();
       var secs = buildReportSections(d);
       ucaEditorWith(code, null, null, secs, 'Comprehensive Student Report \u2014 ' + studentDisplayName() + ' \u2014 ' + new Date().toLocaleDateString());
+    })();
+    return;
+  }
+  if (code === 'report_dump'){
+    (async function(){
+      showToast('Dumping every record on file\u2026','success');
+      var dump;
+      try { dump = await apiGet('/focms/v1/student/' + STUDENT_ID + '/full-dump'); }
+      catch(e){ showToast('Could not load the complete record dump','error'); return; }
+      // Raw dump can be thousands of fields \u2014 too heavy for the row editor.
+      // Render straight to a printable window instead.
+      ucaDumpPrint(dump);
     })();
     return;
   }
@@ -9272,7 +9388,7 @@ function ucaResumeV322Enabled(){
 function ucaResumeCss(){  return ucaResumeV322Enabled() ? RESUME_CSS_V322 : RESUME_CSS; }
 function ucaResumeRender(x){ return ucaResumeV322Enabled() ? ucaResumeBodyV322(x) : ucaResumeBody(x); }
 function ucaIsResume(code){ return code==='resume_academic' || code==='resume_career'; }
-function ucaIsReport(code){ return code==='report_full' || code==='report_custom'; }
+function ucaIsReport(code){ return code==='report_full' || code==='report_dump' || code==='report_custom'; }
 var REPORT_CSS = 'body{font-family:Poppins,Arial,sans-serif;color:#4A5563;font-size:11px;line-height:1.55;margin:0;padding:40px 50px}'
  +'.rpt-title{font-family:Lora,Georgia,serif;color:#201868;font-size:27px;font-weight:600;letter-spacing:-.01em}'
  +'.rpt-rule{width:120px;border-bottom:3px solid #F07800;margin:6px 0 4px}'
