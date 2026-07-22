@@ -8896,8 +8896,18 @@ function ucaSecsPrint(title, secs){
     if (!(sec.rows||[]).length) return;
     body += '<div class="dp-tbl">'+ucaEsc(sec.title)+'</div><div class="dp-tblline"></div>';
     sec.rows.forEach(function(r){
-      var k=r[0], v=(r[1]==null?'':String(r[1]));
-      if (k==='\u2500\u2500\u2500'){ body += '<div class="dp-rech">'+ucaEsc(v)+'</div>'; return; }
+      var k=r[0], raw=r[1];
+      if (k==='\u2500\u2500\u2500'){ body += '<div class="dp-rech">'+ucaEsc(raw==null?'':String(raw))+'</div>'; return; }
+      if (raw!==null && typeof raw==='object'){
+        // safety net: never print an object as JSON \u2014 flatten it
+        var out=[]; _rptFlatten(k, raw, out);
+        if (!out.length){ return; }
+        out.forEach(function(rr){
+          body += '<div class="dp-kv"><div class="dp-k">'+ucaEsc(rr[0])+'</div><div class="dp-v">'+ucaEsc(String(rr[1])).replace(/\n/g,'<br>')+'</div></div>';
+        });
+        return;
+      }
+      var v=(raw==null?'':String(raw));
       body += '<div class="dp-kv"><div class="dp-k">'+ucaEsc(k)+'</div><div class="dp-v">'+ucaEsc(v).replace(/\n/g,'<br>')+'</div></div>';
     });
   });
