@@ -8831,6 +8831,14 @@ var _DUMP_CSS =
   +'@media print{.dp-foot{display:none}.dp-pillar,.dp-tbl{page-break-after:avoid}}';
 
 function _dumpKV(k, v){
+  if (v !== null && typeof v === 'object'){
+    // JSONB / array -> flatten to readable sub-rows instead of raw JSON
+    var out = []; _rptFlatten(_dumpTitleCase(k), v, out);
+    if (!out.length) return '<div class="dp-kv"><div class="dp-k">'+ucaEsc(_dumpTitleCase(k))+'</div><div class="dp-v dp-vempty">\u2014</div></div>';
+    return out.map(function(r){
+      return '<div class="dp-kv"><div class="dp-k">'+ucaEsc(r[0])+'</div><div class="dp-v">'+ucaEsc(String(r[1])).replace(/\n/g,'<br>')+'</div></div>';
+    }).join('');
+  }
   var val = _dumpFmt(v);
   var cls = val === '' ? 'dp-v dp-vempty' : 'dp-v';
   if (val === '') val = '\u2014';
