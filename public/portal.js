@@ -281,52 +281,57 @@ async function billingShowInner() {
   var pmInfo = null;
   try { pmInfo = await apiGet('/focms/v1/student/' + STUDENT_ID + '/billing/payment-method'); } catch (e) { pmInfo = null; }
   var html = '';
-  // v324: single-panel billing summary.
-  // Previous UI stacked "Card on file" and "Current plan" as two boxes with
-  // separate action buttons, which read as two different payment surfaces
-  // (they aren't). One panel now, ordered plan -> payment -> account links.
-  var ok = pmInfo ? !!pmInfo.has_card : false;
-  var notCfg = pmInfo ? (pmInfo.configured === false) : false;
-  var accentColor = (pmInfo && !ok && !notCfg) ? 'var(--orange)' : '#E5E7EB';
-  html += '<div style="background:#fff;border:1px solid ' + accentColor + ';border-radius:14px;padding:18px 20px;margin-top:12px">' +
-    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:2px">' +
-      escapeHTML(cp.title || 'Free plan') + '</div>' +
-    '<div class="ec-meta" style="margin-bottom:14px">Status: ' + escapeHTML(cp.status || 'active') +
-      (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') +
-    '</div>';
   if (pmInfo) {
-    html += '<div style="border-top:1px solid #F1F3F5;padding-top:12px;margin-bottom:10px">' +
-      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:14px;margin-bottom:4px">Payment method</div>' +
+    var ok = !!pmInfo.has_card;
+    var notCfg = pmInfo.configured === false;
+    html += '<div style="background:#fff;border:1px solid ' + (ok ? '#E5E7EB' : 'var(--orange)') + ';border-radius:14px;padding:16px 18px;margin-top:12px">' +
+      '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Card on file</div>' +
       '<div class="ec-title">' + (notCfg ? 'Online payments are not configured on this server'
-                                            : (ok ? 'Card on file' : 'No card on file')) + '</div>' +
-      '<div class="ec-meta">' + (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '') +
-        (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') +
-      '</div>' +
-      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card.</div>') +
-      '</div>';
+                                          : (ok ? 'Yes - a card is saved and can be charged' : 'No card saved')) + '</div>' +
+      '<div class="ec-meta">' + (pmInfo.customer ? 'Stripe customer ' + escapeHTML(pmInfo.customer) : (notCfg ? 'STRIPE_SECRET_KEY is missing or empty on the API service' : '')) +
+        (pmInfo.error ? ' \u00b7 lookup failed (' + escapeHTML(pmInfo.error) + ')' : '') + '</div>' +
+      (ok || notCfg ? '' : '<div class="ec-meta" style="margin-top:6px">The $1.00 AI resume needs a saved card. Use the button below - the "Update payment method" link goes to the subscription portal, which cannot add a first card.</div>') +
+      (notCfg ? '' : '<div class="ec-bar" style="margin-top:10px"><button class="save-btn" onclick="billingAddCard()">' +
+        (ok ? 'Replace card' : 'Add a card') + '</button>' +
+        (ok ? '' : '<button class="save-btn save-btn-ghost" onclick="billingReconcile()">Re-check Stripe</button>') +
+        '</div>') + '</div>';
   }
-  html += '<div class="ec-bar" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px">';
-  if (pmInfo && !notCfg) {
-    html += '<button class="save-btn" onclick="billingAddCard()">' + (ok ? 'Replace card' : 'Add a card') + '</button>';
-    if (!ok) html += '<button class="save-btn save-btn-ghost" onclick="billingReconcile()">Re-check Stripe</button>';
-  }
-  html += '<button class="save-btn save-btn-ghost" onclick="billingPortal()">Invoices \u00b7 cancel plan</button>';
-  html += '</div></div>';
+  html += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;margin-top:12px">' +
+    '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-bottom:6px">Current plan</div>' +
+    '<div class="ec-title">' + escapeHTML(cp.title || 'Free plan') + '</div>' +
+    '<div class="ec-meta">Status: ' + escapeHTML(cp.status || 'active') +
+    (cp.current_period_end ? ' \u00b7 renews ' + escapeHTML(String(cp.current_period_end).slice(0, 10)) : '') + '</div>' +
+    '<div class="ec-bar" style="margin-top:10px"><button class="save-btn save-btn-ghost" onclick="billingPortal()">Update payment method \u00b7 invoices \u00b7 cancel</button></div>' +
+    '</div>';
   if (!d.configured) {
     html += '<div class="cr-waiting" style="margin-top:12px">Online payments are being set up. Plans shown below will be purchasable shortly.</div>';
   }
   var plans = (d.available_plans || []).filter(function(p){ return p.kind === 'subscription'; });
   var core = plans.filter(function(p){ return p.plan_code.indexOf('addon_') !== 0; });
   var addons = plans.filter(function(p){ return p.plan_code.indexOf('addon_') === 0; });
+  // v325 (2026-07-22): ownership must be checked against ALL active
+  // subscriptions, not just current_plan. current_plan is deliberately the
+  // BASE plan only (backend excludes addon_ prefixes), so add-ons like
+  // Keepsake never matched cp.plan_code and always showed "Choose" even when
+  // owned. Build a set of every active/trialing plan_code the tenant holds.
+  var ownedCodes = {};
+  (d.subscriptions || []).forEach(function(sub){
+    if (sub.status === 'active' || sub.status === 'trialing') ownedCodes[sub.plan_code] = sub;
+  });
   function planCard(p) {
-    var isCur = cp.plan_code === p.plan_code;
+    var isAddon = p.plan_code.indexOf('addon_') === 0;
+    var owned = !!ownedCodes[p.plan_code];
+    var isCur = owned || (cp.plan_code === p.plan_code);
+    var actionLabel;
+    if (owned) actionLabel = null; // show "Active" instead of a button
+    else if (isAddon) actionLabel = 'Add';
+    else actionLabel = (cp.plan_code && cp.plan_code !== 'k5_free' ? 'Switch' : 'Choose');
     return '<div style="background:#fff;border:1px solid ' + (isCur ? 'var(--orange)' : '#E5E7EB') + ';border-radius:14px;padding:14px 16px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">' +
       '<div><div class="ec-title">' + escapeHTML(p.title) + '</div>' +
       '<div class="ec-meta">' + billingFmt(p.amount_cents) + ' / ' + escapeHTML(p.billing_interval || 'year') +
       (p.storage_gb ? ' \u00b7 ' + p.storage_gb + ' GB storage' : '') + '</div></div>' +
-      (isCur ? '<span class="ec-meta" style="margin-top:0">Current</span>'
-             : '<button class="save-btn" onclick="billingCheckout(\'' + p.plan_code + '\')">' +
-               (cp.plan_code && cp.plan_code !== 'k5_free' ? 'Switch' : 'Choose') + '</button>') + '</div>';
+      (owned ? '<span class="ec-meta" style="margin-top:0;color:var(--orange);font-weight:600">Active</span>'
+             : '<button class="save-btn" onclick="billingCheckout(\'' + p.plan_code + '\')">' + actionLabel + '</button>') + '</div>';
   }
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Plans</div>' + core.map(planCard).join('');
   html += '<div style="font-family:Lora,serif;font-weight:600;color:var(--navy);font-size:16px;margin-top:18px">Storage add-ons</div>' + addons.map(planCard).join('');
