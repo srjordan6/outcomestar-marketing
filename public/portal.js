@@ -11505,10 +11505,9 @@ function _heUnivOptionLabel(u) {
 }
 function _heUnivRankedOptions(selectedLeaid) {
   const cat = UNIV_CATALOG || [];
-  const rk = u => (u.us_news_rank_national != null ? u.us_news_rank_national : u.us_news_rank);
-  const natl = cat.filter(u => rk(u) != null)
-                  .sort((a,b) => rk(a) - rk(b));
-  const la   = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null && u.us_news_rank == null)
+  const natl = cat.filter(u => u.us_news_rank_national != null)
+                  .sort((a,b) => a.us_news_rank_national - b.us_news_rank_national);
+  const la   = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null)
                   .sort((a,b) => a.us_news_rank_liberal_arts - b.us_news_rank_liberal_arts);
   const opt = u => '<option value="' + u.leaid + '"' +
       (selectedLeaid === u.leaid ? ' selected' : '') + '>' +
@@ -11530,19 +11529,23 @@ function _heAddressLines(addr) {
 }
 function _heAdmissionsPanel(u) {
   if (!u) return '<div class="ec-help" id="he-adm-panel" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
-  var muted = 'color:#7A8A9E';
-  var na = '<span style="' + muted + '">not on file</span>';
+  var na = '<span class="he-adm-na">not on file</span>';
   var addr  = u.admissions_address ? _heAddressLines(u.admissions_address) : na;
   var phone = u.admissions_phone ? escapeHTML(u.admissions_phone) : na;
+  var fax   = u.admissions_fax ? escapeHTML(u.admissions_fax) : na;
   var email = u.admissions_email ? '<a href="mailto:' + encodeURIComponent(u.admissions_email) + '">' + escapeHTML(u.admissions_email) + '</a>' : na;
   var url = u.admissions_url || u.website;
   var web = url ? '<a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a>' : na;
-  var head = '<div style="font-weight:600;margin-bottom:4px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>';
-  var body = '<div><b>Address:</b> ' + addr + '</div>' +
-             '<div><b>Phone:</b> ' + phone + '</div>' +
-             '<div><b>Email:</b> ' + email + '</div>' +
-             '<div><b>Website:</b> ' + web + '</div>';
-  return '<div class="ec-panel" id="he-adm-panel" style="margin:6px 0 14px;padding:10px 12px;border:1px solid #E3E7EF;border-radius:8px;background:#F7F9FC">' + head + body + '</div>';
+  return '<div class="he-adm" id="he-adm-panel">' +
+    '<div class="he-adm-h">Admissions Office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>' +
+    '<div class="he-adm-addr">' + addr + '</div>' +
+    '<div class="he-adm-grid">' +
+      '<div><span class="he-adm-l">Phone</span><span class="he-adm-v">' + phone + '</span></div>' +
+      '<div><span class="he-adm-l">Fax</span><span class="he-adm-v">' + fax + '</span></div>' +
+      '<div><span class="he-adm-l">Email</span><span class="he-adm-v">' + email + '</span></div>' +
+      '<div><span class="he-adm-l">Website</span><span class="he-adm-v">' + web + '</span></div>' +
+    '</div>' +
+  '</div>';
 }
 // onchange handler wired on the ranked select AND after a search pick.
 function targetUnivChanged() {
