@@ -11527,23 +11527,49 @@ function _heAddressLines(addr) {
   if (parts.length <= 1) return escapeHTML(addr);
   return escapeHTML(parts[0]) + '<br>' + escapeHTML(parts.slice(1).join(', '));
 }
+// v342: parse the stored one-line admissions address into US address parts.
+function _heAddrParts(addr) {
+  var out = { street: '', city: '', state: '', zip: '' };
+  if (!addr) return out;
+  var parts = String(addr).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+  if (!parts.length) return out;
+  var last = parts[parts.length - 1] || '';
+  var m = last.match(/^([A-Za-z]{2})\s+([\d\-]+)$/) || last.match(/^([A-Za-z]{2})$/);
+  if (m) { out.state = (m[1] || '').toUpperCase(); out.zip = m[2] || ''; parts.pop(); }
+  else { var z = last.match(/([\d]{5}(?:-[\d]{4})?)\s*$/); if (z) { out.zip = z[1]; last = last.replace(z[1], '').trim(); var st = last.match(/([A-Za-z]{2})\s*$/); if (st) { out.state = st[1].toUpperCase(); } parts.pop(); } }
+  if (parts.length) { out.city = parts.pop(); }
+  out.street = parts.join(', ');
+  if (!out.street && out.city) { out.street = out.city; out.city = ''; }
+  return out;
+}
+function _heRO(label, val, isLink, href) {
+  var v = val == null ? '' : String(val);
+  if (isLink && v) {
+    return '<div class="field"><label>' + label + '</label>' +
+      '<div class="he-ro he-ro-link"><a href="' + escapeHTML(href) + '"' + (href.indexOf('mailto:') === 0 ? '' : ' target="_blank" rel="noopener"') + '>' + escapeHTML(v) + '</a></div></div>';
+  }
+  return '<div class="field"><label>' + label + '</label>' +
+    '<div class="he-ro' + (v ? '' : ' he-ro-empty') + '">' + (v ? escapeHTML(v) : 'not on file') + '</div></div>';
+}
 function _heAdmissionsPanel(u) {
   if (!u) return '<div class="ec-help" id="he-adm-panel" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
-  var na = '<span class="he-adm-na">not on file</span>';
-  var addr  = u.admissions_address ? _heAddressLines(u.admissions_address) : na;
-  var phone = u.admissions_phone ? escapeHTML(u.admissions_phone) : na;
-  var fax   = u.admissions_fax ? escapeHTML(u.admissions_fax) : na;
-  var email = u.admissions_email ? '<a href="mailto:' + encodeURIComponent(u.admissions_email) + '">' + escapeHTML(u.admissions_email) + '</a>' : na;
-  var url = u.admissions_url || u.website;
-  var web = url ? '<a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a>' : na;
+  var a = _heAddrParts(u.admissions_address);
+  if (!a.city && u.city) a.city = u.city;
+  if (!a.state && u.state) a.state = u.state;
+  var url = u.admissions_url || u.website || '';
+  var em = u.admissions_email || '';
   return '<div class="he-adm" id="he-adm-panel">' +
     '<div class="he-adm-h">Admissions Office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>' +
-    '<div class="he-adm-addr">' + addr + '</div>' +
-    '<div class="he-adm-grid">' +
-      '<div><span class="he-adm-l">Phone</span><span class="he-adm-v">' + phone + '</span></div>' +
-      '<div><span class="he-adm-l">Fax</span><span class="he-adm-v">' + fax + '</span></div>' +
-      '<div><span class="he-adm-l">Email</span><span class="he-adm-v">' + email + '</span></div>' +
-      '<div><span class="he-adm-l">Website</span><span class="he-adm-v">' + web + '</span></div>' +
+    '<div class="field-grid" style="grid-template-columns:1fr">' +
+      _heRO('Country', 'United States') +
+      _heRO('Address line 1', a.street) +
+      _heRO('City / Town', a.city) +
+      _heRO('State / Province / Region', a.state) +
+      _heRO('Postal code', a.zip) +
+      _heRO('Phone', u.admissions_phone) +
+      _heRO('Fax', u.admissions_fax) +
+      _heRO('Email', em, !!em, 'mailto:' + em) +
+      _heRO('Website', url, !!url, url) +
     '</div>' +
   '</div>';
 }
