@@ -11459,41 +11459,171 @@ const PATHWAY_OPTS = [
 ];
 const FIT_OPTS = ['reach','target','likely','safety'];
 
+/* ===== v349: target schools as a sortable table =====
+   Default sort: student interest level, highest first (5 = dream school).
+   Every column sorts asc/desc on click.
+   Academic Index (AI) = Converted GPA Score + Test Score Component, capped 240:
+     CGS  = (GPA / 4.0) * 80          -> 80 at a 4.0
+     Test = SAT_total / 10            -> 160 at a 1600  (SAT/20 * 2)
+     ACT composite is concorded to SAT first.
+   The AI shown per row is the SCHOOL's profile AI: what a 4.0 applicant
+   presenting that school's mid-50% test score would carry. It is a difficulty
+   benchmark for comparing targets, not the student's own AI. */
+var HE_SORT = { key: 'interest_level', dir: 'desc' };
+var ACT_TO_SAT = { 36:1590, 35:1540, 34:1500, 33:1460, 32:1430, 31:1400, 30:1370,
+  29:1340, 28:1310, 27:1280, 26:1240, 25:1210, 24:1180, 23:1140, 22:1110, 21:1080,
+  20:1040, 19:1010, 18:970, 17:930, 16:890, 15:850, 14:800, 13:760, 12:710, 11:670,
+  10:630, 9:590 };
+function heActToSat(act) {
+  var a = Math.round(Number(act));
+  if (!a || isNaN(a)) return null;
+  if (a > 36) a = 36;
+  if (ACT_TO_SAT[a] != null) return ACT_TO_SAT[a];
+  return null;
+}
+function heAcademicIndex(gpa, satTotal, actComposite) {
+  var g = Number(gpa);
+  if (isNaN(g) || !g) g = 4.0;
+  if (g > 4.0) g = 4.0;
+  var cgs = (g / 4.0) * 80;
+  var sat = Number(satTotal);
+  if (!sat || isNaN(sat)) sat = heActToSat(actComposite);
+  if (!sat) return null;
+  if (sat > 1600) sat = 1600;
+  var ai = cgs + (sat / 10);
+  return Math.round(Math.min(240, ai));
+}
+function heSchoolAI(u) {
+  if (!u) return null;
+  var sat = null;
+  if (u.sat_25 && u.sat_75) sat = (Number(u.sat_25) + Number(u.sat_75)) / 2;
+  else if (u.sat_75) sat = Number(u.sat_75);
+  else if (u.sat_25) sat = Number(u.sat_25);
+  var act = null;
+  if (!sat) {
+    if (u.act_25 && u.act_75) act = (Number(u.act_25) + Number(u.act_75)) / 2;
+    else act = u.act_75 || u.act_25 || null;
+  }
+  return heAcademicIndex(4.0, sat, act);
+}
+function heAIBand(ai) {
+  if (ai == null) return '';
+  if (ai >= 230) return 'Exceptional';
+  if (ai >= 220) return 'Highly competitive';
+  if (ai >= 210) return 'Competitive';
+  return 'Below Ivy threshold';
+}
+function heTargetMajors(t) {
+  return String(t.program_of_interest || '')
+    .split(';').map(function (x) { return x.trim(); })
+    .filter(Boolean).sort(function (a, b) { return a.localeCompare(b); });
+}
+function _heSortVal(t, key) {
+  var u = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
+  switch (key) {
+    case 'school':   return (t.common_name || t.university_name || t.university_leaid || '').toLowerCase();
+    case 'majors':   return (heTargetMajors(t)[0] || '').toLowerCase();
+    case 'fit':      return FIT_OPTS.indexOf(t.fit_category) === -1 ? 99 : FIT_OPTS.indexOf(t.fit_category);
+    case 'priority': return t.priority == null ? 9999 : Number(t.priority);
+    case 'interest_level': return t.interest_level == null ? -1 : Number(t.interest_level);
+    case 'ai':       var a = heSchoolAI(u); return a == null ? -1 : a;
+    default:         return '';
+  }
+}
+function heSortTargets(key) {
+  if (HE_SORT.key === key) HE_SORT.dir = (HE_SORT.dir === 'asc' ? 'desc' : 'asc');
+  else { HE_SORT.key = key; HE_SORT.dir = (key === 'interest_level' || key === 'ai') ? 'desc' : 'asc'; }
+  renderTargetsList();
+}
+function _heSortedTargets() {
+  var arr = (HE_TARGETS || []).slice();
+  var k = HE_SORT.key, dir = (HE_SORT.dir === 'desc') ? -1 : 1;
+  arr.sort(function (x, y) {
+    var a = _heSortVal(x, k), b = _heSortVal(y, k);
+    if (typeof a === 'string' || typeof b === 'string') {
+      a = String(a); b = String(b);
+      if (a < b) return -1 * dir;
+      if (a > b) return 1 * dir;
+    } else {
+      if (a < b) return -1 * dir;
+      if (a > b) return 1 * dir;
+    }
+    // stable secondary: school name ascending
+    var an = _heSortVal(x, 'school'), bn = _heSortVal(y, 'school');
+    return an < bn ? -1 : (an > bn ? 1 : 0);
+  });
+  return arr;
+}
+function _heTh(label, key, align) {
+  var on = (HE_SORT.key === key);
+  var arrow = on ? (HE_SORT.dir === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+  return '<th onclick="heSortTargets(\'' + key + '\')" title="Sort by ' + escapeHTML(label) + '" ' +
+    'style="text-align:' + (align || 'left') + ';cursor:pointer;user-select:none;padding:8px 10px;' +
+    'font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;' +
+    'color:' + (on ? '#201868' : '#7A8A9E') + ';border-bottom:2px solid #E3E7EF;white-space:nowrap">' +
+    escapeHTML(label) + arrow + '</th>';
+}
 function renderTargetsList() {
-  const rows = HE_TARGETS;
   ecCrumbHtml([{ label: 'All pillars', go: 'ecClearCrumb();renderPillars()' }, { label: 'Higher Education', go: 'renderHeSections()' }, { label: 'Target Schools' }]);
-  let html = '<div class="ec-bar"><button class="save-btn" onclick="targetEdit(null)">Add target school</button>' +
+  var html = '<div class="ec-bar"><button class="save-btn" onclick="targetEdit(null)">Add target school</button>' +
     '<button class="save-btn save-btn-ghost" onclick="renderHeSections()">Back to sections</button></div>';
+  var rows = _heSortedTargets();
   if (!rows.length) {
     html += '<div class="cr-waiting">No targets yet. Start with the 13 canonical schools.</div>';
-  } else {
-    html += rows.map(targetRow).join('');
+    document.getElementById('sections-container').innerHTML = html;
+    return;
   }
-  document.getElementById('sections-container').innerHTML = html;
-}
-
-function targetRow(t) {
-  const name = escapeHTML(t.common_name || t.university_name || t.university_leaid);
-  const loc = t.university_city ? ' \u00b7 ' + escapeHTML(t.university_city + ', ' + (t.university_state || '')) : '';
-  const rank = t.us_news_rank ? ' \u00b7 #' + t.us_news_rank : '';
-  const admit = t.admit_rate != null ? ' \u00b7 ' + (t.admit_rate * 100).toFixed(1) + '% admit' : '';
-  const fit = t.fit_category ? '<span class="ec-chip">' + t.fit_category + '</span>' : '';
-  const pathways = (t.pathways_pursuing || []).map(p => {
-    const o = PATHWAY_OPTS.find(x => x.code === p);
-    return '<span class="ec-chip">' + (o ? o.label : p) + '</span>';
+  var td = 'padding:9px 10px;border-bottom:1px solid #EEF0F4;font-size:13px;color:#201868;vertical-align:top';
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;background:#fff;' +
+    'border:1px solid #E3E7EF;border-radius:8px"><thead><tr>' +
+    _heTh('School', 'school') +
+    _heTh('Major(s)', 'majors') +
+    _heTh('Fit', 'fit') +
+    _heTh('Priority', 'priority', 'center') +
+    _heTh('Interest', 'interest_level', 'center') +
+    _heTh('Academic Index', 'ai', 'center') +
+    '<th style="border-bottom:2px solid #E3E7EF"></th></tr></thead><tbody>';
+  html += rows.map(function (t) {
+    var u = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
+    var name = escapeHTML(t.common_name || t.university_name || t.university_leaid || '');
+    var rank = t.us_news_rank ? ' \u00b7 #' + t.us_news_rank : '';
+    var loc = t.university_city ? escapeHTML(t.university_city + ', ' + (t.university_state || '')) : '';
+    var admit = t.admit_rate != null ? (Number(t.admit_rate) * 100).toFixed(1) + '% admit' : '';
+    var sub = [loc, admit].filter(Boolean).join(' \u00b7 ');
+    var majors = heTargetMajors(t);
+    var majorCell = majors.length
+      ? majors.map(function (m) { return escapeHTML(m); }).join('<br>')
+      : '<span style="color:#9AA5B4">\u2014</span>';
+    var fitCell = t.fit_category
+      ? '<span class="ec-chip">' + escapeHTML(t.fit_category) + '</span>'
+      : '<span style="color:#9AA5B4">\u2014</span>';
+    var pri = (t.priority == null || t.priority === '') ? '<span style="color:#9AA5B4">\u2014</span>' : escapeHTML(String(t.priority));
+    var inter = (t.interest_level == null || t.interest_level === '') ? '<span style="color:#9AA5B4">\u2014</span>' : escapeHTML(String(t.interest_level));
+    var ai = heSchoolAI(u);
+    var aiCell = (ai == null)
+      ? '<span style="color:#9AA5B4" title="No SAT or ACT on file for this school">\u2014</span>'
+      : '<span title="' + escapeHTML(heAIBand(ai)) + ' \u2014 school mid-50% profile at a 4.0 GPA">' + ai +
+        '<div style="font-size:11px;color:#7A8A9E">' + escapeHTML(heAIBand(ai)) + '</div></span>';
+    return '<tr>' +
+      '<td style="' + td + '"><div style="font-weight:600">' + name + rank + '</div>' +
+        (sub ? '<div style="font-size:12px;color:#7A8A9E">' + sub + '</div>' : '') +
+        (t.show_on_showcase ? '<span class="ec-badge ec-badge-pub">Public</span>' : '') + '</td>' +
+      '<td style="' + td + '">' + majorCell + '</td>' +
+      '<td style="' + td + '">' + fitCell + '</td>' +
+      '<td style="' + td + ';text-align:center">' + pri + '</td>' +
+      '<td style="' + td + ';text-align:center">' + inter + '</td>' +
+      '<td style="' + td + ';text-align:center">' + aiCell + '</td>' +
+      '<td style="' + td + ';text-align:right;white-space:nowrap">' +
+        '<button onclick="targetEdit(\'' + t.id + '\')">Edit</button> ' +
+        '<button onclick="targetDelete(\'' + t.id + '\')">Delete</button></td>' +
+    '</tr>';
   }).join('');
-  const showcase = t.show_on_showcase ? '<span class="ec-badge ec-badge-pub">Public</span>' : '';
-  const flags = [];
-  if (t.has_rotc) flags.push('ROTC');
-  if (t.has_d1_swim) flags.push('D1 Swim');
-  if (t.is_service_academy) flags.push('Service Academy');
-  const flagStr = flags.length ? ' \u00b7 ' + flags.join(', ') : '';
-  return '<div class="ec-row"><div><div class="ec-title">' + name + rank + '</div>' +
-    '<div class="ec-meta">' + loc.replace(/^ · /,'') + admit + flagStr + '</div>' +
-    '<div class="ec-chips">' + fit + pathways + showcase + '</div>' +
-    (t.why_interested ? '<div class="ec-notes">' + escapeHTML(t.why_interested) + '</div>' : '') + '</div>' +
-    '<div class="ec-actions"><button onclick="targetEdit(\'' + t.id + '\')">Edit</button>' +
-    '<button onclick="targetDelete(\'' + t.id + '\')">Delete</button></div></div>';
+  html += '</tbody></table></div>' +
+    '<div style="font-size:12px;color:#7A8A9E;margin-top:8px">' +
+    'Click any column heading to sort ascending or descending. ' +
+    '<b>Academic Index</b> = converted GPA score (80 at a 4.0) + test component (SAT total \u00f7 10, ACT concorded), capped at 240. ' +
+    'The value shown is each school\u2019s mid-50% profile: 230\u2013240 exceptional, 220\u2013229 highly competitive, below 210 under the usual Ivy threshold for unhooked applicants.</div>';
+  document.getElementById('sections-container').innerHTML = html;
 }
 
 // v337b: build the ranked <select> grouped into US News National Universities
