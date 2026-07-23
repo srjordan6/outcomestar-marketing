@@ -8513,6 +8513,7 @@ function ucaFormName(code){ var f=UCA_FORMS.concat(RESUME_FORMS, REPORT_FORMS).f
 async function renderUcaTopic(code){
   await ucaLoadSaved();
   var list = UCA_SAVED.filter(function(x){ return x.form_code === code; });
+  var isApp = !ucaIsReport(code) && !ucaIsResume(code);
   let html = adCrumb([ucaCrumbParent(code), { label: ucaFormName(code) }]) + '<div class="ec-bar"><button class="save-btn" onclick="ucaCreate(\'' + code + '\')">Create ' + ucaFormName(code) + '</button>'
     + '<button class="save-btn save-btn-ghost" onclick="'+ucaBackTarget(code)+'">Back</button></div>';
   if (!list.length) html += '<div class="cr-waiting">No saved ' + ucaFormName(code) + ' yet. Create one \u2014 it pre-fills from your records.</div>';
@@ -8520,7 +8521,10 @@ async function renderUcaTopic(code){
     return '<div class="ec-row"><div><div class="ec-title">' + escapeHTML(x.title || ucaFormName(code)) + '</div>'
       + '<div class="ec-meta">Updated ' + (x.updated_at ? new Date(x.updated_at).toLocaleDateString() : '') + '</div></div>'
       + '<div class="ec-actions"><button onclick="ucaPrint(\'' + x.id + '\')">Print</button><button onclick="ucaPdfOut(\'' + x.id + '\')">PDF</button>'
-      + '<button onclick="ucaEditInstance(\'' + x.id + '\')">Edit</button><button onclick="ucaDelete(\'' + x.id + '\')">Delete</button></div></div>';
+      + '<button onclick="ucaEditInstance(\'' + x.id + '\')">Edit</button>'
+      + (isApp ? '<button onclick="ucaApplyNow(\'' + x.id + '\')" title="Start a new ' + escapeHTML(ucaFormName(code)) + ' for this college" '
+          + 'style="background:#C81E1E;color:#FFFFFF;border:0;border-radius:6px;font-weight:600">Apply Now</button>' : '')
+      + '<button onclick="ucaDelete(\'' + x.id + '\')">Delete</button></div></div>';
   }).join('');
   document.getElementById('sections-container').innerHTML = html;
 }
@@ -8619,6 +8623,22 @@ async function ucaBuildSections(code, APP, d){
     if (code === 'ed_agreement') secs.push(S('SIGNATURES', [['Student signature','________________________    Date: ____________'],['Parent signature','________________________    Date: ____________'],['Counselor signature','________________________    Date: ____________']]));
   }
   return secs.filter(function(x){ return x.rows.length; });
+}
+// v351: Apply Now. Starts a fresh instance of this form already bound to the
+// college on the row clicked, so the "Which application is this for?" step is
+// answered from context instead of being asked again. Falls back to the
+// picker when the source row has no college attached. The generated form
+// saves into the same library it was launched from.
+async function ucaApplyNow(id){
+  await ucaLoadSaved();
+  var inst = UCA_SAVED.find(function(x){ return x.id === id; });
+  if (!inst) { showToast('Could not find that form', 'error'); return; }
+  if (!inst.application_id) { ucaCreate(inst.form_code); return; }
+  try { const ad = await apiGet('/focms/v1/student/' + STUDENT_ID + '/applications'); HE_APPS = ad.applications || []; } catch(e){}
+  var app = (HE_APPS || []).find(function(a){ return a.id === inst.application_id; });
+  var where = app ? (app.common_name || app.university_name || app.university_leaid) : 'this college';
+  showToast('New ' + ucaFormName(inst.form_code) + ' for ' + where, 'success');
+  ucaEditor(inst.form_code, inst.application_id, null);
 }
 async function ucaCreate(code){
   if (ucaIsReport(code)) { ucaReportCreate(code); return; }
@@ -11518,6 +11538,81 @@ function heTargetMajors(t) {
     .split(';').map(function (x) { return x.trim(); })
     .filter(Boolean).sort(function (a, b) { return a.localeCompare(b); });
 }
+/* ===== v350: Outcomestar Probability of Admission =====
+   P = sigma( logit(base_rate) + SUM(beta_i * z_i) + hooks - gamma_major )
+   The school's published admit rate is the prior, so an exactly-average
+   applicant returns that rate. Each z is an applicant-vs-school delta in
+   standard units. Components with no data on file contribute 0 rather than
+   being guessed, and the major penalty is only applied once at least one
+   applicant-side component exists - otherwise every row would be biased low by
+   a penalty with nothing to offset it. Betas are calibrated judgement, not
+   fitted coefficients: use this to RANK targets against each other, not as an
+   absolute forecast. Refit from admission_outcomes when enough rows exist. */
+var OSPA_BETA = { ai: 0.55, rigor: 0.35, trend: 0.15, ec: 0.40, fit: 0.30, di: 0.15 };
+var OSPA_HOOK = { recruited_athlete: 2.2, academy_nomination: 1.8, arts_portfolio: 0.9,
+                  early_decision: 0.7, legacy: 0.6, first_gen: 0.5, geographic: 0.3 };
+var OSPA_GAMMA = [
+  { re: /(computer science|computer engineering|nursing|artificial intelligence|data science)/i, g: 1.2, label: 'capped major' },
+  { re: /(engineer)/i, g: 0.7, label: 'engineering' },
+  { re: /(business|finance|accounting|marketing|economics)/i, g: 0.5, label: 'business' },
+  { re: /(classics|geology|philosophy|religio|anthropolog|linguistic|classical)/i, g: -0.4, label: 'under-enrolled major' }
+];
+var HE_STUDENT = { gpa: null, sat: null, act: null };
+function _ospaLogit(p) {
+  if (p == null) return null;
+  var x = Number(p);
+  if (isNaN(x) || x <= 0) return null;
+  if (x > 1) x = x / 100;
+  x = Math.min(0.98, Math.max(0.005, x));
+  return Math.log(x / (1 - x));
+}
+function _ospaSigma(z) { return 1 / (1 + Math.exp(-z)); }
+function heStudentAI() {
+  if (!HE_STUDENT || (!HE_STUDENT.sat && !HE_STUDENT.act)) return null;
+  return heAcademicIndex(HE_STUDENT.gpa || 4.0, HE_STUDENT.sat, HE_STUDENT.act);
+}
+function heMajorGamma(t) {
+  var majors = heTargetMajors(t).join(' ');
+  if (!majors) return { g: 0, label: '' };
+  for (var i = 0; i < OSPA_GAMMA.length; i++) {
+    if (OSPA_GAMMA[i].re.test(majors)) return { g: OSPA_GAMMA[i].g, label: OSPA_GAMMA[i].label };
+  }
+  return { g: 0, label: '' };
+}
+function heAdmitProbability(t, u) {
+  if (!u || u.admit_rate == null) return null;
+  var base = _ospaLogit(u.admit_rate);
+  if (base == null) return null;
+  var z = base, parts = [], used = 0;
+
+  var sAI = heStudentAI(), cAI = heSchoolAI(u);
+  if (sAI != null && cAI != null) {
+    var d = OSPA_BETA.ai * ((sAI - cAI) / 8);
+    z += d; used++;
+    parts.push('Academic Index ' + sAI + ' vs school ' + cAI + ' (' + (d >= 0 ? '+' : '') + d.toFixed(2) + ')');
+  } else {
+    parts.push('Academic Index: no student test scores on file yet');
+  }
+
+  var gm = heMajorGamma(t);
+  if (gm.g && used > 0) {
+    z -= gm.g;
+    parts.push('Major adjustment, ' + gm.label + ' (' + (gm.g > 0 ? '-' : '+') + Math.abs(gm.g).toFixed(2) + ')');
+  } else if (gm.g) {
+    parts.push('Major adjustment held back until student metrics exist');
+  }
+
+  var p = _ospaSigma(z);
+  return { p: p, pct: Math.round(p * 1000) / 10, parts: parts, used: used,
+           baseline: used === 0, base: Number(u.admit_rate) };
+}
+function heProbBand(p) {
+  if (p == null) return '';
+  if (p >= 0.40) return 'Likely';
+  if (p >= 0.20) return 'Target';
+  if (p >= 0.08) return 'Reach';
+  return 'High reach';
+}
 function _heSortVal(t, key) {
   var u = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
   switch (key) {
@@ -11527,12 +11622,13 @@ function _heSortVal(t, key) {
     case 'priority': return t.priority == null ? 9999 : Number(t.priority);
     case 'interest_level': return t.interest_level == null ? -1 : Number(t.interest_level);
     case 'ai':       var a = heSchoolAI(u); return a == null ? -1 : a;
+    case 'ospa':     var pr = heAdmitProbability(t, u); return pr == null ? -1 : pr.p;
     default:         return '';
   }
 }
 function heSortTargets(key) {
   if (HE_SORT.key === key) HE_SORT.dir = (HE_SORT.dir === 'asc' ? 'desc' : 'asc');
-  else { HE_SORT.key = key; HE_SORT.dir = (key === 'interest_level' || key === 'ai') ? 'desc' : 'asc'; }
+  else { HE_SORT.key = key; HE_SORT.dir = (key === 'interest_level' || key === 'ai' || key === 'ospa') ? 'desc' : 'asc'; }
   renderTargetsList();
 }
 function _heSortedTargets() {
@@ -11582,6 +11678,7 @@ function renderTargetsList() {
     _heTh('Priority', 'priority', 'center') +
     _heTh('Interest', 'interest_level', 'center') +
     _heTh('Academic Index', 'ai', 'center') +
+    _heTh('Outcomestar Probability of Admission', 'ospa', 'center') +
     '<th style="border-bottom:2px solid #E3E7EF"></th></tr></thead><tbody>';
   html += rows.map(function (t) {
     var u = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
@@ -11604,6 +11701,16 @@ function renderTargetsList() {
       ? '<span style="color:#9AA5B4" title="No SAT or ACT on file for this school">\u2014</span>'
       : '<span title="' + escapeHTML(heAIBand(ai)) + ' \u2014 school mid-50% profile at a 4.0 GPA">' + ai +
         '<div style="font-size:11px;color:#7A8A9E">' + escapeHTML(heAIBand(ai)) + '</div></span>';
+    var pr = heAdmitProbability(t, u);
+    var ospaCell;
+    if (pr == null) {
+      ospaCell = '<span style="color:#9AA5B4" title="No published admit rate on file for this school">\u2014</span>';
+    } else {
+      var tip = 'Base admit rate ' + (pr.base * 100).toFixed(1) + '%. ' + pr.parts.join('. ') +
+        '. Ranking estimate, not a forecast.';
+      ospaCell = '<span title="' + escapeHTML(tip) + '"><b>' + pr.pct.toFixed(1) + '%</b>' +
+        '<div style="font-size:11px;color:#7A8A9E">' + escapeHTML(pr.baseline ? 'baseline' : heProbBand(pr.p)) + '</div></span>';
+    }
     return '<tr>' +
       '<td style="' + td + '"><div style="font-weight:600">' + name + rank + '</div>' +
         (sub ? '<div style="font-size:12px;color:#7A8A9E">' + sub + '</div>' : '') +
@@ -11613,6 +11720,7 @@ function renderTargetsList() {
       '<td style="' + td + ';text-align:center">' + pri + '</td>' +
       '<td style="' + td + ';text-align:center">' + inter + '</td>' +
       '<td style="' + td + ';text-align:center">' + aiCell + '</td>' +
+      '<td style="' + td + ';text-align:center">' + ospaCell + '</td>' +
       '<td style="' + td + ';text-align:right;white-space:nowrap">' +
         '<button onclick="targetEdit(\'' + t.id + '\')">Edit</button> ' +
         '<button onclick="targetDelete(\'' + t.id + '\')">Delete</button></td>' +
@@ -11622,7 +11730,10 @@ function renderTargetsList() {
     '<div style="font-size:12px;color:#7A8A9E;margin-top:8px">' +
     'Click any column heading to sort ascending or descending. ' +
     '<b>Academic Index</b> = converted GPA score (80 at a 4.0) + test component (SAT total \u00f7 10, ACT concorded), capped at 240. ' +
-    'The value shown is each school\u2019s mid-50% profile: 230\u2013240 exceptional, 220\u2013229 highly competitive, below 210 under the usual Ivy threshold for unhooked applicants.</div>';
+    'The value shown is each school\u2019s mid-50% profile: 230\u2013240 exceptional, 220\u2013229 highly competitive, below 210 under the usual Ivy threshold for unhooked applicants. ' +
+    '<b>Outcomestar Probability of Admission</b> starts from the school\u2019s published admit rate and shifts it by how far the applicant sits from that school\u2019s profile, less a penalty for capped majors. ' +
+    'Rows marked <i>baseline</i> show the published rate because no student test scores are on file yet. Hover any value for its components. ' +
+    'Use it to rank targets against each other \u2014 it is not a forecast.</div>';
   document.getElementById('sections-container').innerHTML = html;
 }
 
