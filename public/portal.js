@@ -11573,14 +11573,66 @@ function _heRO(label, val, ph) {
   return '<div class="field"><label>' + escapeHTML(label) + '</label>' +
     '<input type="text" readonly value="' + escapeHTML(v) + '" placeholder="' + escapeHTML(ph || 'not on file') + '"></div>';
 }
+function _heMoney(n) {
+  if (n == null || n === '') return '';
+  var x = Number(n); if (isNaN(x)) return '';
+  return '$' + Math.round(x).toLocaleString();
+}
+function _hePct(n) {
+  if (n == null || n === '') return '';
+  var x = Number(n); if (isNaN(x)) return '';
+  if (x > 0 && x <= 1) x = x * 100;
+  return (Math.round(x * 10) / 10) + '%';
+}
+function _heRange(a, b) {
+  if (a && b) return a + '\u2013' + b;
+  return a || b || '';
+}
+function _heNum(n) {
+  if (n == null || n === '') return '';
+  var x = Number(n); if (isNaN(x)) return '';
+  return x.toLocaleString();
+}
+function _heYesNo(v) {
+  if (v === true) return 'Yes';
+  if (v === false) return 'No';
+  return '';
+}
+// v348: dump everything on file for this institution. Read-only mirror of the
+// shared catalog row - never copied into tenant data, so it is always current.
+function _heSchoolFacts(u) {
+  var rank = '';
+  if (u.us_news_rank_national != null) rank = '#' + u.us_news_rank_national + ' National Universities';
+  else if (u.us_news_rank_liberal_arts != null) rank = '#' + u.us_news_rank_liberal_arts + ' National Liberal Arts Colleges';
+  var rows = '';
+  rows += _heRO('US News rank', rank);
+  rows += _heRO('Acceptance rate', _hePct(u.admit_rate));
+  rows += _heRO('SAT (25th\u201375th)', _heRange(u.sat_25, u.sat_75));
+  rows += _heRO('ACT (25th\u201375th)', _heRange(u.act_25, u.act_75));
+  rows += _heRO('Tuition (out-of-state)', _heMoney(u.tuition));
+  rows += _heRO('Cost of attendance', _heMoney(u.cost_attendance));
+  rows += _heRO('Undergraduate enrollment', _heNum(u.enrollment_under));
+  rows += _heRO('Total enrollment', _heNum(u.enrollment_total));
+  rows += _heRO('Institution type', u.institution_type);
+  rows += _heRO('Carnegie classification', u.carnegie);
+  rows += _heRO('Common App member', _heYesNo(u.common_app_member));
+  rows += _heRO('ROTC on campus', _heYesNo(u.has_rotc));
+  rows += _heRO('D1 swimming', _heYesNo(u.has_d1_swim));
+  rows += _heRO('Service academy', _heYesNo(u.is_service_academy));
+  rows += _heRO('IPEDS UNITID', u.leaid);
+  rows += _heRO('Data year', u.data_year);
+  return '<div style="font-weight:600;color:#201868;margin:14px 0 6px">Institution data on file</div>' +
+    '<div class="field-grid" style="grid-template-columns:1fr 1fr">' + rows + '</div>' +
+    '<div style="font-size:12px;color:#7A8A9E;margin-top:6px">From IPEDS and the College Scorecard, refreshed nightly. Blank fields are not published by either source.</div>';
+}
 function _heAdmissionsPanel(u) {
   if (!u) return '<div id="he-adm-panel" class="ec-help" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
   var a = _heAddrParts(u.admissions_address);
   if (!a.city && u.city) a.city = u.city;
   if (!a.state && u.state) a.state = u.state;
   var url = u.admissions_url || u.website || '';
-  return '<div id="he-adm-panel" style="margin:8px 0 16px">' +
-    '<div style="font-weight:600;color:#201868;margin:4px 0 6px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>' +
+  var known = (u.leaid && _heUnivByLeaid(String(u.leaid))) ? true : false;
+  var body = '<div style="font-weight:600;color:#201868;margin:4px 0 6px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>' +
     '<div class="field-grid" style="grid-template-columns:1fr">' +
       _heRO('Country', 'United States') +
       _heRO('Address line 1', a.street) +
@@ -11592,7 +11644,10 @@ function _heAdmissionsPanel(u) {
       _heRO('Fax', u.admissions_fax) +
       _heRO('Email', u.admissions_email) +
       _heRO('Website', url) +
-    '</div></div>';
+    '</div>';
+  if (known) { body += _heSchoolFacts(u); }
+  else { body += '<div style="font-size:12px;color:#7A8A9E;margin-top:10px">This college is not in the ranked catalog yet, so only the directory details above are on file.</div>'; }
+  return '<div id="he-adm-panel" style="margin:8px 0 16px">' + body + '</div>';
 }
 function targetUnivChanged() {
   const sel = document.querySelector('.ec-in[data-k="university_leaid"]');
@@ -11676,36 +11731,74 @@ function _heGroupedOpts(options) {
   }
   return out;
 }
-function heListField(key, label, options, style) {
+function heListField(key, label, options, style, cfg) {
+  cfg = cfg || {};
   window.__HE_OPTS = window.__HE_OPTS || {};
   window.__HE_OPTS[key] = options;
+  var opts = _heGroupedOpts(options);
+  if (cfg.other) opts += '<option value="__OTHER__">Other (type it in)</option>';
+  var otherBox = cfg.other
+    ? '<input type="text" id="he-oth-' + key + '" placeholder="Type the major" ' +
+      'style="display:none;flex:1 1 180px;padding:8px 10px;border:1px solid #E3E7ED;border-radius:6px;font-size:13px;color:#201868;font-family:inherit">'
+    : '';
+  var hint = cfg.hint
+    ? '<div style="font-size:12px;color:#7A8A9E;margin-top:5px">' + escapeHTML(cfg.hint) + '</div>'
+    : '';
   return '<label class="ec-lbl">' + escapeHTML(label) +
-    '<div class="he-list-row"><select class="ec-in he-list-sel" id="he-sel-' + key + '">' + _heGroupedOpts(options) + '</select>' +
-    '<button type="button" class="save-btn he-add-btn" onclick="heListAdd(\'' + key + '\')">Add</button></div>' +
-    '<div id="he-list-' + key + '" class="he-list" data-style="' + (style || 'chips') + '"></div></label>';
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+      '<select class="ec-in" id="he-sel-' + key + '" style="flex:2 1 220px"' +
+        (cfg.other ? ' onchange="heListOtherToggle(\'' + key + '\')"' : '') + '>' + opts + '</select>' +
+      otherBox +
+      '<button type="button" class="save-btn" style="white-space:nowrap" onclick="heListAdd(\'' + key + '\')">Add</button>' +
+    '</div>' + hint +
+    '<div id="he-list-' + key + '" data-style="' + (style || 'chips') + '" style="margin-top:6px"></div></label>';
+}
+function heListOtherToggle(key) {
+  var sel = document.getElementById('he-sel-' + key);
+  var box = document.getElementById('he-oth-' + key);
+  if (!sel || !box) return;
+  var on = sel.value === '__OTHER__';
+  box.style.display = on ? '' : 'none';
+  if (on) box.focus();
 }
 function heListRender(key) {
   var box = document.getElementById('he-list-' + key);
   if (!box) return;
   var arr = (HE_PICK && HE_PICK[key]) || [];
   var style = box.getAttribute('data-style') || 'chips';
-  if (!arr.length) { box.innerHTML = '<div class="ec-hint" style="margin-top:4px">None added yet.</div>'; return; }
+  if (!arr.length) { box.innerHTML = '<div style="font-size:12px;color:#9AA5B4">None added yet.</div>'; return; }
+  var xBtn = function (i) {
+    return '<button type="button" title="Remove" onclick="heListRemove(\'' + key + '\',' + i + ')" ' +
+      'style="border:0;background:transparent;color:#7A8A9E;cursor:pointer;font-size:16px;line-height:1;padding:0 2px">&times;</button>';
+  };
   if (style === 'table') {
-    box.innerHTML = '<table class="he-tbl"><tbody>' + arr.map(function (v, i) {
-      return '<tr><td>' + escapeHTML(v) + '</td><td style="text-align:right;width:1%"><button type="button" class="he-x" onclick="heListRemove(\'' + key + '\',' + i + ')">&times;</button></td></tr>';
-    }).join('') + '</tbody></table>';
+    box.innerHTML = '<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #E3E7ED;border-radius:6px"><tbody>' +
+      arr.map(function (v, i) {
+        return '<tr><td style="border-bottom:1px solid #EEF0F4;padding:7px 10px;font-size:13px;color:#201868">' + escapeHTML(v) + '</td>' +
+               '<td style="border-bottom:1px solid #EEF0F4;padding:7px 10px;text-align:right;width:1%">' + xBtn(i) + '</td></tr>';
+      }).join('') + '</tbody></table>';
   } else {
     box.innerHTML = arr.map(function (v, i) {
-      return '<span class="he-chip">' + escapeHTML(v) + '<button type="button" class="he-x" onclick="heListRemove(\'' + key + '\',' + i + ')">&times;</button></span>';
+      return '<span style="display:inline-flex;align-items:center;gap:6px;background:#EEF0F6;color:#201868;' +
+        'border-radius:14px;padding:3px 6px 3px 10px;margin:3px 4px 0 0;font-size:12px">' + escapeHTML(v) + xBtn(i) + '</span>';
     }).join('');
   }
 }
 function heListAdd(key) {
   var sel = document.getElementById('he-sel-' + key);
-  if (!sel || !sel.value) return;
+  if (!sel) return;
+  var val = sel.value;
+  if (val === '__OTHER__') {
+    var box = document.getElementById('he-oth-' + key);
+    val = box ? (box.value || '').trim() : '';
+    if (!val) { if (box) box.focus(); return; }
+    if (box) box.value = '';
+  }
+  if (!val) return;
   HE_PICK[key] = HE_PICK[key] || [];
-  if (HE_PICK[key].indexOf(sel.value) === -1) HE_PICK[key].push(sel.value);
+  if (HE_PICK[key].indexOf(val) === -1) HE_PICK[key].push(val);
   sel.value = '';
+  heListOtherToggle(key);
   heListRender(key);
 }
 function heListRemove(key, i) {
@@ -11789,7 +11882,8 @@ async function targetEdit(id) {
     ) +
     heNumSelect('interest_level', 'Interest level (1-5)', t.interest_level, 1, 5) +
     fitHelp +
-    heListField('program_of_interest', 'Majors of interest (track several from this college)', heMajorOptions(), 'table') +
+    heListField('program_of_interest', 'Majors of interest (track several from this college)', heMajorOptions(), 'table',
+      { other: true, hint: 'Check this school\u2019s course catalog for the exact majors it offers \u2014 this list is the national CIP catalog, not the school\u2019s. Use Other to type a major exactly as the school names it.' }) +
     ecArea('why_interested', 'Why interested', t.why_interested) +
     heListField('advantages', 'Advantages / hooks', HOOK_OPTS, 'chips') +
     heListField('blockers', 'Blockers / risks', BLOCKER_OPTS, 'chips') +
