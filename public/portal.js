@@ -11564,38 +11564,36 @@ function _heAddrParts(addr) {
   if (!out.street && out.city) { out.street = out.city; out.city = ''; }
   return out;
 }
-function _heRO(label, val, isLink, href) {
+// v345: renders with the SAME markup as addrFields() so it inherits the
+// identical styling as every other address block in the app. Read-only:
+// this is shared catalog data, not tenant data. No data-k / no ec-in class,
+// so collectEcForm and targetSave never pick these up.
+function _heRO(label, val, ph) {
   var v = val == null ? '' : String(val);
-  if (isLink && v) {
-    return '<div class="field"><label>' + label + '</label>' +
-      '<div class="he-ro he-ro-link"><a href="' + escapeHTML(href) + '"' + (href.indexOf('mailto:') === 0 ? '' : ' target="_blank" rel="noopener"') + '>' + escapeHTML(v) + '</a></div></div>';
-  }
-  return '<div class="field"><label>' + label + '</label>' +
-    '<div class="he-ro' + (v ? '' : ' he-ro-empty') + '">' + (v ? escapeHTML(v) : 'not on file') + '</div></div>';
+  return '<div class="field"><label>' + escapeHTML(label) + '</label>' +
+    '<input type="text" readonly value="' + escapeHTML(v) + '" placeholder="' + escapeHTML(ph || 'not on file') + '"></div>';
 }
 function _heAdmissionsPanel(u) {
-  if (!u) return '<div class="ec-help" id="he-adm-panel" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
+  if (!u) return '<div id="he-adm-panel" class="ec-help" style="margin:6px 0 14px">Pick a college above to see its admissions office.</div>';
   var a = _heAddrParts(u.admissions_address);
   if (!a.city && u.city) a.city = u.city;
   if (!a.state && u.state) a.state = u.state;
   var url = u.admissions_url || u.website || '';
-  var em = u.admissions_email || '';
-  return '<div class="he-adm" id="he-adm-panel">' +
-    '<div class="he-adm-h">Admissions Office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>' +
+  return '<div id="he-adm-panel" style="margin:8px 0 16px">' +
+    '<div style="font-weight:600;color:#201868;margin:4px 0 6px">Admissions office \u2014 ' + escapeHTML(u.common_name || u.name || '') + '</div>' +
     '<div class="field-grid" style="grid-template-columns:1fr">' +
       _heRO('Country', 'United States') +
       _heRO('Address line 1', a.street) +
+      _heRO('Address line 2 (optional)', '', '\u2014') +
       _heRO('City / Town', a.city) +
       _heRO('State / Province / Region', a.state) +
       _heRO('Postal code', a.zip) +
       _heRO('Phone', u.admissions_phone) +
       _heRO('Fax', u.admissions_fax) +
-      _heRO('Email', em, !!em, 'mailto:' + em) +
-      _heRO('Website', url, !!url, url) +
-    '</div>' +
-  '</div>';
+      _heRO('Email', u.admissions_email) +
+      _heRO('Website', url) +
+    '</div></div>';
 }
-// onchange handler wired on the ranked select AND after a search pick.
 function targetUnivChanged() {
   const sel = document.querySelector('.ec-in[data-k="university_leaid"]');
   const leaid = sel ? sel.value : '';
