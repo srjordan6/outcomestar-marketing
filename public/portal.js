@@ -11728,6 +11728,17 @@ function _hePrefillPublicDesc(u) {
   var ta = document.querySelector('.ec-in[data-k="public_description"]');
   if (ta && !ta.value.trim() && u) ta.value = heComposePublicDesc(u);
 }
+// v346: bounded numeric picker. Priority and Interest level are ranked
+// scales, not free numbers - typing -7 or 99 was possible before.
+function heNumSelect(key, label, val, min, max) {
+  var cur = (val === 0 || val) ? String(parseInt(val, 10)) : '';
+  var opts = '<option value="">-- choose --</option>';
+  for (var i = min; i <= max; i++) {
+    opts += '<option value="' + i + '"' + (cur === String(i) ? ' selected' : '') + '>' + i + '</option>';
+  }
+  return '<label class="ec-lbl">' + escapeHTML(label) +
+    '<select class="ec-in" data-k="' + key + '">' + opts + '</select></label>';
+}
 async function targetEdit(id) {
   const t = id ? HE_TARGETS.find(x => x.id === id) : { pathways_pursuing: [] };
   if (!t) return;
@@ -11774,9 +11785,9 @@ async function targetEdit(id) {
     _heAdmissionsPanel(preU) +
     ecRowTwo(
       '<label class="ec-lbl">Fit category<select class="ec-in" data-k="fit_category">' + fitOpts + '</select></label>',
-      ecField('priority', 'Priority (1-13)', t.priority, false, 'number')
+      heNumSelect('priority', 'Priority (1-13)', t.priority, 1, 13)
     ) +
-    ecField('interest_level', 'Interest level (1-5)', t.interest_level, false, 'number') +
+    heNumSelect('interest_level', 'Interest level (1-5)', t.interest_level, 1, 5) +
     fitHelp +
     heListField('program_of_interest', 'Majors of interest (track several from this college)', heMajorOptions(), 'table') +
     ecArea('why_interested', 'Why interested', t.why_interested) +
@@ -11802,6 +11813,13 @@ async function targetSave(id) {
   });
   document.querySelectorAll('.ec-path').forEach(el => {
     if (el.checked) item.pathways_pursuing.push(el.dataset.code);
+  });
+  ['priority', 'interest_level'].forEach(function (k) {
+    if (item[k] === '' || item[k] == null) { delete item[k]; return; }
+    var n = parseInt(item[k], 10);
+    if (isNaN(n)) { delete item[k]; return; }
+    var lo = 1, hi = (k === 'priority' ? 13 : 5);
+    item[k] = Math.min(hi, Math.max(lo, n));
   });
   ['program_of_interest', 'advantages', 'blockers'].forEach(function (k) {
     var arr = (HE_PICK && HE_PICK[k]) || [];
