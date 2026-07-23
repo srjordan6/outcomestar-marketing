@@ -10449,6 +10449,7 @@ let HE_TARGETS = [];
 let HE_APPS = [];
 let UNIV_CATALOG = null;
 let CIP_CATALOG = null;
+var CIP_MAJORS = [];
 let HE_VIEW = null;
 
 const APP_PLATFORMS = [
@@ -11273,10 +11274,59 @@ async function testSave(id){
 async function testDelete(id){ if(!confirm('Delete this test?'))return;
   try{ await apiPost('/focms/v1/student/'+STUDENT_ID+'/college-tests',{delete_ids:[id]}); HE_TESTS=HE_TESTS.filter(x=>x.id!==id); renderTestsList(); showToast('Deleted','success'); }catch(e){showToast(e.message,'error');} }
 
+// v352: one place that turns the canonical majors list into <option>s.
+// Both Major Fit and the target-school picker call these, so the two
+// screens always show the identical set, grouped identically.
+function _heCipFamilyOf(m) {
+  return m.cip_family || m.family || m.family_name || m.cip_family_title || 'Other';
+}
+function _heCipGroups() {
+  var cat = CIP_CATALOG || [];
+  var groups = {};
+  cat.forEach(function (m) {
+    var f = _heCipFamilyOf(m);
+    (groups[f] = groups[f] || []).push(m);
+  });
+  return Object.keys(groups).sort().map(function (f) {
+    return { group: f, rows: groups[f].slice().sort(function (a, b) {
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    }) };
+  });
+}
+function _heCipOptionsByFamily(selectedCode) {
+  return _heCipGroups().map(function (g) {
+    return '<optgroup label="' + escapeHTML(g.group) + '">' +
+      g.rows.map(function (m) {
+        return '<option value="' + escapeHTML(m.cip_code) + '"' +
+          (selectedCode === m.cip_code ? ' selected' : '') + '>' +
+          escapeHTML(m.title) + '</option>';
+      }).join('') + '</optgroup>';
+  }).join('');
+}
 async function heLoadCip() {
-  if (CIP_CATALOG) return CIP_CATALOG;
-  try { const d = await apiGet('/focms/v1/catalogs/cip-majors'); CIP_CATALOG = d.majors || []; }
-  catch (e) { CIP_CATALOG = []; }
+  // v352: ONE canonical majors list for the whole portal. Major Fit and the
+  // target-school majors picker previously loaded different endpoints into
+  // different caches, so the two screens could disagree. Both now come
+  // through here, and CIP_MAJORS is kept pointing at the same array.
+  if (CIP_CATALOG && CIP_CATALOG.length) { CIP_MAJORS = CIP_CATALOG; return CIP_CATALOG; }
+  // v353: query BOTH endpoints and keep whichever returns more majors, rather
+  // than taking the first that answers. If the two ever diverge, the portal
+  // shows the fuller catalog instead of silently using the shorter one.
+  var eps = ['/focms/v1/catalogs/cip-majors', '/focms/v1/cip-majors'];
+  var best = [], bestEp = '';
+  for (var i = 0; i < eps.length; i++) {
+    try {
+      var d = await apiGet(eps[i]);
+      var rows = d.majors || [];
+      if (rows.length > best.length) { best = rows; bestEp = eps[i]; }
+    } catch (e) { /* endpoint unavailable - keep whatever the other returned */ }
+  }
+  if (best.length) {
+    CIP_CATALOG = best; CIP_MAJORS = best;
+    try { console.log('[FOCMS] majors catalog: ' + best.length + ' from ' + bestEp); } catch (e) {}
+    return CIP_CATALOG;
+  }
+  CIP_CATALOG = []; CIP_MAJORS = CIP_CATALOG;
   return CIP_CATALOG;
 }
 
@@ -11403,7 +11453,7 @@ async function appEdit(id) {
   const platOpts = '<option value="">-- pick platform --</option>' +
     APP_PLATFORMS.map(p => '<option value="' + p.code + '"' + (a.application_platform===p.code?' selected':'') + '>' + p.label + '</option>').join('');
   const cipOpts = '<option value="">-- optional --</option>' +
-    (CIP_CATALOG || []).map(m => '<option value="' + m.cip_code + '"' + (a.possible_major_cip===m.cip_code?' selected':'') + '>' + escapeHTML(m.title) + '</option>').join('');
+    _heCipOptionsByFamily(a.possible_major_cip);
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     '<label class="ec-lbl">University *<select class="ec-in" data-k="university_leaid">' + targetOpts + '</select>' +
     '<div class="ec-hint">Targets are listed first. Any accredited US institution can be picked.</div></label>' +
@@ -11956,8 +12006,11 @@ var BLOCKER_OPTS = [
 ];
 function _heSplit(v) { return String(v || '').split(';').map(function (x) { return x.trim(); }).filter(Boolean); }
 function heMajorOptions() {
-  var cat = CIP_CATALOG || [];
-  return cat.map(function (m) { return m.title || m.name || ''; }).filter(Boolean);
+  // Same canonical list as Major Fit, same family grouping, titles as values
+  // because program_of_interest stores names rather than CIP codes.
+  return _heCipGroups().map(function (g) {
+    return { group: g.group, items: g.rows.map(function (m) { return m.title || m.name || ''; }).filter(Boolean) };
+  }).filter(function (g) { return g.items.length; });
 }
 function _heGroupedOpts(options) {
   if (!options || !options.length) return '';
@@ -11974,6 +12027,7 @@ function _heGroupedOpts(options) {
 }
 function heListField(key, label, options, style, cfg) {
   cfg = cfg || {};
+  if (!options || !options.length) options = [];
   window.__HE_OPTS = window.__HE_OPTS || {};
   window.__HE_OPTS[key] = options;
   var opts = _heGroupedOpts(options);
@@ -12184,7 +12238,6 @@ async function targetDelete(id) {
 }
 
 /* ================= v21: Major Fit (skill-cluster gap report) ================= */
-let CIP_MAJORS = [];
 
 async function openMajorFit() {
   if (!getToken()) { showToast("Set your API token first", "error"); return; }
@@ -12196,12 +12249,8 @@ async function openMajorFit() {
   const c = document.getElementById('sections-container');
   c.innerHTML = '<div class="ac-est">Loading majors\u2026</div>';
   try {
-    if (!CIP_MAJORS.length) {
-      const m = await apiGet('/focms/v1/cip-majors');
-      CIP_MAJORS = m.majors || [];
-    }
-    const opts = CIP_MAJORS.map(m =>
-      '<option value="' + m.cip_code + '">' + escapeHTML(m.title) + '  (CIP ' + m.cip_code + ')</option>').join('');
+    await heLoadCip();
+    const opts = _heCipOptionsByFamily();
     c.innerHTML =
       '<div class="gap-picker"><select id="gap-major"><option value="">Choose a major\u2026</option>' + opts + '</select>' +
       '<button class="save-btn" onclick="runGap()">Show the gap</button></div>' +
