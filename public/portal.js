@@ -11503,19 +11503,41 @@ function _heUnivOptionLabel(u) {
   const rank = (u.us_news_rank_national || u.us_news_rank_liberal_arts || u.us_news_rank);
   return (u.common_name || u.name) + (rank ? ' (#' + rank + ')' : '');
 }
-function _heUnivRankedOptions(selectedLeaid) {
+// v343: the two US News lists are SEPARATE. One list renders at a time,
+// chosen by the list selector above the dropdown. Never merged.
+function _heListKindFor(leaid) {
+  var u = leaid ? _heUnivByLeaid(leaid) : null;
+  if (u && u.us_news_rank_national == null && u.us_news_rank_liberal_arts != null) return 'liberal_arts';
+  return 'national';
+}
+function _heCurrentListKind() {
+  var k = document.getElementById('he-rank-list');
+  return (k && k.value) ? k.value : 'national';
+}
+function _heUnivRankedOptions(selectedLeaid, kind) {
   const cat = UNIV_CATALOG || [];
-  const natl = cat.filter(u => u.us_news_rank_national != null)
-                  .sort((a,b) => a.us_news_rank_national - b.us_news_rank_national);
-  const la   = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null)
-                  .sort((a,b) => a.us_news_rank_liberal_arts - b.us_news_rank_liberal_arts);
+  kind = kind || 'national';
+  var rows;
+  if (kind === 'liberal_arts') {
+    rows = cat.filter(u => u.us_news_rank_liberal_arts != null && u.us_news_rank_national == null)
+              .sort((a,b) => a.us_news_rank_liberal_arts - b.us_news_rank_liberal_arts);
+  } else {
+    rows = cat.filter(u => u.us_news_rank_national != null)
+              .sort((a,b) => a.us_news_rank_national - b.us_news_rank_national);
+  }
   const opt = u => '<option value="' + u.leaid + '"' +
       (selectedLeaid === u.leaid ? ' selected' : '') + '>' +
       escapeHTML(_heUnivOptionLabel(u)) + '</option>';
-  let html = '<option value="">-- pick a university --</option>';
-  if (natl.length) html += '<optgroup label="US News National Universities">' + natl.map(opt).join('') + '</optgroup>';
-  if (la.length)   html += '<optgroup label="US News National Liberal Arts Colleges">' + la.map(opt).join('') + '</optgroup>';
-  return html;
+  var head = (kind === 'liberal_arts')
+    ? '<option value="">-- pick a liberal arts college --</option>'
+    : '<option value="">-- pick a university --</option>';
+  return head + rows.map(opt).join('');
+}
+function heRankListChanged() {
+  var sel = document.querySelector('.ec-in[data-k="university_leaid"]');
+  if (!sel) return;
+  sel.innerHTML = _heUnivRankedOptions('', _heCurrentListKind());
+  targetUnivChanged();
 }
 function _heUnivByLeaid(leaid) {
   return (UNIV_CATALOG || []).find(u => u.leaid === leaid) || null;
@@ -11718,14 +11740,15 @@ async function targetEdit(id) {
   setTimeout(function(){
     var sel=document.querySelector('.ec-in[data-k="university_leaid"]');
     if (sel && UNIV_CATALOG && UNIV_CATALOG.length) {
-      sel.innerHTML = _heUnivRankedOptions(t.university_leaid);
+      sel.innerHTML = _heUnivRankedOptions(t.university_leaid, _heListKindFor(t.university_leaid));
       targetUnivChanged();
     }
     heListRender('program_of_interest'); heListRender('advantages'); heListRender('blockers');
     var preU = t.university_leaid ? _heUnivByLeaid(t.university_leaid) : null;
     if (preU) _hePrefillPublicDesc(preU);
   }, 80);
-  const univOpts = _heUnivRankedOptions(t.university_leaid);
+  const _preKind = t.university_leaid ? _heListKindFor(t.university_leaid) : 'national';
+  const univOpts = _heUnivRankedOptions(t.university_leaid, _preKind);
   const fitOpts = '<option value="">-- pick fit --</option>' +
     FIT_OPTS.map(f => '<option value="' + f + '"' + (t.fit_category === f ? ' selected' : '') + '>' + f + '</option>').join('');
   const pathChecks = PATHWAY_OPTS.map(p =>
@@ -11743,6 +11766,11 @@ async function targetEdit(id) {
   document.getElementById('sections-container').innerHTML = '<div class="ec-form">' +
     '<label class="ec-lbl">University * (search or pick below)</label>' +
     schoolPickerField({ key: 'university_search', label: 'Search colleges (IPEDS)', value: '', level: 'college', hideCountry: true }) +
+    '<label class="ec-lbl">US News list' +
+    '<select class="ec-in" id="he-rank-list" onchange="heRankListChanged()">' +
+      '<option value="national"' + (_preKind === 'national' ? ' selected' : '') + '>National Universities</option>' +
+      '<option value="liberal_arts"' + (_preKind === 'liberal_arts' ? ' selected' : '') + '>National Liberal Arts Colleges</option>' +
+    '</select></label>' +
     '<label class="ec-lbl">Or pick from ranked list (US News, #1 first)' +
     '<select class="ec-in" data-k="university_leaid" onchange="targetUnivChanged()">' + univOpts + '</select></label>' +
     _heAdmissionsPanel(preU) +
