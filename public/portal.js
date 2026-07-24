@@ -766,10 +766,35 @@ function pillarHasChildren(code) { return pillarChildren(code).length > 0; }
    There is deliberately no dismiss button - the exit is visiting the five
    places, each of which is somewhere they need to go anyway. */
 var WIZ_STATE = null;   // null = unknown; {done, visited} once fetched
+var WIZ_GRADE = null;   // student's current grade from the signup form; null = not in school
+function wizInSchool() { return WIZ_GRADE != null && !isNaN(Number(WIZ_GRADE)); }
+function wizBandForGrade() {
+  var g = Number(WIZ_GRADE);
+  var b = BANDS.find(function (x) { return g >= x.lo && g <= x.hi; });
+  return b ? b.code : null;
+}
 
 async function wizLoad() {
   if (!getToken()) { WIZ_STATE = { done: true, visited: {} }; return; }
-  try { WIZ_STATE = await apiGet('/focms/v1/tenant/wizard-state'); }
+  try {
+    WIZ_STATE = await apiGet('/focms/v1/tenant/wizard-state');
+    // Grade comes from the student record the parent filled in at signup.
+    // Not in school (no grade) => the school-family steps are not applicable:
+    // hidden AND auto-marked, so the wizard can still retire on the steps
+    // that do apply (Personal, Extracurricular).
+    try {
+      var stu = await apiGet('/focms/v1/student/' + STUDENT_ID);
+      WIZ_GRADE = (stu && stu.current_grade != null && stu.current_grade !== '') ? stu.current_grade : null;
+    } catch (e2) { WIZ_GRADE = null; }
+    if (!WIZ_STATE.done && !wizInSchool()) {
+      var v0 = WIZ_STATE.visited || {};
+      var na = ['schools', 'personnel', 'courses', 'academics'].filter(function (k) { return !v0[k]; });
+      if (na.length) apiPost('/focms/v1/tenant/wizard-state', { visited: na })
+        .then(function (d) { WIZ_STATE = d; renderWizard(); }).catch(function () {});
+      na.forEach(function (k) { v0[k] = true; });
+      WIZ_STATE.visited = v0;
+    }
+  }
   catch (e) {
     // Endpoint missing (API not yet deployed) or transient failure: hide the
     // wizard rather than nag forever with progress that cannot persist.
@@ -791,6 +816,19 @@ function wizMark(step) {
 }
 
 function wizGo(step, fn) { try { fn(); } catch (e) {} }
+// v356: step 4 lands on the child's own grade band (from the signup form),
+// skipping the band picker. Falls back to the Academics landing if the grade
+// is missing.
+function wizGoCourses() {
+  var band = wizBandForGrade();
+  if (!band) return openPillar('academics');
+  wizMark('academics');
+  document.getElementById('view-pillars').classList.add('hidden');
+  document.getElementById('view-pillar').classList.remove('hidden');
+  document.getElementById('pillar-view-title').textContent = 'Academics';
+  document.getElementById('pillar-view-desc').textContent = 'Pick the school year, then add each course.';
+  openAcadBand(band);
+}
 
 function wizStepHtml(n, title, body, buttons, visited) {
   return '<li style="counter-increment:s;position:relative;padding:0 0 0 50px;margin-bottom:18px">' +
@@ -828,21 +866,23 @@ function renderWizard() {
     '<p style="margin:0 0 12px;font-size:14px;color:#333">We will be spending many years together, and we hope the journey is as enjoyable for you as we know it will be for us.</p>' +
     '<p style="margin:0 0 12px;font-size:14px;color:#333">A few words before you begin. This system is built to collect as much information as possible about your child while they grow up. In doing so, our aim is to shape that record into something genuinely compelling to the college of your choice. That only works if the record is full \u2014 so capture as much as you can, however minor a detail may seem at the time. The award nobody thought mattered in seventh grade, the club joined and stayed with, the summer job: these are the specifics an application asks for years later, when memory has already softened.</p>' +
     '<div style="border-left:3px solid #F07800;background:#FFF8F2;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 18px;font-size:13.5px;color:#333"><b>An honest word.</b> We make no guarantee that your child will be admitted to the college of your choice. Nobody can. What we promise is that we will make every effort to help you toward the best possible outcome, and that when the moment comes, the record will be ready.</div>' +
-    '<div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:19px;margin:0 0 12px">Where to start \u2014 complete all five and this guide retires itself</div>' +
+    '<div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:19px;margin:0 0 12px">Where to start</div>' +
     '<ol style="list-style:none;counter-reset:s;padding:0;margin:0">' +
     wizStepHtml(1, 'Fill out the Personal pillar',
       'Identity, family, address, citizenship, languages. Complete this as thoroughly as you can \u2014 nearly every form your child will ever face draws on it.',
       wizBtn('Open Personal', "openPillar('personal')"), v.personal) +
-    wizStepHtml(2, 'Add your child\u2019s school',
-      'Begin with the school itself: enter your child\u2019s current school as completely as possible. Everything academic hangs off it.',
-      wizBtn('Add your child\u2019s school', 'openSchoolProfiles()'), v.schools) +
-    wizStepHtml(3, 'Add School Personnel',
-      'Teachers, counselors and staff. Enter your child\u2019s current teachers now \u2014 entered once, they are reused across courses, recommendations and applications. Get the recommendation while you are fresh in your teacher\u2019s memory.',
-      wizBtn('Open School Personnel', 'openSchoolPersonnel()'), v.personnel) +
-    wizStepHtml(4, 'Enter courses, subject by subject and year by year',
-      'Inside Academics, choose the band for your child\u2019s grade, then the school year, and add each subject they are taking.',
-      wizBtn('Open Academics', "openPillar('academics')", true), v.courses) +
-    wizStepHtml(5, 'Record extracurricular activities',
+    (wizInSchool()
+      ? wizStepHtml(2, 'Add your child\u2019s school',
+          'Begin with the school itself: enter your child\u2019s current school as completely as possible. Everything academic hangs off it.',
+          wizBtn('Add your child\u2019s school', 'openSchoolProfiles()'), v.schools) +
+        wizStepHtml(3, 'Add School Personnel',
+          'Teachers, counselors and staff. Enter your child\u2019s current teachers now \u2014 entered once, they are reused across courses, recommendations and applications. Get the recommendation while you are fresh in your teacher\u2019s memory.',
+          wizBtn('Open School Personnel', 'openSchoolPersonnel()'), v.personnel) +
+        wizStepHtml(4, 'Enter courses, subject by subject and year by year',
+          'You told us your child is in ' + escapeHTML(String(GRADE_LABELS[Number(WIZ_GRADE)] || ('grade ' + WIZ_GRADE))) + ', so this opens that grade band directly. Pick the school year, then add each subject they are taking.',
+          wizBtn('Enter courses for ' + escapeHTML(String(GRADE_LABELS[Number(WIZ_GRADE)] || 'their grade')), 'wizGoCourses()'), v.courses)
+      : '') +
+    wizStepHtml(wizInSchool() ? 5 : 2, 'Record extracurricular activities',
       'Add whatever your child is involved in as of today \u2014 sports, music, clubs, service, anything at all. Start with what is true right now; the history can follow later.',
       wizBtn('Open Extracurricular', "openPillar('extracurricular')"), v.extracurricular) +
     '</ol>' +
