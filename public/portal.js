@@ -828,21 +828,20 @@ function renderWizard() {
     '<p style="margin:0 0 12px;font-size:14px;color:#333">We will be spending many years together, and we hope the journey is as enjoyable for you as we know it will be for us.</p>' +
     '<p style="margin:0 0 12px;font-size:14px;color:#333">A few words before you begin. This system is built to collect as much information as possible about your child while they grow up. In doing so, our aim is to shape that record into something genuinely compelling to the college of your choice. That only works if the record is full \u2014 so capture as much as you can, however minor a detail may seem at the time. The award nobody thought mattered in seventh grade, the club joined and stayed with, the summer job: these are the specifics an application asks for years later, when memory has already softened.</p>' +
     '<div style="border-left:3px solid #F07800;background:#FFF8F2;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 18px;font-size:13.5px;color:#333"><b>An honest word.</b> We make no guarantee that your child will be admitted to the college of your choice. Nobody can. What we promise is that we will make every effort to help you toward the best possible outcome, and that when the moment comes, the record will be ready.</div>' +
-    '<div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:19px;margin:0 0 12px">Where to start \u2014 visit all five and this guide retires itself</div>' +
+    '<div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:19px;margin:0 0 12px">Where to start \u2014 complete all five and this guide retires itself</div>' +
     '<ol style="list-style:none;counter-reset:s;padding:0;margin:0">' +
     wizStepHtml(1, 'Fill out the Personal pillar',
       'Identity, family, address, citizenship, languages. Complete this as thoroughly as you can \u2014 nearly every form your child will ever face draws on it.',
       wizBtn('Open Personal', "openPillar('personal')"), v.personal) +
-    wizStepHtml(2, 'Move to the Academics pillar',
-      'This is where your child\u2019s academic life is recorded. Begin with the school: enter their current school as completely as possible.',
-      wizBtn('Open Academics', "openPillar('academics')") +
-      wizBtn('Go straight to School Profiles', 'openSchoolProfiles()', true), v.academics && v.schools) +
+    wizStepHtml(2, 'Add your child\u2019s school',
+      'Begin with the school itself: enter your child\u2019s current school as completely as possible. Everything academic hangs off it.',
+      wizBtn('Add your child\u2019s school', 'openSchoolProfiles()'), v.schools) +
     wizStepHtml(3, 'Add School Personnel',
-      'Teachers, counselors and staff. Enter your child\u2019s current teachers now \u2014 entered once, they are reused across courses, recommendations and applications, and in a few years one of them will be writing a recommendation letter.',
+      'Teachers, counselors and staff. Enter your child\u2019s current teachers now \u2014 entered once, they are reused across courses, recommendations and applications. Get the recommendation while you are fresh in your teacher\u2019s memory.',
       wizBtn('Open School Personnel', 'openSchoolPersonnel()'), v.personnel) +
     wizStepHtml(4, 'Enter courses, subject by subject and year by year',
       'Inside Academics, choose the band for your child\u2019s grade, then the school year, and add each subject they are taking.',
-      wizBtn('Open Academics', "openPillar('academics')", true), v.academics) +
+      wizBtn('Open Academics', "openPillar('academics')", true), v.courses) +
     wizStepHtml(5, 'Record extracurricular activities',
       'Add whatever your child is involved in as of today \u2014 sports, music, clubs, service, anything at all. Start with what is true right now; the history can follow later.',
       wizBtn('Open Extracurricular', "openPillar('extracurricular')"), v.extracurricular) +
@@ -1834,6 +1833,7 @@ async function saveAcademics() {
   try {
     const a = await apiPost('/focms/v1/student/' + STUDENT_ID + '/academics', acBody);
     const c = await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: readCourses() });
+    if ((readCourses() || []).length) wizMark('courses');   // v355: report-card path counts too
     const t = await apiPost('/focms/v1/student/' + STUDENT_ID + '/tests', { items: readTests() });
     const parts = [];
     if ((a.written || []).length) parts.push(a.written.join(', '));
@@ -5661,6 +5661,7 @@ async function bulkSave() {
   if (items.length > 10) { showToast('10 courses per term is the maximum', 'error'); return; }
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: items, mode: 'upsert' });
+    wizMark('courses');   // v355: step 4 completes on a real course, not a page visit
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/courses?band=' + ACAD_BAND);
     ACAD_COURSES = d.courses || [];
     openAcadYear(g);
@@ -5862,6 +5863,7 @@ async function courseSave(id) {
     // parent_portal course and re-inserts only what is posted - saving one
     // course used to wipe all the others.
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: [item], mode: 'upsert' });
+    wizMark('courses');   // v355
     const d = await apiGet('/focms/v1/student/' + STUDENT_ID + '/courses?band=' + ACAD_BAND);
     ACAD_COURSES = d.courses || [];
     openAcadYear(ACAD_YEAR != null ? ACAD_YEAR : (BANDS.find(x=>x.code===ACAD_BAND).lo));
@@ -6130,6 +6132,7 @@ async function tutorSave(id) {
   item.grade_level = Number(item.grade_level);
   try {
     await apiPost('/focms/v1/student/' + STUDENT_ID + '/courses', { items: [item], mode: 'upsert' });
+    wizMark('courses');   // v355
     await loadTutoring();
     renderTutoringList();
     showToast('Saved', 'success');
