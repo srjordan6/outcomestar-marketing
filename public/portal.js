@@ -4,6 +4,13 @@
  * release. Deployed file is byte-identical to public/portal.js in
  * srjordan6/outcomestar-marketing.
  *
+ * v357 · Old v140 tour modal latched SERVER-SIDE: fires only when the tenant
+ *        wizard-state shows a brand-new tenant (not done, no 'tour' flag).
+ *        closeWizard() posts visited:['tour'] (backend v0.12.179 accepts it;
+ *        excluded from done_at). Fixes the modal reappearing in private
+ *        windows / new devices where localStorage is empty. localStorage flag
+ *        kept as a fast-path skip only.
+ *
  * CHANGELOG — 2026-07-19 session (v259 → v282)
  *
  * v282 · EMAIL VERIFICATION GATE (operator decision): after the birth
@@ -604,7 +611,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   // endpoint/network errors so an API blip never locks a paying family out.
   if (getToken()) {
     var evBlocked = await emailVerificationGate();
-    if (!evBlocked && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) openWizard();
+    // v357: server-side latch. The localStorage flag alone reopened the tour in
+    // private windows and on new devices. Fire only for a genuinely brand-new
+    // tenant: wizard-state not done AND no server-side 'tour' flag yet.
+    if (!evBlocked && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) {
+      try {
+        if (WIZ_STATE === null) await wizLoad();
+        var wv = (WIZ_STATE && WIZ_STATE.visited) || {};
+        if (WIZ_STATE && !WIZ_STATE.done && !wv.tour) openWizard();
+      } catch(e) {}
+    }
   }
 });
 
@@ -721,6 +737,14 @@ function closeWizard(){
   var ov=document.getElementById('wiz-overlay'); if(ov) ov.remove();
   sessionDrop('focms_fresh_signup');
   try{ localStorage.setItem('focms_onboarded_'+TENANT_ID,'1'); }catch(e){}
+  // v357: durable server-side latch so the tour never reopens on other
+  // devices/private windows. 'tour' is stored in wizard-state but excluded
+  // from the six-step done_at calculation (backend v0.12.179).
+  try{
+    apiPost('/focms/v1/tenant/wizard-state', { visited: ['tour'] })
+      .then(function(d){ if (d && d.visited) { WIZ_STATE = WIZ_STATE || {}; WIZ_STATE.visited = d.visited; WIZ_STATE.done = d.done; } })
+      .catch(function(){});
+  }catch(e){}
 }
 async function wizLoadThemes(){
   try {
