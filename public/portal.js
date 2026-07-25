@@ -4,6 +4,13 @@
  * release. Deployed file is byte-identical to public/portal.js in
  * srjordan6/outcomestar-marketing.
  *
+ * v358 · Wizard age logic + website finale: (a) grades Pre-K..5 are never
+ *        asked to enter courses - the step is hidden and 'courses'+'academics'
+ *        auto-mark server-side so the wizard can retire; (b) not-in-school
+ *        continues to hide every academic step; (c) NEW final step for every
+ *        tenant regardless of age: "Set up your child's website" -> Website
+ *        pillar. 'website' joins WIZARD_STEPS (backend v0.12.180) and is
+ *        required for done_at; openWebsitePillar() marks it.
  * v357 · Old v140 tour modal latched SERVER-SIDE: fires only when the tenant
  *        wizard-state shows a brand-new tenant (not done, no 'tour' flag).
  *        closeWizard() posts visited:['tour'] (backend v0.12.179 accepts it;
@@ -792,6 +799,9 @@ function pillarHasChildren(code) { return pillarChildren(code).length > 0; }
 var WIZ_STATE = null;   // null = unknown; {done, visited} once fetched
 var WIZ_GRADE = null;   // student's current grade from the signup form; null = not in school
 function wizInSchool() { return WIZ_GRADE != null && !isNaN(Number(WIZ_GRADE)); }
+// v358: course-by-course entry is only asked from 6th grade up. Pre-K..5
+// families still add the school and its personnel, but not courses.
+function wizAskCourses() { return wizInSchool() && Number(WIZ_GRADE) >= 6; }
 function wizBandForGrade() {
   var g = Number(WIZ_GRADE);
   var b = BANDS.find(function (x) { return g >= x.lo && g <= x.hi; });
@@ -810,13 +820,21 @@ async function wizLoad() {
       var stu = await apiGet('/focms/v1/student/' + STUDENT_ID);
       WIZ_GRADE = (stu && stu.current_grade != null && stu.current_grade !== '') ? stu.current_grade : null;
     } catch (e2) { WIZ_GRADE = null; }
-    if (!WIZ_STATE.done && !wizInSchool()) {
-      var v0 = WIZ_STATE.visited || {};
-      var na = ['schools', 'personnel', 'courses', 'academics'].filter(function (k) { return !v0[k]; });
-      if (na.length) apiPost('/focms/v1/tenant/wizard-state', { visited: na })
-        .then(function (d) { WIZ_STATE = d; renderWizard(); }).catch(function () {});
-      na.forEach(function (k) { v0[k] = true; });
-      WIZ_STATE.visited = v0;
+    if (!WIZ_STATE.done) {
+      // v358: steps that do not apply to this child are auto-marked so the
+      // wizard can retire on the steps that DO apply.
+      //   not in school   -> schools, personnel, courses, academics
+      //   Pre-K..5        -> courses, academics (school + personnel still asked)
+      var skip = !wizInSchool() ? ['schools', 'personnel', 'courses', 'academics']
+               : !wizAskCourses() ? ['courses', 'academics'] : [];
+      if (skip.length) {
+        var v0 = WIZ_STATE.visited || {};
+        var na = skip.filter(function (k) { return !v0[k]; });
+        if (na.length) apiPost('/focms/v1/tenant/wizard-state', { visited: na })
+          .then(function (d) { WIZ_STATE = d; renderWizard(); }).catch(function () {});
+        na.forEach(function (k) { v0[k] = true; });
+        WIZ_STATE.visited = v0;
+      }
     }
   }
   catch (e) {
@@ -892,23 +910,34 @@ function renderWizard() {
     '<div style="border-left:3px solid #F07800;background:#FFF8F2;padding:12px 16px;border-radius:0 8px 8px 0;margin:0 0 18px;font-size:13.5px;color:#333"><b>An honest word.</b> We make no guarantee that your child will be admitted to the college of your choice. Nobody can. What we promise is that we will make every effort to help you toward the best possible outcome, and that when the moment comes, the record will be ready.</div>' +
     '<div style="font-family:Lora,Georgia,serif;font-weight:600;color:#201868;font-size:19px;margin:0 0 12px">Where to start</div>' +
     '<ol style="list-style:none;counter-reset:s;padding:0;margin:0">' +
-    wizStepHtml(1, 'Fill out the Personal pillar',
-      'Identity, family, address, citizenship, languages. Complete this as thoroughly as you can \u2014 nearly every form your child will ever face draws on it.',
-      wizBtn('Open Personal', "openPillar('personal')"), v.personal) +
-    (wizInSchool()
-      ? wizStepHtml(2, 'Add your child\u2019s school',
+    (function () {
+      // v358: dynamic numbering - which steps render depends on the child's
+      // grade, and the website finale is always last for every family.
+      var n = 0, out = '';
+      out += wizStepHtml(++n, 'Fill out the Personal pillar',
+        'Identity, family, address, citizenship, languages. Complete this as thoroughly as you can \u2014 nearly every form your child will ever face draws on it.',
+        wizBtn('Open Personal', "openPillar('personal')"), v.personal);
+      if (wizInSchool()) {
+        out += wizStepHtml(++n, 'Add your child\u2019s school',
           'Begin with the school itself: enter your child\u2019s current school as completely as possible. Everything academic hangs off it.',
-          wizBtn('Add your child\u2019s school', 'openSchoolProfiles()'), v.schools) +
-        wizStepHtml(3, 'Add School Personnel',
+          wizBtn('Add your child\u2019s school', 'openSchoolProfiles()'), v.schools);
+        out += wizStepHtml(++n, 'Add School Personnel',
           'Teachers, counselors and staff. Enter your child\u2019s current teachers now \u2014 entered once, they are reused across courses, recommendations and applications. Get the recommendation while you are fresh in your teacher\u2019s memory.',
-          wizBtn('Open School Personnel', 'openSchoolPersonnel()'), v.personnel) +
-        wizStepHtml(4, 'Enter courses, subject by subject and year by year',
-          'You told us your child is in ' + escapeHTML(String(GRADE_LABELS[Number(WIZ_GRADE)] || ('grade ' + WIZ_GRADE))) + ', so this opens that grade band directly. Pick the school year, then add each subject they are taking.',
-          wizBtn('Enter courses for ' + escapeHTML(String(GRADE_LABELS[Number(WIZ_GRADE)] || 'their grade')), 'wizGoCourses()'), v.courses)
-      : '') +
-    wizStepHtml(wizInSchool() ? 5 : 2, 'Record extracurricular activities',
-      'Add whatever your child is involved in as of today \u2014 sports, music, clubs, service, anything at all. Start with what is true right now; the history can follow later.',
-      wizBtn('Open Extracurricular', "openPillar('extracurricular')"), v.extracurricular) +
+          wizBtn('Open School Personnel', 'openSchoolPersonnel()'), v.personnel);
+        if (wizAskCourses()) {
+          out += wizStepHtml(++n, 'Enter courses, subject by subject and year by year',
+            'You told us your child is in ' + escapeHTML(String(GRADE_LABELS[Number(WIZ_GRADE)] || ('grade ' + WIZ_GRADE))) + ', so this opens that grade band directly. Pick the school year, then add each subject they are taking.',
+            wizBtn('Enter courses for ' + escapeHTML(String(GRADE_LABELS[Number(WIZ_GRADE)] || 'their grade')), 'wizGoCourses()'), v.courses);
+        }
+      }
+      out += wizStepHtml(++n, 'Record extracurricular activities',
+        'Add whatever your child is involved in as of today \u2014 sports, music, clubs, service, anything at all. Start with what is true right now; the history can follow later.',
+        wizBtn('Open Extracurricular', "openPillar('extracurricular')"), v.extracurricular);
+      out += wizStepHtml(++n, 'Set up your child\u2019s website',
+        'Every child gets a personal website, whatever their age. Pick a look \u2014 sections and privacy come preset for their age band: first name only in public, never an address or phone. You can change everything later in the Website pillar.',
+        wizBtn('Set up the website', "openPillar('website')"), v.website);
+      return out;
+    })() +
     '</ol>' +
     '<div style="background:#201868;color:#fff;border-radius:10px;padding:18px 22px;margin-top:6px">' +
     '<div style="font-family:Lora,Georgia,serif;font-weight:600;font-size:17px;margin-bottom:5px">And there you have it.</div>' +
@@ -8495,6 +8524,7 @@ async function uploadHero(){
   } catch (e) { st.textContent = 'Upload failed: ' + e.message; }
 }
 async function openWebsitePillar(){
+  wizMark('website');   // v358: website finale counts on any visit, wizard button or direct
   if (!getToken()) { showToast('Set your API token first','error'); return; }
   if (!SITE_STATUS) { try { await loadSiteStatus(); } catch(e){} }
   currentPillar='website';
