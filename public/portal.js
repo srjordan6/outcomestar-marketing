@@ -4,6 +4,16 @@
  * release. Deployed file is byte-identical to public/portal.js in
  * srjordan6/outcomestar-marketing.
  *
+ * v359 · Old v140 tour modal RETIRED. It never auto-fires again, for any
+ *        tenant, new or existing. It duplicated the v354 checklist wizard -
+ *        two onboarding systems asking for the same things, and its own
+ *        "Set up the website" step is now the checklist's final step. The
+ *        checklist is the single onboarding surface. openWizard/closeWizard
+ *        and window.startTour() are left in place so the tour can still be
+ *        invoked deliberately (console or a future menu item); nothing calls
+ *        them automatically. The v357 'tour' server flag is now inert but is
+ *        still written on manual close, so no backend change is needed.
+ *
  * v358 · Wizard age logic + website finale: (a) grades Pre-K..5 are never
  *        asked to enter courses - the step is hidden and 'courses'+'academics'
  *        auto-mark server-side so the wizard can retire; (b) not-in-school
@@ -617,17 +627,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   // blocking overlay lists each address with per-address Resend; fail-open on
   // endpoint/network errors so an API blip never locks a paying family out.
   if (getToken()) {
-    var evBlocked = await emailVerificationGate();
-    // v357: server-side latch. The localStorage flag alone reopened the tour in
-    // private windows and on new devices. Fire only for a genuinely brand-new
-    // tenant: wizard-state not done AND no server-side 'tour' flag yet.
-    if (!evBlocked && !localStorage.getItem('focms_onboarded_'+TENANT_ID)) {
-      try {
-        if (WIZ_STATE === null) await wizLoad();
-        var wv = (WIZ_STATE && WIZ_STATE.visited) || {};
-        if (WIZ_STATE && !WIZ_STATE.done && !wv.tour) openWizard();
-      } catch(e) {}
-    }
+    await emailVerificationGate();
+    // v359: the old v140 tour modal no longer auto-fires. Onboarding is the
+    // v354 checklist above the pillar grid - it covers every step this modal
+    // covered, including the website, and it is age-aware. Two competing
+    // welcome flows was the bug. window.startTour() still opens the modal on
+    // demand if it is ever wanted again.
   }
 });
 
