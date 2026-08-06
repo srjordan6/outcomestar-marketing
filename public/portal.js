@@ -4,6 +4,15 @@
  * release. Deployed file is byte-identical to public/portal.js in
  * srjordan6/outcomestar-marketing.
  *
+ * v360 · Rank/badge/award logger: the Location address block on a NEW entry
+ *        now defaults to the affiliation's DRILL LOCATION (details drill_*
+ *        keys, legacy drill_location fallback for street) instead of the
+ *        child's home address - a promotion is attained where the unit
+ *        drills, not at home. Values are BAKED into the form HTML at render
+ *        time (the only reliable prefill path); stdLocWire's home default is
+ *        suppressed when a drill address was baked. Editing an existing
+ *        record still shows that record's own stored address. Applies to any
+ *        program whose entry carries drill_* details (Sea Cadets today).
  * v359 · Old v140 tour modal RETIRED. It never auto-fires again, for any
  *        tenant, new or existing. It duplicated the v354 checklist wizard -
  *        two onboarding systems asking for the same things, and its own
@@ -2391,6 +2400,23 @@ async function stdLocWire(pfx, defaultToHome) {
     }
   }
 }
+// v360: default address for a NEW rank/badge/award entry - the unit's drill
+// location from the affiliation details (drill_* keys, v236/v239 schema).
+// Returns null when the entry has no drill address so home-default applies.
+function lmDrillAddr(a) {
+  var d = (a && a.details && typeof a.details === 'object') ? a.details : {};
+  var street = d.drill_street || d.drill_location || '';
+  if (!(street || d.drill_city || d.drill_zip)) return null;
+  return {
+    street_address: street,
+    street_address_line_2: d.drill_line2 || '',
+    city_town: d.drill_city || '',
+    county: d.drill_county || '',
+    state_province: d.drill_state || '',
+    zip_postal_code: d.drill_zip || '',
+    country: d.drill_country || 'US'
+  };
+}
 // v251: venue prefill - stored venue wins; legacy rows fall back to the composed location string
 function venuePrefill(rec) {
   var lp = rec && rec.location_parts;
@@ -4380,6 +4406,7 @@ async function lmEdit(id, presetKind) {
   const _a = (EC_DATA || []).find(x => x.id === ENTRY_VIEW.id) || {};
   const _prog = (EC_PROGRAMS || []).find(pp => pp.code === ENTRY_VIEW.code) || {};
   const lmIsCadet = /sea cadet|usnscc|naval sea/i.test((_a.organization_name || '') + ' ' + (_prog.title || ''));
+  const _lmDrill = lmDrillAddr(_a);  // v360: drill location default for new entries
   // v260: org context - trainings + rank ladders + (bsa) badge roster
   const lmOrg = LM_ORGS[ENTRY_VIEW.code] ? ENTRY_VIEW.code : (lmIsCadet ? 'usnscc' : null);
   LM_CTX = { org: lmOrg, ranks: null, badges: null, awards: null, jrotcRanks: false, rankLabel: '' };
@@ -4434,16 +4461,16 @@ async function lmEdit(id, presetKind) {
       ? '<div class="ec-two">' + perfField('lm-date', 'Start date *', p.event_date, 'date') +
         perfField('lm-end', 'End date', p.event_end_date, 'date') + '</div>'
       : perfField('lm-date', 'Date attained *', p.event_date, 'date')) +
-    perfField('lm-location', 'Venue / place name', venuePrefill(p)) +
+    perfField('lm-location', 'Venue / place name', venuePrefill(p) || (!id && _lmDrill ? (_a.organization_name || '') : '')) +
     '<div style="font-weight:600;color:var(--navy);margin:8px 0 4px;font-size:13.5px">Location address</div>' +
-    addrFields('lmloc', p.location_parts || {}) +
+    addrFields('lmloc', p.location_parts || (!id && _lmDrill) || {}) +
     '<label class="ec-lbl">Notes (private)<textarea class="ec-in" id="lm-notes" rows="2">' + escapeHTML(p.notes || '') + '</textarea></label>' +
     skillsGainedField(p.skills_gained, CAT_FILTER, false, (LM_CTX.org === 'bsa' || LM_CTX.org === 'gsa') ? LM_CTX.org : '') +
     mediaWidgetHtml('lm-media', 'Photos, videos & documents', normalizeMediaIds(p)) +
     '<label class="ec-check"><input type="checkbox" id="lm-showcase"' + (p.show_on_showcase ? ' checked' : '') + '> Show on public showcase</label>' +
     '<div class="ec-bar"><button class="save-btn" onclick="lmSave(\'' + (id || '') + '\',\'' + (isTraining ? 'training' : '') + '\')">Save</button>' +
     '<button class="save-btn save-btn-ghost" onclick="' + back + '">Cancel</button></div></div>';
-  stdLocWire('lmloc', !id);
+  stdLocWire('lmloc', !id && !_lmDrill);  // v360: home default only when no drill address was baked
   if (_tCat) applyTrainingSkillOptions((p.title && _tCat.indexOf(p.title) !== -1) ? p.title : '');  // v249
   mediaWidgetRenderChips('lm-media');
 }
