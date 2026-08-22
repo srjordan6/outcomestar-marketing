@@ -4,7 +4,7 @@
 // Idempotent: skips files that already contain the widget marker.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 const TOKEN = process.env.PUBLIC_CHATWOOT_WEBSITE_TOKEN;
 const BASE_URL = process.env.PUBLIC_CHATWOOT_BASE_URL;
@@ -121,10 +121,19 @@ function walk(dir) {
 }
 
 const distDir = "dist";
+// Path containment: only ever read/write inside the resolved dist/ root.
+// walk() already only follows readdirSync results, but this guard makes the
+// invariant explicit and satisfies static analysis (no traversal outside dist).
+const DIST_ROOT = resolve(distDir) + sep;
 let count = 0;
 let skipped = 0;
 for (const file of walk(distDir)) {
-  const html = readFileSync(file, "utf8");
+  const full = resolve(file);
+  if (!full.startsWith(DIST_ROOT)) {
+    console.warn(`[chatwoot-inject] Refusing path outside dist/: ${file}`);
+    continue;
+  }
+  const html = readFileSync(full, "utf8");
   if (html.includes(MARKER)) {
     skipped++;
     continue;
@@ -134,7 +143,7 @@ for (const file of walk(distDir)) {
     continue;
   }
   const updated = html.replace("</body>", `${SNIPPET}</body>`);
-  writeFileSync(file, updated, "utf8");
+  writeFileSync(full, updated, "utf8");
   count++;
 }
 console.log(`[chatwoot-inject] Injected widget + hint into ${count} file(s). Skipped ${skipped} already-injected.`);
