@@ -155,24 +155,19 @@ footer a{color:var(--navy);text-decoration:none}
   <div class="gr-word">Every outcome. <b>One star.</b></div>
 </div>
 <script is:inline>
-/* Decide before first paint so returning visitors get no flash.
-   ?greet=1 forces it on demand (testing); ?greet=0 clears the stored flag. */
+/* Plays on every load of the homepage (2026-08-23: changed from once-per-
+   browser at Stephen's request). Still skips instantly on any input and is
+   never shown to visitors who ask for reduced motion.
+   ?greet=0 suppresses it for one load - useful for screenshots and audits. */
 (function(){
+  try{ if (location.search.indexOf('greet=0') > -1) return; }catch(e){}
+
   var force = false;
-  try{
-    var qs = location.search;
-    if (qs.indexOf('greet=0') > -1) { localStorage.removeItem('os_greeted'); }
-    if (qs.indexOf('greet=1') > -1) { force = true; }
-  }catch(e){}
+  try{ force = location.search.indexOf('greet=1') > -1; }catch(e){}
 
   if (!force) {
     try{
-      if (localStorage.getItem('os_greeted')) return;
-    }catch(e){ return; }  /* storage blocked: skip rather than replay every load */
-    try{
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        localStorage.setItem('os_greeted','1'); return;
-      }
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     }catch(e){}
   }
 
@@ -359,7 +354,6 @@ footer a{color:var(--navy);text-decoration:none}
   function finish(){
     if (done) return;
     done = true;
-    try { localStorage.setItem('os_greeted','1'); } catch(e){}
     g.classList.add('out');
     document.documentElement.style.overflow = '';
     setTimeout(function(){ g.remove(); }, 760);
