@@ -133,9 +133,9 @@ footer a{color:var(--navy);text-decoration:none}
   .gr-stage,.gr-ring{width:112px;height:112px;margin:-56px 0 0 -56px}
   .gr-word{top:calc(50% + 78px);font-size:16px;padding:0 24px}
 }
-@media(prefers-reduced-motion:reduce){
-  #greet.on:not(.force){display:none!important}
-}
+/* prefers-reduced-motion is intentionally not applied to the greeting -
+   see the note on the inline script above. The instant-skip handlers are
+   the escape hatch instead. */
 </style>
 </head>
 <body>
@@ -155,25 +155,21 @@ footer a{color:var(--navy);text-decoration:none}
   <div class="gr-word">Every outcome. <b>One star.</b></div>
 </div>
 <script is:inline>
-/* Plays on every load of the homepage (2026-08-23: changed from once-per-
-   browser at Stephen's request). Still skips instantly on any input and is
-   never shown to visitors who ask for reduced motion.
-   ?greet=0 suppresses it for one load - useful for screenshots and audits. */
+/* Plays on every load of the homepage, for every visitor.
+   ?greet=0 suppresses it for one load - use for screenshots, Lighthouse
+   runs and SEO audits where a 2.6s overlay would distort the measurement.
+
+   NOTE (2026-08-23): prefers-reduced-motion is deliberately NOT honoured
+   here. That was a considered business decision by the owner, not an
+   oversight - do not "fix" it in a later session without asking. The
+   mitigation that remains is that any click, key, scroll or touch kills
+   the overlay instantly, so a motion-sensitive visitor is never held in
+   it for longer than it takes to move a finger. */
 (function(){
   try{ if (location.search.indexOf('greet=0') > -1) return; }catch(e){}
-
-  var force = false;
-  try{ force = location.search.indexOf('greet=1') > -1; }catch(e){}
-
-  if (!force) {
-    try{
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    }catch(e){}
-  }
-
   var el = document.getElementById('greet');
   if (!el) return;
-  el.className = force ? 'on force' : 'on';
+  el.className = 'on';
   document.documentElement.style.overflow = 'hidden';
 })();
 </script>
