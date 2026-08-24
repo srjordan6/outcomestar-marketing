@@ -72,9 +72,100 @@ h1,h2,h3{font-family:Lora,Georgia,serif;color:var(--navy);margin:0}
 @media(max-width:760px){.tl-row{grid-template-columns:1fr}}
 footer{border-top:1px solid #E5E2D9;margin-top:0;padding:26px 20px;text-align:center;font-size:13px;color:var(--gray);background:var(--paper)}
 footer a{color:var(--navy);text-decoration:none}
+
+/* ===== FIRST-VISIT GREETING =====================================
+   The brand mark introduces itself once, then retires into the
+   topbar logo. Fires only on a first visit (localStorage), skips on
+   any input, and is fully disabled under prefers-reduced-motion.
+   Hidden by default so returning visitors never see a flash; an
+   inline script decides before first paint whether to show it. */
+#greet{display:none}
+#greet.on{
+  display:block;position:fixed;inset:0;z-index:9999;background:var(--navy);
+  cursor:pointer;
+}
+#greet.on::after{
+  content:"";position:absolute;left:50%;bottom:38px;transform:translateX(-50%);
+  width:34px;height:1.5px;background:rgba(255,255,255,.28);
+  animation:gr-hint .9s .9s ease-out forwards;opacity:0;
+}
+@keyframes gr-hint{to{opacity:1}}
+#greet.out{
+  animation:gr-lift .72s cubic-bezier(.7,0,.3,1) forwards;pointer-events:none;
+}
+@keyframes gr-lift{to{opacity:0;transform:translateY(-14px)}}
+.gr-stage{
+  position:absolute;left:50%;top:50%;width:150px;height:150px;
+  margin:-75px 0 0 -75px;
+}
+.gr-mark{
+  width:100%;height:100%;transform-origin:50% 50%;
+  animation:gr-arrive 1.05s cubic-bezier(.2,1.25,.4,1) .12s both;
+}
+@keyframes gr-arrive{
+  0%{opacity:0;transform:scale(.12) rotate(-115deg)}
+  55%{opacity:1}
+  100%{opacity:1;transform:scale(1) rotate(0)}
+}
+.gr-dot{transform-origin:50% 50%;animation:gr-dot .5s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes gr-dot{0%{opacity:0;transform:scale(0)}100%{opacity:1;transform:scale(1)}}
+.gr-ring{
+  position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;
+  border:1.5px solid var(--orange);border-radius:50%;opacity:0;
+  animation:gr-ring .95s cubic-bezier(.15,.7,.3,1) .62s both;
+}
+@keyframes gr-ring{
+  0%{opacity:.55;transform:scale(.3)}
+  100%{opacity:0;transform:scale(2.4)}
+}
+.gr-spark{
+  position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;
+  border-radius:50%;background:var(--orange);opacity:0;
+}
+.gr-word{
+  position:absolute;left:0;right:0;top:calc(50% + 96px);text-align:center;
+  font-family:Lora,Georgia,serif;font-size:19px;color:#fff;letter-spacing:.01em;
+  opacity:0;animation:gr-word .7s cubic-bezier(.22,1,.36,1) .74s both;
+}
+.gr-word b{color:var(--orange);font-weight:600}
+@keyframes gr-word{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+@media(max-width:600px){
+  .gr-stage,.gr-ring{width:112px;height:112px;margin:-56px 0 0 -56px}
+  .gr-word{top:calc(50% + 78px);font-size:16px;padding:0 24px}
+}
+@media(prefers-reduced-motion:reduce){
+  #greet.on{display:none!important}
+}
 </style>
 </head>
 <body>
+
+<!-- ===== FIRST-VISIT GREETING (additive; page content untouched) ===== -->
+<div id="greet" aria-hidden="true">
+  <div class="gr-ring"></div>
+  <div class="gr-stage">
+    <svg class="gr-mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <!-- concave-edge four-point mark, traced from outcomestar_mark_only.png:
+           tips at N 107, S 403, W 115, E 396; control points at centre -->
+      <path d="M256 107 Q256 256 396 256 Q256 256 256 403 Q256 256 116 256 Q256 256 256 107 Z" fill="#F07800"/>
+      <path d="M256 107 Q257 210 274 245 L256 258 Z" fill="#FFB067"/>
+      <circle class="gr-dot" cx="256" cy="256" r="14" fill="#FAFAF7"/>
+    </svg>
+  </div>
+  <div class="gr-word">Every outcome. <b>One star.</b></div>
+</div>
+<script is:inline>
+/* Decide before first paint so returning visitors get no flash. */
+(function(){
+  try{
+    if (localStorage.getItem('os_greeted')) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { localStorage.setItem('os_greeted','1'); return; }
+    document.getElementById('greet').className = 'on';
+    document.documentElement.style.overflow = 'hidden';
+  }catch(e){/* private mode / storage blocked: skip the greeting entirely */}
+})();
+</script>
+
 <div class="topbar">
   <a href="https://outcomestar.app/"><img src="/outcomestar_logo_primary.png" alt="outcomestar" style="height:40px"></a>
   <nav>
@@ -226,6 +317,46 @@ footer a{color:var(--navy);text-decoration:none}
   <a href="/user-agreement">Terms of Service</a> &nbsp;&middot;&nbsp; <a href="/privacy-policy">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="/disclaimer">Disclaimer</a> &nbsp;&middot;&nbsp; <a href="/contact">Contact</a>
   <div style="margin-top:6px">&copy; 2026 SRJ Consulting &amp; Services LLC &middot; outcomestar.app &middot; Every outcome. One star.</div>
 </footer>
+
+<script is:inline>
+/* ===== FIRST-VISIT GREETING: sparks + dismissal ===== */
+(function(){
+  var g = document.getElementById('greet');
+  if (!g || g.className !== 'on') return;
+
+  /* Eight sparks thrown along the mark's own axes and diagonals. */
+  var R = window.innerWidth < 600 ? 86 : 118;
+  for (var i = 0; i < 8; i++) {
+    var a = (Math.PI / 4) * i;
+    var s = document.createElement('div');
+    s.className = 'gr-spark';
+    g.appendChild(s);
+    s.animate([
+      { opacity: 0, transform: 'translate(0,0) scale(.4)' },
+      { opacity: 1, offset: .25 },
+      { opacity: 0, transform: 'translate(' + (Math.cos(a)*R).toFixed(1) + 'px,' + (Math.sin(a)*R).toFixed(1) + 'px) scale(.2)' }
+    ], { duration: 900, delay: 620 + i * 22, easing: 'cubic-bezier(.15,.7,.3,1)' });
+  }
+
+  var done = false;
+  function finish(){
+    if (done) return;
+    done = true;
+    try { localStorage.setItem('os_greeted','1'); } catch(e){}
+    g.classList.add('out');
+    document.documentElement.style.overflow = '';
+    setTimeout(function(){ g.remove(); }, 760);
+  }
+
+  /* Retires on its own, or the moment the visitor does anything. */
+  var timer = setTimeout(finish, 2600);
+  function skip(){ clearTimeout(timer); finish(); }
+  g.addEventListener('click', skip);
+  addEventListener('keydown', skip, { once:true });
+  addEventListener('wheel', skip, { once:true, passive:true });
+  addEventListener('touchstart', skip, { once:true, passive:true });
+})();
+</script>
 
 <script is:inline>
   window.chatwootSettings = { position: "right", type: "standard", launcherTitle: "Chat with us" };
