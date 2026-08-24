@@ -134,7 +134,7 @@ footer a{color:var(--navy);text-decoration:none}
   .gr-word{top:calc(50% + 78px);font-size:16px;padding:0 24px}
 }
 @media(prefers-reduced-motion:reduce){
-  #greet.on{display:none!important}
+  #greet.on:not(.force){display:none!important}
 }
 </style>
 </head>
@@ -155,14 +155,31 @@ footer a{color:var(--navy);text-decoration:none}
   <div class="gr-word">Every outcome. <b>One star.</b></div>
 </div>
 <script is:inline>
-/* Decide before first paint so returning visitors get no flash. */
+/* Decide before first paint so returning visitors get no flash.
+   ?greet=1 forces it on demand (testing); ?greet=0 clears the stored flag. */
 (function(){
+  var force = false;
   try{
-    if (localStorage.getItem('os_greeted')) return;
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { localStorage.setItem('os_greeted','1'); return; }
-    document.getElementById('greet').className = 'on';
-    document.documentElement.style.overflow = 'hidden';
-  }catch(e){/* private mode / storage blocked: skip the greeting entirely */}
+    var qs = location.search;
+    if (qs.indexOf('greet=0') > -1) { localStorage.removeItem('os_greeted'); }
+    if (qs.indexOf('greet=1') > -1) { force = true; }
+  }catch(e){}
+
+  if (!force) {
+    try{
+      if (localStorage.getItem('os_greeted')) return;
+    }catch(e){ return; }  /* storage blocked: skip rather than replay every load */
+    try{
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        localStorage.setItem('os_greeted','1'); return;
+      }
+    }catch(e){}
+  }
+
+  var el = document.getElementById('greet');
+  if (!el) return;
+  el.className = force ? 'on force' : 'on';
+  document.documentElement.style.overflow = 'hidden';
 })();
 </script>
 
@@ -322,7 +339,7 @@ footer a{color:var(--navy);text-decoration:none}
 /* ===== FIRST-VISIT GREETING: sparks + dismissal ===== */
 (function(){
   var g = document.getElementById('greet');
-  if (!g || g.className !== 'on') return;
+  if (!g || g.className.indexOf('on') === -1) return;
 
   /* Eight sparks thrown along the mark's own axes and diagonals. */
   var R = window.innerWidth < 600 ? 86 : 118;
