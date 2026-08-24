@@ -3,6 +3,7 @@
   sitemap.xml — outcomestar.app (marketing site)
   Public, indexable pages only. Excluded on purpose:
     /portal, /reset-password  — disallowed in robots.txt (private surfaces)
+    /login                    — sign-in surface, meta robots noindex (2026-08-23)
     /parent_data_entry*.html  — internal build artifacts, never linked
   Student showcase sites live on app.outcomestar.app and are deliberately
   no-index for minors; they are NOT listed here.
@@ -56,13 +57,6 @@
     <lastmod>2026-07-11</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
-  </url>
-
-  <url>
-    <loc>https://outcomestar.app/login</loc>
-    <lastmod>2026-07-11</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
   </url>
 
   <url>

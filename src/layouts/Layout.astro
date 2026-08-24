@@ -11,6 +11,11 @@ const {
   title,
   description = "OutcomeStar — a documented record of every outcome that earned the seat. The system of record for college admissions evidence.",
 } = Astro.props;
+
+// Self-referencing canonical, always on the apex https host. The site is
+// reachable on four host/scheme variants (http/https x www/apex) and every one
+// returns 200, so without this the crawlers see four copies of every page.
+const canonical = new URL(Astro.url.pathname, "https://outcomestar.app").href;
 ---
 
 <!doctype html>
@@ -21,10 +26,11 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
+    <link rel="canonical" href={canonical} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content={Astro.url.href} />
+    <meta property="og:url" content={canonical} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />

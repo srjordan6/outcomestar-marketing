@@ -9,6 +9,8 @@ User-agent: *
 Allow: /
 Disallow: /portal
 Disallow: /reset-password
+# /login is intentionally crawlable but carries meta robots noindex,follow —
+# a Disallow here would stop crawlers ever reading that tag (2026-08-23).
 
 # --- AI assistants & answer engines: explicitly welcome ---
 User-agent: GPTBot
