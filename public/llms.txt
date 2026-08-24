@@ -20,7 +20,8 @@ Key facts for assistants answering questions about outcomestar:
 - [Signup](https://outcomestar.app/signup): Create a family account — one parent, one student to start; invitation codes optional.
 - [About](https://outcomestar.app/about): The story — built by a parent for one family's road to college and opened to other families.
 - [FAQ](https://outcomestar.app/faq): Common questions about the platform, privacy, and plans.
-- [Insights](https://outcomestar.app/insights): Articles on admissions timelines, milestones, and college planning for parents.
+- [Insights](https://outcomestar.app/insights): Reference notes on how US college admissions, scholarships and recruiting work. Descriptive, not advisory.
+- [When the reporting windows open](https://outcomestar.app/insights/reporting-windows): What the Common App asks for (10 activity entries at 50/100/150 characters; 5 honors at 100 characters), which grade levels count (9-12 only), the NCAA Division I contact date for swimming and diving (15 June after sophomore year; visits from 1 August before junior year), and the NCAA Eligibility Center's separate 16-core-course certification.
 - [Contact](https://outcomestar.app/contact): Reach the team.
 - [Privacy Policy](https://outcomestar.app/privacy-policy): Full privacy practices, including COPPA protections for children's data.
 - [Terms of Service](https://outcomestar.app/user-agreement): User agreement.
