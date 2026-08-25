@@ -4,6 +4,13 @@
  * release. Deployed file is byte-identical to public/portal.js in
  * srjordan6/outcomestar-marketing.
  *
+ * v361 · Website pillar: live preview of the selected theme (palette, display
+ *        font, badge, card treatment) that changes as cards are picked, and a
+ *        status line that distinguishes the SAVED theme (live on the site)
+ *        from the SELECTED one (not yet saved). The old "Currently live" line
+ *        only printed the saved value and never moved when a card was picked.
+ *        Companion change on app.outcomestar.app: the site now reads config
+ *        with no cache, so a saved theme shows on the next load.
  * v360 · Rank/badge/award logger: the Location address block on a NEW entry
  *        now defaults to the affiliation's DRILL LOCATION (details drill_*
  *        keys, legacy drill_location fallback for street) instead of the
@@ -1276,6 +1283,54 @@ function themeCardSync(){
     l.style.borderColor = on ? 'var(--orange)' : '#E3E7ED';
     l.style.background = on ? '#FFF7EF' : '#fff';
   });
+  themePreviewSync(); themeStatusSync();
+}
+/* v361: Website-pillar theme preview. Palettes mirror lib/genericThemes.ts in
+   srjordan6/outcomestar (the site is the source of truth; this is a picture
+   of it). Per theme: [bg, ink, accent, accent2, card, badge, displayFont]. */
+var THEME_PREVIEW = {"sketchbook":["#FDFBF7","#3B3A36","#E8945A","#7FA5B0","#FFFFFF","MY SKETCHBOOK","Caveat"],"storybook":["#FFF9F0","#4A3728","#B5651D","#6C8A5B","#FFFFFF","CHAPTER ONE","Lora"],"nursery":["#F7F5FB","#4E4A66","#A78BC8","#8FC1E3","#FFFFFF","SWEET DREAMS","Quicksand"],"scrapbook":["#F6F1E7","#43392E","#C0563E","#5E7F6B","#FFFDF8","KEEP FOREVER","Kalam"],"growth-chart":["#F2F8F4","#2F4A3A","#3E9C6B","#2E7DA6","#FFFFFF","STILL GROWING","Fredoka"],"toy-box":["#FFFDF5","#33324E","#E0473A","#2E86C1","#FFFFFF","OPEN ME","Baloo 2"],"picture-frame":["#F4F2EE","#3B3B3B","#8A6F4D","#5B6B62","#FFFFFF","ON DISPLAY","Playfair Display"],"lullaby":["linear-gradient(180deg,#1B2143 0%,#2A3160 100%)","#EDEFFB","#F3C86B","#9FB4F0","#FFFFFF","GOODNIGHT MOON","Comfortaa"],"garden":["#F4F8EF","#33442C","#5C8A3C","#B8563F","#FFFFFF","IN BLOOM","Lora"],"crayon":["#FFFFFF","#2E2A26","#F0532D","#F2B705","#FFF8E8","I MADE THIS","Gochi Hand"],"mission-control":["#0B1120","#E4ECFF","#37C8F5","#7CF2C4","#111B31","GO FOR LAUNCH","Space Grotesk"],"trading-card":["#EEF1F7","#1E2433","#C8A24A","#2C4E9E","#EEF1F7","ROOKIE OF THE YEAR","Rubik"],"arcade":["#0D0B1E","#E9E6FF","#FF3E8A","#3EF0D0","#171334","HIGH SCORE","Press Start 2P"],"comic-book":["#FFF9E8","#20242C","#E43B2C","#2E86C1","#FFFFFF","ISSUE Nº1","Bangers"],"stadium":["#101418","#F2F5F7","#3DDC5A","#3D9BE9","#1A2026","UNDER THE LIGHTS","Oswald"],"field-notes":["#FBFAF6","#33393B","#2F6F8F","#5E8C61","#FFFFFF","FIELD LOG","Architects Daughter"],"treasure-map":["#F3E9D2","#4A3520","#9C2B1B","#3F6B54","#FBF4E1","X MARKS THE SPOT","Pirata One"],"science-lab":["#F5F8FA","#1F2A33","#0FA3A3","#E0653F","#FFFFFF","HYPOTHESIS: AWESOME","Space Grotesk"],"game-day":["#141210","#FBF6EE","#F5A623","#E04B3A","#201C18","GAME DAY","Anton"],"clubhouse":["#F1F4F1","#25332A","#1F6E43","#8E2A2A","#FFFFFF","MEMBERS ONLY","Rubik"],"resume-mode":["#FFFFFF","#161A1D","#20456B","#20456B","#F7F8F9","","Source Serif 4"],"studio":["#111111","#F4F1EC","#E33F2E","#F4F1EC","#1C1C1C","ONE NIGHT ONLY","Bebas Neue"],"broadsheet":["#FAF7F0","#1B1B1B","#8C1D18","#1B1B1B","#FFFFFF","LATE EDITION","Playfair Display"],"portfolio":["#FAFAFA","#121417","#111827","#6E7378","#FFFFFF","","Inter"],"blueprint":["#0E2A47","#DDEBFA","#4FC3F7","#7CE0C3","#123357","REV A","IBM Plex Mono"],"varsity":["#F6F4EF","#232D3F","#8E2A2A","#232D3F","#FFFFFF","VARSITY","Graduate"],"command-brief":["#F2F3F0","#1E2420","#3A5A40","#8A6D3B","#FFFFFF","BRIEFING","IBM Plex Sans"],"ledger":["#FFFFFF","#0A0A0A","#0A0A0A","#0A0A0A","#FAFAFA","","Inter"],"spotlight":["linear-gradient(180deg,#141114 0%,#221A22 100%)","#F5EFE6","#D9A441","#B8677A","#FFFFFF","NOW SHOWING","Cormorant Garamond"],"summit":["#101820","#EAF1F5","#5FB49C","#7FA7C9","#182430","BASE CAMP","Space Grotesk"]};
+var _themeFontsLoaded = {};
+function themeSelectedKey(){ var r=document.querySelector('input[name="web-theme"]:checked'); return r ? r.value : ''; }
+function themeNameOf(k){
+  if (!k) return '\u2014';
+  var r=document.querySelector('input[name="web-theme"][value="'+k+'"]');
+  var b=r && r.closest('label') && r.closest('label').querySelector('b');
+  return b ? b.textContent : k;
+}
+function themePreviewSync(){
+  var box=document.getElementById('web-theme-preview'); if(!box) return;
+  var key=themeSelectedKey(), t=THEME_PREVIEW[key];
+  if(!t){ box.innerHTML=''; return; }
+  var bg=t[0], ink=t[1], ac=t[2], ac2=t[3], card=t[4], badge=t[5], font=t[6];
+  if(!_themeFontsLoaded[font]){
+    _themeFontsLoaded[font]=1;
+    var l=document.createElement('link'); l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(font).replace(/%20/g,'+')+':wght@600;700&display=swap';
+    document.head.appendChild(l);
+  }
+  var first=(studentDisplayName()||'').split(' ')[0]||'Student';
+  var line=function(w){ return '<span style="display:block;height:6px;width:'+w+'%;background:'+ink+';opacity:.18;border-radius:3px;margin-top:6px"></span>'; };
+  var cardHtml=function(){ return '<div style="flex:1;background:'+card+';border:1px solid '+ac2+'55;border-top:3px solid '+ac+';border-radius:8px;padding:10px 12px;min-width:0">'
+      +'<span style="display:block;height:8px;width:60%;background:'+ac+';opacity:.85;border-radius:3px"></span>'+line(90)+line(70)+'</div>'; };
+  box.innerHTML =
+    '<div style="border:1px solid #D6DAE0;border-radius:12px;overflow:hidden">'
+    + '<div style="background:'+bg+';color:'+ink+';padding:16px 18px 18px">'
+    +   '<div style="height:5px;background:'+ac+';border-radius:3px;margin-bottom:14px"></div>'
+    +   '<div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:'+ac+';font-weight:700">Ages \u00b7 showcase</div>'
+    +   '<div style="font-family:\''+font+'\',sans-serif;font-size:34px;font-weight:700;line-height:1.05;margin-top:4px">'+escapeHTML(first)+'</div>'
+    +   (badge?'<span style="display:inline-block;margin-top:8px;padding:3px 10px;border-radius:999px;background:'+ac+';color:'+card+';font-size:10px;font-weight:800;letter-spacing:.08em">'+escapeHTML(badge)+'</span>':'')
+    +   '<div style="display:flex;gap:10px;margin-top:14px">'+cardHtml()+cardHtml()+cardHtml()+'</div>'
+    + '</div>'
+    + '<div style="background:#fff;padding:8px 14px;font-size:11px;color:#7A8A9E;border-top:1px solid #E3E7ED">Preview of <b style="color:var(--navy)">'+escapeHTML(themeNameOf(key))+'</b> \u2014 the real site adds motion, the 3D record stage and the full record.</div>'
+    + '</div>';
+}
+function themeStatusSync(){
+  var el=document.getElementById('web-theme-status'); if(!el) return;
+  var saved=el.dataset.saved||'', sel=themeSelectedKey(), url=el.dataset.url||'';
+  var link = url ? '<a href="'+url+'" target="_blank" style="color:var(--orange);font-weight:600">'+escapeHTML(url.replace('https://',''))+'</a>' : 'the site';
+  if(!saved) el.innerHTML='No theme saved yet \u2014 '+link+' is using its default. Selected: <b>'+escapeHTML(themeNameOf(sel))+'</b>. Click <b>Save website configuration</b> to publish it.';
+  else if(sel===saved) el.innerHTML='Live on '+link+': <b style="color:var(--navy)">'+escapeHTML(themeNameOf(saved))+'</b>. Changes appear on the site\u2019s next load.';
+  else el.innerHTML='Live on '+link+': <b style="color:var(--navy)">'+escapeHTML(themeNameOf(saved))+'</b> \u00b7 Selected: <b style="color:var(--orange)">'+escapeHTML(themeNameOf(sel))+'</b> \u2014 not saved yet. Click <b>Save website configuration</b>.';
 }
 let SITE_STATUS = null;
 async function loadSiteStatus(){
@@ -8643,11 +8698,15 @@ function renderWebsiteConfig(band){
         + (t.built?'':' <span style="font-size:10px;color:#7A8A9E">pre-launch sprint</span>')
         + '<div style="font-size:11px;color:#7A8A9E;margin-top:2px;margin-left:22px">'+escapeHTML(t.vibe)+'</div></label>';
     }).join('') + '</div>';
-    if (band==='band_6_12') {
-      var liveTheme = (themes.find(function(t){return t.key===curTheme;})||{}).name || 'Mission Control';
-      var liveUrl = (SITE_STATUS && (SITE_STATUS.url || (SITE_STATUS.slug ? ('https://app.outcomestar.app/' + SITE_STATUS.slug) : null))) || 'https://app.outcomestar.app/jrj';
-      html += '<div style="font-size:11.5px;color:#7A8A9E;margin-top:6px">Currently live: ' + escapeHTML(liveTheme) + ' at <a href="' + liveUrl + '" target="_blank" style="color:var(--orange)">' + escapeHTML(liveUrl.replace('https://','')) + '</a></div>';
-    }
+    /* v361: a live picture of the SELECTED theme, and a status line that
+       says what is actually saved versus merely selected. The old line
+       printed the saved theme as "Currently live" and never changed when a
+       different card was picked, so nothing on this pillar moved when the
+       theme did. */
+    html += '<div id="web-theme-preview" style="margin-top:12px"></div>';
+    html += '<div id="web-theme-status" data-saved="' + escapeHTML(curTheme || '') + '" data-url="'
+      + escapeHTML((SITE_STATUS && (SITE_STATUS.url || (SITE_STATUS.slug ? ('https://app.outcomestar.app/' + SITE_STATUS.slug) : null))) || (WEBCFG.site_url || ''))
+      + '" style="font-size:11.5px;color:#7A8A9E;margin-top:8px;line-height:1.5"></div>';
   }
   html += '<h3 style="font-family:Lora,serif;color:var(--navy);margin-top:18px">Privacy & safety</h3>';
   var forcedKeys = ['first_name_only_public','no_address_or_phone_public','nondescript_slug_required'].concat(Object.keys(cat.privacy_forced||{}));
@@ -8677,7 +8736,7 @@ function renderWebsiteConfig(band){
     + '<div class="ec-bar" style="margin-top:12px"><button class="save-btn" onclick="saveWebsiteConfig(\''+band+'\')">Save website configuration</button></div>'
     + '</div>';
   document.getElementById('sections-container').innerHTML = html;
-  setTimeout(syncPillarSections, 0);
+  setTimeout(function(){ syncPillarSections(); themePreviewSync(); themeStatusSync(); }, 0);
 }
 function syncPillarSections(){
   var offCodes = {};
@@ -8706,9 +8765,11 @@ async function saveWebsiteConfig(band){
         is_public: isPub, pillars: pillars,
         domain: document.getElementById('web-domain').value.trim() || null,
         notes: document.getElementById('web-notes').value.trim() || null });
-    showToast('Website configuration saved','success');
+    showToast('Website configuration saved \u2014 live on the site on its next load','success');
     WEBCFG.config = { age_band: r.age_band, control_mode: r.control_mode, sections: sections, privacy: r.privacy, theme_key: r.theme_key || (th?th.value:null),
       domain: document.getElementById('web-domain').value.trim(), notes: document.getElementById('web-notes').value.trim() };
+    var st=document.getElementById('web-theme-status');   // v361: status reflects what was just saved
+    if (st) { st.dataset.saved = WEBCFG.config.theme_key || ''; themeStatusSync(); }
   } catch(e){ showToast(e.message,'error'); }
 }
 function openAppsDocs(){
