@@ -9,7 +9,7 @@
  *
  *   - portal.js, portal.html, and every navigation  -> NETWORK ONLY (+ offline
  *     fallback page when the network is genuinely gone)
- *   - the API (focms-api.onrender.com)              -> NETWORK ONLY, never cached
+ *   - the API (api.outcomestar.app)              -> NETWORK ONLY, never cached
  *   - icons / manifest / favicon                    -> cache-first (immutable)
  *
  * The only thing precached is the app shell's static furniture. That is enough
@@ -76,7 +76,7 @@ self.addEventListener('fetch', function (event) {
 
   // The API is the system of record - it is never cached, not even briefly.
   if (url.hostname.indexOf('focms-api') === 0 ||
-      url.hostname === 'focms-api.onrender.com') return;
+      url.hostname === 'api.outcomestar.app') return;
 
   // App code: always from the network. No cache, no fallback, no exceptions.
   if (url.origin === self.location.origin &&

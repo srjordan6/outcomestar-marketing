@@ -190,7 +190,7 @@ var sc_project=13338023;var sc_invisible=1;var sc_security="f312b234";
       var tries=0;
       (function poll(){
         tries++;
-        fetch('https://focms-api.onrender.com/focms/v1/auth/claim-signup',{
+        fetch('https://api.outcomestar.app/focms/v1/auth/claim-signup',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({session_id:sid})})
         .then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
@@ -296,7 +296,7 @@ document.getElementById('f-go').onclick = async function(){
   var btn=this; btn.disabled=true;
   btn.textContent=(_age<18)?'Verifying birth certificate\u2026 (can take up to a minute)':'Creating your account\u2026';
   try{
-    var r=await fetch('https://focms-api.onrender.com/focms/v1/auth/cohort-signup',{
+    var r=await fetch('https://api.outcomestar.app/focms/v1/auth/cohort-signup',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var d=await r.json().catch(function(){return {};});
     if(r.status===201 && d.vpc_checkout_url){ saveSignupDraft(); location.href=d.vpc_checkout_url; return; }

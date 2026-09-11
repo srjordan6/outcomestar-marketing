@@ -117,7 +117,7 @@
  * v259 · Extracurricular section photo (purpose-keyed media).
  * ======================================================================== */
 let SUBJECT_CATALOG = [];
-const API_BASE   = "https://focms-api.onrender.com";
+const API_BASE   = "https://api.outcomestar.app";
 let TENANT_ID  = "019ed384-56fc-7516-bfbf-efaa5231e281";   // resolved from token at startup (v140)
 let STUDENT_ID = "019ed384-5769-72ca-864a-28e40c4e5d30";
 let STUDENT_FIRST = "";
@@ -159,7 +159,7 @@ async function loadHeaderPhoto(){
       el.appendChild(img);
       el.style.background = 'transparent';
     };
-    img.src = 'https://focms-api.onrender.com/focms/v1/public/site/' + encodeURIComponent(wc.site_slug) + '/hero';
+    img.src = 'https://api.outcomestar.app/focms/v1/public/site/' + encodeURIComponent(wc.site_slug) + '/hero';
   } catch(e){}
 }
 
@@ -512,7 +512,7 @@ async function forgotPw() {
   var err = document.getElementById('login-err');
   if (!email) { err.textContent = 'Enter your email above first, then click Forgot password.'; err.style.display = 'block'; return; }
   try {
-    await fetch('https://focms-api.onrender.com/focms/v1/auth/forgot-password', {
+    await fetch('https://api.outcomestar.app/focms/v1/auth/forgot-password', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, turnstile_token: (window.turnstile ? turnstile.getResponse() : null) }) });
   } catch (e) {}
   if (window.turnstile) turnstile.reset();
@@ -538,7 +538,7 @@ async function doLogin() {
   var pass = document.getElementById('login-pass').value;
   if (!email || !pass) { err.textContent = 'Enter email and password.'; err.style.display = 'block'; return; }
   try {
-    var r = await fetch('https://focms-api.onrender.com/focms/v1/auth/login', {
+    var r = await fetch('https://api.outcomestar.app/focms/v1/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email, password: pass, turnstile_token: (window.turnstile ? turnstile.getResponse() : null) })
     });
