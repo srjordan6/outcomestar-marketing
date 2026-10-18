@@ -3,6 +3,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+# Checkout is the only step that uses GITHUB_TOKEN; wrangler deploys with
+# the Cloudflare token, not the GitHub one.
+permissions:
+  contents: read
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -11,11 +15,11 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5.1.0
         with:
           persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v5.0.0
         with:
           node-version: "22"
       - name: Install dependencies
